@@ -14,8 +14,6 @@ public class PlayerMovement : MonoBehaviour
     void Update()
     {
 
-        Debug.Log(this.animator.GetCurrentAnimatorStateInfo(0).IsName("Movement"));
-
         // Input
         movement.x = Input.GetAxisRaw("Horizontal");
         movement.y = Input.GetAxisRaw("Vertical");
