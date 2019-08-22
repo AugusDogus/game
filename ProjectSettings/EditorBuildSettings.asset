@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Player Movement Development.unity
-    guid: 719cae68b4c647d4396feea130bc8181
+    path: Assets/Scenes/Character Collision Development.unity
+    guid: c27982111cdef504698a89c9a56de098
   m_configObjects: {}

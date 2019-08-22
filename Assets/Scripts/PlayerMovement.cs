@@ -13,6 +13,7 @@ public class PlayerMovement : MonoBehaviour
 
     void Update()
     {
+
         // Input
         movement.x = Input.GetAxisRaw("Horizontal");
         movement.y = Input.GetAxisRaw("Vertical");
@@ -20,8 +21,17 @@ public class PlayerMovement : MonoBehaviour
 
         sprinting = Input.GetButton("Fire3");
 
-        animator.SetFloat("Horizontal", movement.x);
-        animator.SetFloat("Vertical", movement.y);
+        if (movement != Vector2.zero)
+        {
+            animator.SetFloat("Horizontal", movement.x);
+            animator.SetFloat("Vertical", movement.y);
+        } else {
+            if (animator.GetFloat("Vertical") != 0)
+            {
+                animator.SetFloat("Horizontal", 0);
+            }
+        }
+
         animator.SetFloat("Speed", movement.sqrMagnitude);
     }
 
