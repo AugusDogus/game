@@ -1,55 +1,55 @@
 fileFormatVersion: 2
-guid: e3a13b5a25afad04ea3da51a9dac38e6
+guid: 273c8467154c49e469aedce761e4f006
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -2787707037094699413
-    second: Character_Slashing_Animations_0
+      213: 2145651263147097467
+    second: character attack animations_0
   - first:
-      213: -461890631182836789
-    second: Character_Slashing_Animations_1
+      213: -8653820191553378160
+    second: character attack animations_1
   - first:
-      213: 7735485891089346160
-    second: Character_Slashing_Animations_2
+      213: 4545923771051161502
+    second: character attack animations_2
   - first:
-      213: 2558655823809784661
-    second: Character_Slashing_Animations_3
+      213: -3274529035498331441
+    second: character attack animations_3
   - first:
-      213: -8159386689085370091
-    second: Character_Slashing_Animations_4
+      213: 7299225603974477399
+    second: character attack animations_4
   - first:
-      213: -3181426080957878434
-    second: Character_Slashing_Animations_5
+      213: 1537796558129605598
+    second: character attack animations_5
   - first:
-      213: -2306217321815168165
-    second: Character_Slashing_Animations_6
+      213: 192051640861638145
+    second: character attack animations_6
   - first:
-      213: 1662368197826760469
-    second: Character_Slashing_Animations_7
+      213: 3208356993476422250
+    second: character attack animations_7
   - first:
-      213: -6480160052607920472
-    second: Character_Slashing_Animations_8
+      213: -1026962298758985612
+    second: character attack animations_8
   - first:
-      213: -4855271362688172120
-    second: Character_Slashing_Animations_9
+      213: -6151384654856822183
+    second: character attack animations_9
   - first:
-      213: 6246624537873346370
-    second: Character_Slashing_Animations_10
+      213: 8792578005377612624
+    second: character attack animations_10
   - first:
-      213: -2539616017870171432
-    second: Character_Slashing_Animations_11
+      213: 4690467186928807724
+    second: character attack animations_11
   - first:
-      213: 6100753539835192595
-    second: Character_Slashing_Animations_12
+      213: -2342258790658720937
+    second: character attack animations_12
   - first:
-      213: -4328815996057731446
-    second: Character_Slashing_Animations_13
+      213: 7121875742376413461
+    second: character attack animations_13
   - first:
-      213: -8551602880228781160
-    second: Character_Slashing_Animations_14
+      213: 2745874362171105857
+    second: character attack animations_14
   - first:
-      213: -2265940931266167734
-    second: Character_Slashing_Animations_15
+      213: 4626787196258731781
+    second: character attack animations_15
   externalObjects: {}
   serializedVersion: 10
   mipmaps:
@@ -146,7 +146,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Character_Slashing_Animations_0
+      name: character attack animations_0
       rect:
         serializedVersion: 2
         x: 0
@@ -160,14 +160,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 5273867cc983b0c4ca75d4752dbf0c73
-      internalID: -2787707037094699413
+      spriteID: a3f9159d09d5ce74cabac4523774b43e
+      internalID: 2145651263147097467
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_1
+      name: character attack animations_1
       rect:
         serializedVersion: 2
         x: 32
@@ -181,14 +181,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: ea970fa82efcc4c4dbbdf2e3dd527197
-      internalID: -461890631182836789
+      spriteID: e6ce25c5e4097624cba3766afcf7e9bd
+      internalID: -8653820191553378160
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_2
+      name: character attack animations_2
       rect:
         serializedVersion: 2
         x: 64
@@ -202,14 +202,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: d0deb6adb56777545b66c7ab041f6005
-      internalID: 7735485891089346160
+      spriteID: ec3d1eae7b438f3418b04c6948a83760
+      internalID: 4545923771051161502
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_3
+      name: character attack animations_3
       rect:
         serializedVersion: 2
         x: 96
@@ -223,14 +223,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 0391a8d09eebe424ebb3fe8af60a0230
-      internalID: 2558655823809784661
+      spriteID: ccc0f971a3f927649a3840fba0a0e1f5
+      internalID: -3274529035498331441
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_4
+      name: character attack animations_4
       rect:
         serializedVersion: 2
         x: 0
@@ -244,14 +244,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 2360d578d17600c438bd81929fad1359
-      internalID: -8159386689085370091
+      spriteID: d672a56fca1ae1249aa4d88e1d59d5d0
+      internalID: 7299225603974477399
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_5
+      name: character attack animations_5
       rect:
         serializedVersion: 2
         x: 32
@@ -265,14 +265,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: c7f1d8f4f1ec1e2429277804faadc666
-      internalID: -3181426080957878434
+      spriteID: 5e342ee8f47f24d479cbbed12258583d
+      internalID: 1537796558129605598
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_6
+      name: character attack animations_6
       rect:
         serializedVersion: 2
         x: 64
@@ -286,14 +286,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: fff4fda84fc0e7840a0767c9a71d760b
-      internalID: -2306217321815168165
+      spriteID: 5b94096cf437d9a49bc05c7bc369fdee
+      internalID: 192051640861638145
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_7
+      name: character attack animations_7
       rect:
         serializedVersion: 2
         x: 96
@@ -307,14 +307,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 1bb3a5069bc56364f926cfe3f2c3509e
-      internalID: 1662368197826760469
+      spriteID: 93f63cff2a5e64140a1bd3df3929e414
+      internalID: 3208356993476422250
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_8
+      name: character attack animations_8
       rect:
         serializedVersion: 2
         x: 0
@@ -328,14 +328,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 261fa52bf339c9643b4ff6ea263ef9d1
-      internalID: -6480160052607920472
+      spriteID: 7a7768a103bca2442a7fa1a35331fbc7
+      internalID: -1026962298758985612
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_9
+      name: character attack animations_9
       rect:
         serializedVersion: 2
         x: 32
@@ -349,14 +349,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 64353923ff4ef42498e718a5ae92a3a1
-      internalID: -4855271362688172120
+      spriteID: 8fb9691cfcc4f8040bff2ddf52cfe986
+      internalID: -6151384654856822183
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_10
+      name: character attack animations_10
       rect:
         serializedVersion: 2
         x: 64
@@ -370,14 +370,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 088801301b456f843824163d1eca28ef
-      internalID: 6246624537873346370
+      spriteID: a92c98f52d2b96944961087e580d05e4
+      internalID: 8792578005377612624
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_11
+      name: character attack animations_11
       rect:
         serializedVersion: 2
         x: 96
@@ -391,14 +391,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 9f4eddda1b17452449a7742a959fee83
-      internalID: -2539616017870171432
+      spriteID: 2ac3a79b5133db74493218d8cb0c8e56
+      internalID: 4690467186928807724
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_12
+      name: character attack animations_12
       rect:
         serializedVersion: 2
         x: 0
@@ -412,14 +412,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 8329f39a1c45c3d45acfdc7900d14ca0
-      internalID: 6100753539835192595
+      spriteID: 42a7d8c10f290374bb04b0423bc2286e
+      internalID: -2342258790658720937
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_13
+      name: character attack animations_13
       rect:
         serializedVersion: 2
         x: 32
@@ -433,14 +433,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: bb8c3742db0f51f44882660d288d4e26
-      internalID: -4328815996057731446
+      spriteID: 32a98c647cdcd9e4b8ecc4bae19a6b3a
+      internalID: 7121875742376413461
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_14
+      name: character attack animations_14
       rect:
         serializedVersion: 2
         x: 64
@@ -454,14 +454,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: dbfd300e193447b459c53d86001e397c
-      internalID: -8551602880228781160
+      spriteID: 98358f9d51f79b641a4abff29ec68fe5
+      internalID: 2745874362171105857
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Character_Slashing_Animations_15
+      name: character attack animations_15
       rect:
         serializedVersion: 2
         x: 96
@@ -475,8 +475,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 534a5965e9450c14098a5e70aa3b0387
-      internalID: -2265940931266167734
+      spriteID: 00bf1f261796988458af52344ac90498
+      internalID: 4626787196258731781
       vertices: []
       indices: 
       edges: []
