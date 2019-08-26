@@ -13,7 +13,7 @@ public class Sign : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && playerInRange)
+        if (Input.GetButtonDown("Interact") && playerInRange)
         {
             if (dialogBox.activeInHierarchy)
             {
