@@ -2,49 +2,36 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum PlayerState
+{
+    walk,
+    attack,
+    interact
+}
 public class PlayerMovement : MonoBehaviour
 {
 
-    public float moveSpeed = 5f;
-    public Rigidbody2D rb;
-    public Animator animator;
-    Vector2 movement;
-    bool sprinting;
+    public PlayerState currentState;
+    public float speed;
+    private Rigidbody2D myRigidbody;
+    private Vector3 change;
+    private Animator animator;
+
+    // Setup our player
+    void Start()
+    {
+        // Set our default state to walking/idling
+        currentState = PlayerState.walk;
+        // Get our components
+        animator = GetComponent<Animator>();
+        myRigidbody = GetComponent<Rigidbody2D>();
+        // Set our default attack direction to down
+        animator.SetFloat("moveX", 0);
+        animator.SetFloat("moveY", -1);
+    }
 
     void Update()
     {
-
-        // Input
-        movement.x = Input.GetAxisRaw("Horizontal");
-        movement.y = Input.GetAxisRaw("Vertical");
-        movement = movement.normalized;
-
-        sprinting = Input.GetButton("Fire3");
-
-        if (movement != Vector2.zero)
-        {
-            animator.SetFloat("Horizontal", movement.x);
-            animator.SetFloat("Vertical", movement.y);
-        } else {
-            if (animator.GetFloat("Vertical") != 0)
-            {
-                animator.SetFloat("Horizontal", 0);
-            }
-        }
-
-        animator.SetFloat("Speed", movement.sqrMagnitude);
-    }
-
-    void FixedUpdate()
-    {
-        if (sprinting)
-        {
-            moveSpeed = 7f;
-        } else
-        {
-            moveSpeed = 5f;
-        }
-
-        rb.MovePosition(rb.position + movement * moveSpeed * Time.fixedDeltaTime);
+        
     }
 }
