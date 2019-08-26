@@ -132,8 +132,8 @@ GameObject:
   - component: {fileID: 101630412}
   - component: {fileID: 101630411}
   - component: {fileID: 101630410}
-  - component: {fileID: 101630409}
   - component: {fileID: 101630414}
+  - component: {fileID: 101630409}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -150,12 +150,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 101630408}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 11a8eaf86c3158041848acb8e9b96bcd, type: 3}
+  m_Script: {fileID: 11500000, guid: 53aaf02807f3c9447a4ae6dee2758508, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveSpeed: 5
-  rb: {fileID: 101630411}
-  animator: {fileID: 101630414}
+  currentState: 0
+  speed: 5
 --- !u!61 &101630410
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -173,7 +172,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 2, y: 2}
+    oldSize: {x: 1, y: 2}
     newSize: {x: 1, y: 2}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
