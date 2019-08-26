@@ -2,49 +2,71 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum PlayerState
+{
+    walk,
+    attack,
+    interact
+}
 public class PlayerMovement : MonoBehaviour
 {
 
-    public float moveSpeed = 5f;
-    public Rigidbody2D rb;
-    public Animator animator;
-    Vector2 movement;
-    bool sprinting;
+    public PlayerState currentState;
+    public float speed;
+    private Rigidbody2D myRigidbody;
+    private Vector3 change;
+    private Animator animator;
+
+    // Setup our player
+    void Start()
+    {
+        currentState = PlayerState.walk;
+        animator = GetComponent<Animator>();
+        myRigidbody = GetComponent<Rigidbody2D>();
+    }
 
     void Update()
     {
-
-        // Input
-        movement.x = Input.GetAxisRaw("Horizontal");
-        movement.y = Input.GetAxisRaw("Vertical");
-        movement = movement.normalized;
-
-        sprinting = Input.GetButton("Fire3");
-
-        if (movement != Vector2.zero)
+        change = Vector3.zero;
+        change.x = Input.GetAxisRaw("Horizontal");
+        change.y = Input.GetAxisRaw("Vertical");
+        change = change.normalized;
+        if (Input.GetButtonDown("Attack") && currentState != PlayerState.attack)
         {
-            animator.SetFloat("Horizontal", movement.x);
-            animator.SetFloat("Vertical", movement.y);
-        } else {
-            if (animator.GetFloat("Vertical") != 0)
-            {
-                animator.SetFloat("Horizontal", 0);
-            }
+            StartCoroutine(AttackCo());
+        } else if (currentState == PlayerState.walk)
+        {
+            UpdateAimation();
         }
-
-        animator.SetFloat("Speed", movement.sqrMagnitude);
     }
 
-    void FixedUpdate()
+    void UpdateAimation()
     {
-        if (sprinting)
+        if (change != Vector3.zero)
         {
-            moveSpeed = 7f;
-        } else
-        {
-            moveSpeed = 5f;
+            MoveCharacter();
+            animator.SetFloat("moveX", change.x);
+            animator.SetFloat("moveY", change.y);
+            animator.SetBool("moving", true);
         }
+        else
+        {
+            animator.SetBool("moving", false);
+        }
+    }
 
-        rb.MovePosition(rb.position + movement * moveSpeed * Time.fixedDeltaTime);
+    private IEnumerator AttackCo()
+    {
+        animator.SetBool("attacking", true);
+        currentState = PlayerState.attack;
+        yield return null;
+        animator.SetBool("attacking", false);
+        yield return new WaitForSeconds(0.33f);
+        currentState = PlayerState.walk;
+    }
+
+    void MoveCharacter()
+    {
+        myRigidbody.MovePosition(transform.position + change * speed * Time.fixedDeltaTime);
     }
 }
