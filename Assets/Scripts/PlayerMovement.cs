@@ -23,6 +23,8 @@ public class PlayerMovement : MonoBehaviour
         currentState = PlayerState.walk;
         animator = GetComponent<Animator>();
         myRigidbody = GetComponent<Rigidbody2D>();
+        animator.SetFloat("moveX", 0);
+        animator.SetFloat("moveY", -1);
     }
 
     void Update()
@@ -30,7 +32,6 @@ public class PlayerMovement : MonoBehaviour
         change = Vector3.zero;
         change.x = Input.GetAxisRaw("Horizontal");
         change.y = Input.GetAxisRaw("Vertical");
-        change = change.normalized;
         if (Input.GetButtonDown("Attack") && currentState != PlayerState.attack)
         {
             StartCoroutine(AttackCo());
@@ -67,6 +68,7 @@ public class PlayerMovement : MonoBehaviour
 
     void MoveCharacter()
     {
+        change = change.normalized;
         myRigidbody.MovePosition(transform.position + change * speed * Time.fixedDeltaTime);
     }
 }
