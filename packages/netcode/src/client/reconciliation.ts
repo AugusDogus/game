@@ -38,11 +38,28 @@ export class Reconciler {
     // Set base state to server's authoritative state
     this.predictor.setBaseState(serverState);
 
-    // Replay all unacknowledged inputs
+    // Replay all unacknowledged inputs with their actual time deltas
     const unacknowledged = this.inputBuffer.getUnacknowledged(lastProcessedSeq);
+    let lastTimestamp: number | null = null;
+    
     for (const inputMsg of unacknowledged) {
-      this.predictor.applyInput(inputMsg.input);
+      // Calculate delta time from previous input
+      let deltaTime: number;
+      if (lastTimestamp !== null) {
+        deltaTime = inputMsg.input.timestamp - lastTimestamp;
+        // Clamp to reasonable bounds (1ms to 100ms)
+        deltaTime = Math.max(1, Math.min(100, deltaTime));
+      } else {
+        // First input after server state - use reasonable default (~16.67ms for 60Hz)
+        deltaTime = 16.67;
+      }
+      lastTimestamp = inputMsg.input.timestamp;
+      
+      this.predictor.applyInputWithDelta(inputMsg.input, deltaTime);
     }
+
+    // Reset the predictor's timestamp tracking since we just reconciled
+    this.predictor.resetTimestamp();
 
     // Return the reconciled state
     const reconciled = this.predictor.getState();

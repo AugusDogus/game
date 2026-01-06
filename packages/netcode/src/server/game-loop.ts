@@ -44,34 +44,45 @@ export class GameLoop {
     const timestamp = Date.now();
     const acks: Record<string, number> = {};
 
-    // Process inputs for all clients
-    const clientsWithInputs = this.inputQueue.getClientsWithInputs();
-    for (const clientId of clientsWithInputs) {
-      const player = this.worldState.getPlayer(clientId);
-      if (!player) {
-        continue;
-      }
+    // Idle input for players with no pending inputs (still need physics like gravity)
+    const idleInput = {
+      moveX: 0,
+      moveY: 0,
+      jump: false,
+      timestamp,
+    };
+
+    // Process physics for ALL players, not just those with inputs
+    const allPlayers = this.worldState.getAllPlayers();
+    for (const player of allPlayers) {
+      const clientId = player.id;
 
       // Get all pending inputs for this client
       const inputs = this.inputQueue.getPendingInputs(clientId);
-      if (inputs.length === 0) {
-        continue;
+
+      // Determine the input to use for this tick:
+      // - If we have inputs, use the last one (most recent player intent)
+      // - Also check if ANY input in the batch had jump pressed (so we don't miss jump inputs)
+      // - If no inputs, use idle input
+      let inputForTick = idleInput;
+      if (inputs.length > 0) {
+        const lastInput = inputs[inputs.length - 1]!;
+        // Check if any input in the batch had jump pressed
+        const anyJump = inputs.some((msg) => msg.input.jump);
+        inputForTick = {
+          ...lastInput.input,
+          jump: anyJump, // Preserve jump if any input had it
+        };
+        acks[clientId] = lastInput.seq;
+        // Acknowledge all processed inputs
+        this.inputQueue.acknowledge(clientId, lastInput.seq);
       }
 
-      // Apply each input sequentially
-      let currentState = player;
-      for (const inputMsg of inputs) {
-        currentState = this.physicsFunction(currentState, inputMsg.input, this.tickInterval);
-        acks[clientId] = inputMsg.seq;
-      }
+      // Apply physics ONCE per tick with the determined input
+      const newState = this.physicsFunction(player, inputForTick, this.tickInterval);
 
       // Update player state
-      this.worldState.updatePlayer(clientId, currentState);
-
-      // Acknowledge processed inputs
-      if (acks[clientId] !== undefined) {
-        this.inputQueue.acknowledge(clientId, acks[clientId]!);
-      }
+      this.worldState.updatePlayer(clientId, newState);
     }
 
     // Increment world tick
