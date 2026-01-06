@@ -1,25 +1,33 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { PlayerState, WorldSnapshot } from "../types.js";
+import type { Snapshot } from "../core/types.js";
+import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
+import type { PlatformerPlayer, PlatformerWorld } from "../examples/platformer/types.js";
 import { Interpolator } from "./interpolation.js";
 
 describe("Interpolator", () => {
-  let interpolator: Interpolator;
+  let interpolator: Interpolator<PlatformerWorld>;
 
   beforeEach(() => {
     // Use 100ms delay for testing
-    interpolator = new Interpolator(100);
+    interpolator = new Interpolator<PlatformerWorld>(interpolatePlatformer, 100);
   });
 
   const createSnapshot = (
     tick: number,
     timestamp: number,
-    players: PlayerState[],
-  ): WorldSnapshot => ({
-    tick,
-    timestamp,
-    players,
-    acks: {},
-  });
+    players: PlatformerPlayer[],
+  ): Snapshot<PlatformerWorld> => {
+    const playerMap = new Map<string, PlatformerPlayer>();
+    for (const player of players) {
+      playerMap.set(player.id, player);
+    }
+    return {
+      tick,
+      timestamp,
+      state: { players: playerMap, tick },
+      inputAcks: new Map(),
+    };
+  };
 
   describe("addSnapshot", () => {
     test("should add snapshot to buffer", () => {
@@ -39,25 +47,25 @@ describe("Interpolator", () => {
     });
   });
 
-  describe("getInterpolatedStates", () => {
-    test("should return empty array when no snapshots", () => {
-      const states = interpolator.getInterpolatedStates();
-      expect(states).toHaveLength(0);
+  describe("getInterpolatedState", () => {
+    test("should return null when no snapshots", () => {
+      const state = interpolator.getInterpolatedState();
+      expect(state).toBeNull();
     });
 
     test("should return latest state when only one snapshot", () => {
-      const player: PlayerState = {
+      const player: PlatformerPlayer = {
         id: "player-1",
         position: { x: 100, y: 200 },
         velocity: { x: 0, y: 0 },
         isGrounded: true,
-        tick: 0,
       };
       interpolator.addSnapshot(createSnapshot(0, Date.now(), [player]));
 
-      const states = interpolator.getInterpolatedStates();
-      expect(states).toHaveLength(1);
-      expect(states[0]?.position.x).toBe(100);
+      const state = interpolator.getInterpolatedState();
+      expect(state).not.toBeNull();
+      expect(state!.players.size).toBe(1);
+      expect(state!.players.get("player-1")?.position.x).toBe(100);
     });
 
     test("should interpolate between two snapshots", () => {
@@ -71,7 +79,6 @@ describe("Interpolator", () => {
             position: { x: 0, y: 0 },
             velocity: { x: 100, y: 0 },
             isGrounded: true,
-            tick: 0,
           },
         ]),
       );
@@ -84,7 +91,6 @@ describe("Interpolator", () => {
             position: { x: 100, y: 0 },
             velocity: { x: 100, y: 0 },
             isGrounded: true,
-            tick: 1,
           },
         ]),
       );
@@ -97,17 +103,17 @@ describe("Interpolator", () => {
             position: { x: 200, y: 0 },
             velocity: { x: 100, y: 0 },
             isGrounded: true,
-            tick: 2,
           },
         ]),
       );
 
-      const states = interpolator.getInterpolatedStates();
-      expect(states).toHaveLength(1);
+      const state = interpolator.getInterpolatedState();
+      expect(state).not.toBeNull();
+      expect(state!.players.size).toBe(1);
 
       // With 100ms interpolation delay, we should be rendering
       // somewhere between the first two snapshots
-      const x = states[0]?.position.x ?? 0;
+      const x = state!.players.get("player-1")?.position.x ?? 0;
       expect(x).toBeGreaterThanOrEqual(0);
       expect(x).toBeLessThanOrEqual(200);
     });
@@ -123,7 +129,6 @@ describe("Interpolator", () => {
             position: { x: 0, y: 0 },
             velocity: { x: 0, y: 0 },
             isGrounded: true,
-            tick: 0,
           },
         ]),
       );
@@ -136,22 +141,21 @@ describe("Interpolator", () => {
             position: { x: 50, y: 0 },
             velocity: { x: 0, y: 0 },
             isGrounded: true,
-            tick: 1,
           },
           {
             id: "player-2",
             position: { x: 100, y: 100 },
             velocity: { x: 0, y: 0 },
             isGrounded: false,
-            tick: 1,
           },
         ]),
       );
 
-      const states = interpolator.getInterpolatedStates();
+      const state = interpolator.getInterpolatedState();
+      expect(state).not.toBeNull();
 
       // Both players should be present
-      const ids = states.map((s) => s.id).sort();
+      const ids = Array.from(state!.players.keys()).sort();
       expect(ids).toContain("player-1");
     });
   });

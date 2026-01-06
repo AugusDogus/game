@@ -1,5 +1,9 @@
-import type { WorldSnapshot } from "@game/netcode";
-import { NetcodeClient, platformerPhysics } from "@game/netcode";
+import type { NetcodeClientHandle, PlatformerInput, PlatformerWorld } from "@game/netcode";
+import {
+  createNetcodeClient,
+  interpolatePlatformer,
+  platformerPredictionScope,
+} from "@game/netcode";
 import type { Socket } from "socket.io-client";
 import { CanvasRenderer } from "../client/renderer/canvas-renderer.js";
 
@@ -18,7 +22,7 @@ const INPUT_RATE_MS = 1000 / 60;
  * Game client that integrates NetcodeClient with rendering
  */
 export class GameClient {
-  private netcodeClient: NetcodeClient;
+  private netcodeClient: NetcodeClientHandle<PlatformerWorld, PlatformerInput>;
   private renderer: CanvasRenderer;
   private animationFrameId: number | null = null;
   private inputIntervalId: number | null = null;
@@ -32,10 +36,12 @@ export class GameClient {
     this.renderer = new CanvasRenderer(canvas);
 
     // Create netcode client
-    this.netcodeClient = new NetcodeClient(socket, {
-      interpolationDelay: 100,
-      applyInput: platformerPhysics,
-      onWorldUpdate: (_snapshot: WorldSnapshot) => {
+    this.netcodeClient = createNetcodeClient<PlatformerWorld, PlatformerInput>({
+      socket,
+      predictionScope: platformerPredictionScope,
+      interpolate: interpolatePlatformer,
+      interpolationDelayMs: 100,
+      onWorldUpdate: (_state: PlatformerWorld) => {
         // World update handled by render loop
       },
       onPlayerJoin: (playerId: string) => {
@@ -103,7 +109,6 @@ export class GameClient {
     const jump = this.keys.has(" ") || this.keys.has("w") || this.keys.has("arrowup");
 
     // Always send input so gravity/physics can be applied
-    // Even with no input, we need to process physics each frame
     this.netcodeClient.sendInput({ moveX, moveY: 0, jump });
   }
 
@@ -112,25 +117,19 @@ export class GameClient {
    */
   private startRenderLoop(): void {
     const render = () => {
-      // Get all player states
-      const players = this.netcodeClient.getAllPlayerStates();
+      // Get world state for rendering
+      const world = this.netcodeClient.getStateForRendering();
       const localPlayerId = this.netcodeClient.getPlayerId();
 
-      // Get debug data if needed
-      const debugData = this.debugOptions.showTrails || this.debugOptions.showServerPositions
-        ? this.netcodeClient.getDebugData()
-        : null;
+      // Convert to array for renderer
+      const players = world ? Array.from(world.players.values()) : [];
 
-      const serverSnapshot = this.debugOptions.showServerPositions
-        ? this.netcodeClient.getLastServerSnapshot()
-        : null;
-
-      // Render
+      // Render (debug visualization temporarily disabled - needs refactoring)
       this.renderer.render(players, localPlayerId, {
-        debugData,
-        serverSnapshot,
-        showTrails: this.debugOptions.showTrails,
-        showServerPositions: this.debugOptions.showServerPositions,
+        debugData: null,
+        serverSnapshot: null,
+        showTrails: false,
+        showServerPositions: false,
       });
 
       // Continue loop
@@ -175,10 +174,6 @@ export class GameClient {
    */
   setDebugOptions(options: Partial<DebugOptions>): void {
     this.debugOptions = { ...this.debugOptions, ...options };
-    // Clear history when disabling trails to start fresh next time
-    if (!options.showTrails && !options.showServerPositions) {
-      this.netcodeClient.clearDebugHistory();
-    }
   }
 
   /**

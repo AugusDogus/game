@@ -1,11 +1,12 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { InputBuffer } from "./input-buffer.js";
+import type { PlatformerInput } from "../examples/platformer/types.js";
 
 describe("InputBuffer", () => {
-  let buffer: InputBuffer;
+  let buffer: InputBuffer<PlatformerInput>;
 
   beforeEach(() => {
-    buffer = new InputBuffer();
+    buffer = new InputBuffer<PlatformerInput>();
   });
 
   describe("add", () => {
@@ -41,7 +42,7 @@ describe("InputBuffer", () => {
 
       const unacked = buffer.getUnacknowledged(0);
       expect(unacked).toHaveLength(2);
-      expect(unacked.map((i) => i.seq)).toEqual([1, 2]);
+      expect(unacked.map((i: { seq: number }) => i.seq)).toEqual([1, 2]);
     });
 
     test("should return all inputs when afterSeq is -1", () => {

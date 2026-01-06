@@ -1,26 +1,23 @@
-import type { InputMessage } from "../types.js";
 import { MAX_INPUT_BUFFER_SIZE } from "../constants.js";
+import type { InputMessage } from "../core/types.js";
 
 /**
- * Stores pending input messages that haven't been acknowledged by the server
+ * Stores pending input messages that haven't been acknowledged by the server.
+ * Generic version that works with any input type.
  */
-export class InputBuffer {
-  private inputs: Map<number, InputMessage> = new Map();
+export class InputBuffer<TInput> {
+  private inputs: Map<number, InputMessage<TInput>> = new Map();
   private nextSeq = 0;
 
   /**
-   * Add a new input and return its sequence number
+   * Add a new input and return its sequence number.
+   * Input must have a timestamp property.
    */
-  add(input: { moveX: number; moveY: number; jump: boolean; timestamp: number }): number {
+  add(input: TInput & { timestamp: number }): number {
     const seq = this.nextSeq++;
-    const message: InputMessage = {
+    const message: InputMessage<TInput> = {
       seq,
-      input: {
-        moveX: input.moveX,
-        moveY: input.moveY,
-        jump: input.jump,
-        timestamp: input.timestamp,
-      },
+      input,
       timestamp: input.timestamp,
     };
 
@@ -38,7 +35,7 @@ export class InputBuffer {
   /**
    * Get an input by sequence number
    */
-  get(seq: number): InputMessage | undefined {
+  get(seq: number): InputMessage<TInput> | undefined {
     return this.inputs.get(seq);
   }
 
@@ -46,8 +43,8 @@ export class InputBuffer {
    * Get all inputs with sequence numbers greater than the given number
    * (i.e., unacknowledged inputs)
    */
-  getUnacknowledged(afterSeq: number): InputMessage[] {
-    const result: InputMessage[] = [];
+  getUnacknowledged(afterSeq: number): InputMessage<TInput>[] {
+    const result: InputMessage<TInput>[] = [];
     for (const [seq, msg] of this.inputs.entries()) {
       if (seq > afterSeq) {
         result.push(msg);

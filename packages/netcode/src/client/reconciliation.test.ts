@@ -1,83 +1,95 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { Reconciler } from "./reconciliation.js";
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { Snapshot } from "../core/types.js";
+import { platformerPredictionScope } from "../examples/platformer/prediction.js";
+import type {
+  PlatformerInput,
+  PlatformerPlayer,
+  PlatformerWorld,
+} from "../examples/platformer/types.js";
 import { InputBuffer } from "./input-buffer.js";
 import { Predictor } from "./prediction.js";
-import type { WorldSnapshot, PlayerState } from "../types.js";
-import { platformerPhysics } from "../physics.js";
+import { Reconciler } from "./reconciliation.js";
 
 describe("Reconciler", () => {
-  let inputBuffer: InputBuffer;
-  let predictor: Predictor;
-  let reconciler: Reconciler;
+  let inputBuffer: InputBuffer<PlatformerInput>;
+  let predictor: Predictor<PlatformerWorld, PlatformerInput>;
+  let reconciler: Reconciler<PlatformerWorld, PlatformerInput>;
   const playerId = "player-1";
 
   beforeEach(() => {
-    inputBuffer = new InputBuffer();
-    predictor = new Predictor(platformerPhysics);
-    reconciler = new Reconciler(inputBuffer, predictor, playerId);
+    inputBuffer = new InputBuffer<PlatformerInput>();
+    predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+    reconciler = new Reconciler<PlatformerWorld, PlatformerInput>(
+      inputBuffer,
+      predictor,
+      platformerPredictionScope,
+      playerId,
+    );
   });
 
   const createSnapshot = (
-    playerState: PlayerState,
+    player: PlatformerPlayer,
     lastAck: number,
-  ): WorldSnapshot => ({
-    tick: playerState.tick,
+  ): Snapshot<PlatformerWorld> => ({
+    tick: 1,
     timestamp: Date.now(),
-    players: [playerState],
-    acks: { [playerId]: lastAck },
+    state: {
+      players: new Map([[player.id, player]]),
+      tick: 1,
+    },
+    inputAcks: new Map([[playerId, lastAck]]),
   });
 
   describe("reconcile", () => {
     test("should update state from server snapshot", () => {
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 100, y: 200 },
         velocity: { x: 0, y: 0 },
         isGrounded: true,
-        tick: 5,
       };
-      const snapshot = createSnapshot(serverState, -1);
+      const snapshot = createSnapshot(serverPlayer, -1);
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
-      expect(result.position.x).toBe(100);
-      expect(result.position.y).toBe(200);
+      expect(resultPlayer?.position.x).toBe(100);
+      expect(resultPlayer?.position.y).toBe(200);
     });
 
     test("should replay unacknowledged inputs", () => {
       // Add inputs to buffer
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1001 }); // seq 1
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1002 }); // seq 2
+      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 }); // seq 1
+      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1032 }); // seq 2
 
       // Server acknowledges seq 0, position reflects that
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 10, y: 190 }, // Position after seq 0 (on floor)
         velocity: { x: 200, y: 0 },
         isGrounded: true,
-        tick: 1,
       };
-      const snapshot = createSnapshot(serverState, 0);
+      const snapshot = createSnapshot(serverPlayer, 0);
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
       // Should have replayed seq 1 and 2, so position should be > 10
-      expect(result.position.x).toBeGreaterThan(10);
+      expect(resultPlayer?.position.x).toBeGreaterThan(10);
     });
 
     test("should acknowledge processed inputs", () => {
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1001 }); // seq 1
+      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 }); // seq 1
 
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 10, y: 0 },
         velocity: { x: 0, y: 0 },
         isGrounded: false,
-        tick: 1,
       };
-      const snapshot = createSnapshot(serverState, 0);
+      const snapshot = createSnapshot(serverPlayer, 0);
 
       reconciler.reconcile(snapshot);
 
@@ -88,45 +100,53 @@ describe("Reconciler", () => {
     });
 
     test("should handle player not in snapshot", () => {
-      const snapshot: WorldSnapshot = {
+      const snapshot: Snapshot<PlatformerWorld> = {
         tick: 1,
         timestamp: Date.now(),
-        players: [
-          {
-            id: "other-player",
-            position: { x: 0, y: 0 },
-            velocity: { x: 0, y: 0 },
-            isGrounded: true,
-            tick: 1,
-          },
-        ],
-        acks: {},
+        state: {
+          players: new Map([
+            [
+              "other-player",
+              {
+                id: "other-player",
+                position: { x: 0, y: 0 },
+                velocity: { x: 0, y: 0 },
+                isGrounded: true,
+              },
+            ],
+          ]),
+          tick: 1,
+        },
+        inputAcks: new Map(),
       };
 
       const result = reconciler.reconcile(snapshot);
 
-      // Should return default state
-      expect(result.id).toBe(playerId);
+      // Should return world without our player (no prediction to merge)
+      expect(result.players.has("other-player")).toBe(true);
     });
 
     test("should handle empty acks", () => {
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 50, y: 50 },
         velocity: { x: 0, y: 0 },
         isGrounded: false,
-        tick: 1,
       };
-      const snapshot: WorldSnapshot = {
+      const snapshot: Snapshot<PlatformerWorld> = {
         tick: 1,
         timestamp: Date.now(),
-        players: [serverState],
-        acks: {}, // No acks
+        state: {
+          players: new Map([[playerId, serverPlayer]]),
+          tick: 1,
+        },
+        inputAcks: new Map(), // No acks
       };
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
-      expect(result.position.x).toBe(50);
+      expect(resultPlayer?.position.x).toBe(50);
     });
   });
 
@@ -136,59 +156,65 @@ describe("Reconciler", () => {
       // Server doesn't see any of them, then they all arrive at once
       const startTime = 1000;
       const inputCount = 12; // ~200ms of inputs at 60fps
-      
+
       for (let i = 0; i < inputCount; i++) {
-        inputBuffer.add({ 
-          moveX: 1, moveY: 0, jump: false, 
-          timestamp: startTime + i * 16.67 
+        inputBuffer.add({
+          moveX: 1,
+          moveY: 0,
+          jump: false,
+          timestamp: startTime + i * 16.67,
         });
       }
 
       // Server snapshot arrives with position before any of these inputs
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 0, y: 190 },
         velocity: { x: 0, y: 0 },
         isGrounded: true,
-        tick: 1,
       };
-      const snapshot = createSnapshot(serverState, -1); // No inputs acknowledged
+      const snapshot = createSnapshot(serverPlayer, -1); // No inputs acknowledged
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
-      // All 12 inputs should be replayed with proper timing (~200ms total)
-      // At 200 units/sec, should move about 40 units
-      expect(result.position.x).toBeGreaterThan(30);
-      expect(result.position.x).toBeLessThan(50);
+      // All 12 inputs should be replayed with proper timing
+      // First input uses default 16.67ms, remaining 11 use actual deltas (16.67ms each)
+      // Total: 12 * 16.67ms = ~200ms at 200 units/sec = ~40 units
+      // Allow some tolerance for floating point
+      expect(resultPlayer?.position.x).toBeGreaterThan(35);
+      expect(resultPlayer?.position.x).toBeLessThan(45);
     });
 
     test("partial acknowledgment: only replay unacknowledged inputs", () => {
       // Player sends 5 inputs
       const startTime = 1000;
       for (let i = 0; i < 5; i++) {
-        inputBuffer.add({ 
-          moveX: 1, moveY: 0, jump: false, 
-          timestamp: startTime + i * 50 // 50ms apart (matching server tick)
+        inputBuffer.add({
+          moveX: 1,
+          moveY: 0,
+          jump: false,
+          timestamp: startTime + i * 50, // 50ms apart (matching server tick)
         });
       }
 
       // Server acknowledges first 3 (seq 0, 1, 2)
       // Server position reflects those 3 inputs
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 30, y: 190 }, // Moved 30 units from 3 inputs
         velocity: { x: 200, y: 0 },
         isGrounded: true,
-        tick: 3,
       };
-      const snapshot = createSnapshot(serverState, 2); // Ack through seq 2
+      const snapshot = createSnapshot(serverPlayer, 2); // Ack through seq 2
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
       // Should replay seq 3 and 4 (2 more inputs, ~100ms, ~20 more units)
-      expect(result.position.x).toBeGreaterThan(40);
-      expect(result.position.x).toBeLessThan(60);
-      
+      expect(resultPlayer?.position.x).toBeGreaterThan(40);
+      expect(resultPlayer?.position.x).toBeLessThan(60);
+
       // Inputs 0-2 should be removed from buffer
       expect(inputBuffer.get(0)).toBeUndefined();
       expect(inputBuffer.get(1)).toBeUndefined();
@@ -201,29 +227,29 @@ describe("Reconciler", () => {
     test("misprediction correction: server disagrees with client position", () => {
       // Client predicted they moved right, but server says they hit a wall
       // (simulated by server returning different position)
-      
+
       // Client sent inputs to move right
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1050 }); // seq 1
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1100 }); // seq 2
-      
+
       // Server only processed seq 0, but says player hit a wall and is at x=0
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 0, y: 190 }, // Server says we're at origin (hit wall)
-        velocity: { x: 0, y: 0 },   // And stopped
+        velocity: { x: 0, y: 0 }, // And stopped
         isGrounded: true,
-        tick: 1,
       };
-      const snapshot = createSnapshot(serverState, 0); // Only ack seq 0
+      const snapshot = createSnapshot(serverPlayer, 0); // Only ack seq 0
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
       // Client should accept server position (x=0) and replay seq 1 and 2
       // Since server says x=0, we replay 2 inputs (~100ms of movement)
       // At 200 units/sec, should move about 20 units
-      expect(result.position.x).toBeGreaterThan(10);
-      expect(result.position.x).toBeLessThan(30);
+      expect(resultPlayer?.position.x).toBeGreaterThan(10);
+      expect(resultPlayer?.position.x).toBeLessThan(30);
     });
 
     test("jump input timing: jump pressed while falling should not double-jump", () => {
@@ -232,21 +258,21 @@ describe("Reconciler", () => {
       inputBuffer.add({ moveX: 0, moveY: 0, jump: true, timestamp: 1050 }); // Still holding jump
 
       // Server confirms player is in the air
-      const serverState: PlayerState = {
+      const serverPlayer: PlatformerPlayer = {
         id: playerId,
         position: { x: 0, y: 100 }, // In the air
-        velocity: { x: 0, y: 50 },  // Falling down
-        isGrounded: false,          // NOT grounded
-        tick: 1,
+        velocity: { x: 0, y: 50 }, // Falling down
+        isGrounded: false, // NOT grounded
       };
-      const snapshot = createSnapshot(serverState, -1);
+      const snapshot = createSnapshot(serverPlayer, -1);
 
       const result = reconciler.reconcile(snapshot);
+      const resultPlayer = result.players.get(playerId);
 
       // Player should continue falling, not get another jump
       // Velocity should still be positive (falling) or more positive
-      expect(result.velocity.y).toBeGreaterThanOrEqual(50);
-      expect(result.isGrounded).toBe(false);
+      expect(resultPlayer?.velocity.y).toBeGreaterThanOrEqual(50);
+      expect(resultPlayer?.isGrounded).toBe(false);
     });
   });
 });

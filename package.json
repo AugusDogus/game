@@ -1,8 +1,10 @@
 {
   "name": "game-webtransport",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
-  "workspaces": ["packages/*"],
   "scripts": {
     "start": "bun run packages/app/src/server.ts",
     "dev": "bun --watch run packages/app/src/server.ts",

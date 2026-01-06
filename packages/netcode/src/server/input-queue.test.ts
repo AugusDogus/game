@@ -1,15 +1,16 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { InputQueue } from "./input-queue.js";
-import type { InputMessage } from "../types.js";
+import type { InputMessage } from "../core/types.js";
+import type { PlatformerInput } from "../examples/platformer/types.js";
 
 describe("InputQueue", () => {
-  let inputQueue: InputQueue;
+  let inputQueue: InputQueue<PlatformerInput>;
 
   beforeEach(() => {
-    inputQueue = new InputQueue();
+    inputQueue = new InputQueue<PlatformerInput>();
   });
 
-  const createInput = (seq: number): InputMessage => ({
+  const createInput = (seq: number): InputMessage<PlatformerInput> => ({
     seq,
     input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
     timestamp: Date.now(),
@@ -30,7 +31,7 @@ describe("InputQueue", () => {
       inputQueue.enqueue("client-1", createInput(1));
 
       const pending = inputQueue.getPendingInputs("client-1");
-      expect(pending.map((p) => p.seq)).toEqual([0, 1, 2]);
+      expect(pending.map((p: InputMessage<PlatformerInput>) => p.seq)).toEqual([0, 1, 2]);
     });
 
     test("should handle multiple clients", () => {
@@ -66,7 +67,7 @@ describe("InputQueue", () => {
 
       const pending = inputQueue.getPendingInputs("client-1", 1);
       expect(pending).toHaveLength(2);
-      expect(pending.map((p) => p.seq)).toEqual([0, 1]);
+      expect(pending.map((p: InputMessage<PlatformerInput>) => p.seq)).toEqual([0, 1]);
     });
   });
 

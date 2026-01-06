@@ -1,12 +1,10 @@
 /**
- * Client-side netcode primitives and high-level classes
+ * Client-side netcode primitives
  */
 
-// High-level classes
-export { NetcodeClient } from "./netcode-client.js";
-
-// Primitives
 export { InputBuffer } from "./input-buffer.js";
 export { Predictor } from "./prediction.js";
 export { Reconciler } from "./reconciliation.js";
 export { Interpolator } from "./interpolation.js";
+export type { PredictionScope } from "./prediction-scope.js";
+export { NoPredictionScope } from "./prediction-scope.js";

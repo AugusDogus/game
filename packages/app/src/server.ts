@@ -1,24 +1,37 @@
 import { Server } from "socket.io";
 import { Server as Engine } from "@socket.io/bun-engine";
-import { NetcodeServer, platformerPhysics } from "@game/netcode";
+import {
+  createNetcodeServer,
+  createPlatformerWorld,
+  simulatePlatformer,
+  addPlayerToWorld,
+  removePlayerFromWorld,
+  mergePlatformerInputs,
+  superjsonParser,
+} from "@game/netcode";
 import homepage from "./client/index.html";
 
 const startTime = Date.now();
 
-// Create Socket.IO server and Bun engine
+// Create Socket.IO server and Bun engine with superjson parser for Map/Set/Date support
 // TODO: Add "webtransport" once Bun supports HTTP/3 (https://github.com/oven-sh/bun/issues/13656)
-const io = new Server();
+const io = new Server({ parser: superjsonParser });
 const engine = new Engine({
   path: "/socket.io/",
 });
 
 io.bind(engine);
 
-// Create and start netcode server
-const netcodeServer = new NetcodeServer(io, {
+// Create and start netcode server with platformer game
+const netcodeServer = createNetcodeServer({
+  io,
+  initialWorld: createPlatformerWorld(),
+  simulate: simulatePlatformer,
+  addPlayer: addPlayerToWorld,
+  removePlayer: removePlayerFromWorld,
   tickRate: 20,
   snapshotHistorySize: 60,
-  applyInput: platformerPhysics,
+  mergeInputs: mergePlatformerInputs,
 });
 netcodeServer.start();
 

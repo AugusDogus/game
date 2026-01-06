@@ -1,15 +1,16 @@
-import type { InputMessage } from "../types.js";
+import type { InputMessage } from "../core/types.js";
 
 /**
- * Queues and manages input messages from clients
+ * Queues and manages input messages from clients.
+ * Generic version that works with any input type.
  */
-export class InputQueue {
-  private queues: Map<string, InputMessage[]> = new Map();
+export class InputQueue<TInput> {
+  private queues: Map<string, InputMessage<TInput>[]> = new Map();
 
   /**
    * Add an input message to the queue for a specific client
    */
-  enqueue(clientId: string, message: InputMessage): void {
+  enqueue(clientId: string, message: InputMessage<TInput>): void {
     const queue = this.queues.get(clientId);
     if (!queue) {
       this.queues.set(clientId, [message]);
@@ -28,7 +29,7 @@ export class InputQueue {
   /**
    * Get all pending inputs for a client up to a certain sequence number
    */
-  getPendingInputs(clientId: string, upToSeq?: number): InputMessage[] {
+  getPendingInputs(clientId: string, upToSeq?: number): InputMessage<TInput>[] {
     const queue = this.queues.get(clientId);
     if (!queue || queue.length === 0) {
       return [];
@@ -79,8 +80,37 @@ export class InputQueue {
    * Get all client IDs with pending inputs
    */
   getClientsWithInputs(): string[] {
-    return Array.from(this.queues.keys()).filter(
-      (id) => (this.queues.get(id)?.length ?? 0) > 0,
-    );
+    return Array.from(this.queues.keys()).filter((id) => (this.queues.get(id)?.length ?? 0) > 0);
+  }
+
+  /**
+   * Get all pending inputs from all clients as a map.
+   * Returns the last input for each client (most recent intent).
+   * Used for whole-world simulation.
+   */
+  getAllPendingInputs(): Map<string, TInput> {
+    const result = new Map<string, TInput>();
+    for (const [clientId, queue] of this.queues.entries()) {
+      if (queue.length > 0) {
+        // Use the last input from each client (most recent)
+        const lastInput = queue[queue.length - 1]!;
+        result.set(clientId, lastInput.input);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get all pending input messages from all clients, with full message data.
+   * Returns InputMessage objects with input, seq, and timestamp.
+   */
+  getAllPendingInputsBatched(): Map<string, InputMessage<TInput>[]> {
+    const result = new Map<string, InputMessage<TInput>[]>();
+    for (const [clientId, queue] of this.queues.entries()) {
+      if (queue.length > 0) {
+        result.set(clientId, [...queue]);
+      }
+    }
+    return result;
   }
 }

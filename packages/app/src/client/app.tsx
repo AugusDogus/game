@@ -155,7 +155,7 @@ function App() {
           <h3 className="text-sm font-bold text-slate-200 mb-3 uppercase tracking-wide">
             Debug Panel
           </h3>
-          
+
           <div className="space-y-3">
             <div>
               <label className="flex justify-between text-xs text-slate-400 mb-1">
@@ -189,7 +189,7 @@ function App() {
                 />
                 <span className="text-xs text-slate-300">Show position trails</span>
               </label>
-              
+
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"

@@ -1,37 +1,46 @@
-import type { PlayerState, PlayerInput, PhysicsFunction } from "../types.js";
+import type { PredictionScope } from "./prediction-scope.js";
 
 /**
- * Handles client-side prediction by applying inputs locally
+ * Handles client-side prediction by applying inputs locally.
+ * Generic version that works with any world state and input types.
  */
-export class Predictor {
-  private localState: PlayerState | null = null;
-  private physicsFunction: PhysicsFunction;
+export class Predictor<TWorld, TInput extends { timestamp: number }> {
+  private predictedState: Partial<TWorld> | null = null;
+  private predictionScope: PredictionScope<TWorld, TInput>;
   private lastInputTimestamp: number | null = null;
 
-  constructor(physicsFunction: PhysicsFunction) {
-    this.physicsFunction = physicsFunction;
+  constructor(predictionScope: PredictionScope<TWorld, TInput>) {
+    this.predictionScope = predictionScope;
   }
 
   /**
-   * Set the base state (from server)
+   * Set the base state from server snapshot.
+   * Extracts the predictable portion using the prediction scope.
    */
-  setBaseState(state: PlayerState): void {
-    this.localState = { ...state };
+  setBaseState(world: TWorld, localPlayerId: string): void {
+    this.predictedState = this.predictionScope.extractPredictable(world, localPlayerId);
+  }
+
+  /**
+   * Set the predicted state directly (used during reconciliation)
+   */
+  setPredictedState(state: Partial<TWorld>): void {
+    this.predictedState = state;
   }
 
   /**
    * Get the current predicted state
    */
-  getState(): PlayerState | null {
-    return this.localState;
+  getState(): Partial<TWorld> | null {
+    return this.predictedState;
   }
 
   /**
    * Apply an input to the local state (prediction).
    * Uses the actual time delta between inputs for accurate physics.
    */
-  applyInput(input: PlayerInput): void {
-    if (!this.localState) {
+  applyInput(input: TInput): void {
+    if (!this.predictedState) {
       return;
     }
 
@@ -45,26 +54,45 @@ export class Predictor {
       // First input - use a reasonable default (~16.67ms for 60Hz)
       deltaTime = 16.67;
     }
+
     this.lastInputTimestamp = input.timestamp;
 
-    this.localState = this.physicsFunction(this.localState, input, deltaTime);
+    this.predictedState = this.predictionScope.simulatePredicted(
+      this.predictedState,
+      input,
+      deltaTime,
+    );
   }
 
   /**
    * Apply an input with explicit deltaTime (used during reconciliation replay)
    */
-  applyInputWithDelta(input: PlayerInput, deltaTime: number): void {
-    if (!this.localState) {
+  applyInputWithDelta(input: TInput, deltaTime: number): void {
+    if (!this.predictedState) {
       return;
     }
-    this.localState = this.physicsFunction(this.localState, input, deltaTime);
+    this.predictedState = this.predictionScope.simulatePredicted(
+      this.predictedState,
+      input,
+      deltaTime,
+    );
+  }
+
+  /**
+   * Merge predicted state with server world for rendering
+   */
+  mergeWithServer(serverWorld: TWorld): TWorld {
+    if (!this.predictedState) {
+      return serverWorld;
+    }
+    return this.predictionScope.mergePrediction(serverWorld, this.predictedState);
   }
 
   /**
    * Reset prediction state
    */
   reset(): void {
-    this.localState = null;
+    this.predictedState = null;
     this.lastInputTimestamp = null;
   }
 
@@ -73,5 +101,12 @@ export class Predictor {
    */
   resetTimestamp(): void {
     this.lastInputTimestamp = null;
+  }
+
+  /**
+   * Set the last input timestamp (used after reconciliation replay)
+   */
+  setLastInputTimestamp(timestamp: number): void {
+    this.lastInputTimestamp = timestamp;
   }
 }

@@ -1,27 +1,47 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { platformerPhysics } from "../physics.js";
-import type { InputMessage, WorldSnapshot } from "../types.js";
+import { SnapshotBuffer } from "../core/snapshot-buffer.js";
+import type { Snapshot } from "../core/types.js";
+import { DefaultWorldManager } from "../core/world.js";
+import {
+    addPlayerToWorld,
+    mergePlatformerInputs,
+    simulatePlatformer,
+} from "../examples/platformer/simulation.js";
+import type { PlatformerInput, PlatformerWorld } from "../examples/platformer/types.js";
+import { createPlatformerWorld } from "../examples/platformer/types.js";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
-import { SnapshotHistory } from "./snapshot-history.js";
-import { WorldState } from "./world-state.js";
 
 describe("GameLoop", () => {
-  let worldState: WorldState;
-  let inputQueue: InputQueue;
-  let snapshotHistory: SnapshotHistory;
-  let gameLoop: GameLoop;
+  let worldManager: DefaultWorldManager<PlatformerWorld>;
+  let inputQueue: InputQueue<PlatformerInput>;
+  let snapshotBuffer: SnapshotBuffer<PlatformerWorld>;
+  let gameLoop: GameLoop<PlatformerWorld, PlatformerInput>;
 
   beforeEach(() => {
-    worldState = new WorldState();
-    inputQueue = new InputQueue();
-    snapshotHistory = new SnapshotHistory(60);
-    gameLoop = new GameLoop(worldState, inputQueue, snapshotHistory, platformerPhysics, 50); // 20 Hz
+    worldManager = new DefaultWorldManager(createPlatformerWorld());
+    inputQueue = new InputQueue<PlatformerInput>();
+    snapshotBuffer = new SnapshotBuffer<PlatformerWorld>(60);
+    gameLoop = new GameLoop<PlatformerWorld, PlatformerInput>(
+      worldManager,
+      inputQueue,
+      snapshotBuffer,
+      simulatePlatformer,
+      50, // 20 Hz
+      mergePlatformerInputs, // Use platformer input merger to handle jump-in-burst
+    );
   });
 
   afterEach(() => {
     gameLoop.stop();
   });
+
+  // Helper to add a player to the world
+  const addPlayer = (playerId: string, x: number = 0, y: number = 0) => {
+    const world = worldManager.getState();
+    const newWorld = addPlayerToWorld(world, playerId, { x, y });
+    worldManager.setState(newWorld);
+  };
 
   describe("start/stop", () => {
     test("should start and stop the loop", () => {
@@ -43,7 +63,7 @@ describe("GameLoop", () => {
 
   describe("onTick callback", () => {
     test("should call onTick with snapshot", async () => {
-      const onTickMock = mock<(snapshot: WorldSnapshot) => void>(() => {});
+      const onTickMock = mock<(snapshot: Snapshot<PlatformerWorld>) => void>(() => {});
       gameLoop.onTick(onTickMock);
 
       gameLoop.start();
@@ -62,16 +82,15 @@ describe("GameLoop", () => {
 
   describe("input processing", () => {
     test("should process inputs and update player state", async () => {
-      worldState.addPlayer("player-1", { x: 0, y: 0 });
+      addPlayer("player-1", 0, 0);
 
-      const input: InputMessage = {
+      inputQueue.enqueue("player-1", {
         seq: 0,
         input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
         timestamp: Date.now(),
-      };
-      inputQueue.enqueue("player-1", input);
+      });
 
-      const onTickMock = mock<(snapshot: WorldSnapshot) => void>(() => {});
+      const onTickMock = mock<(snapshot: Snapshot<PlatformerWorld>) => void>(() => {});
       gameLoop.onTick(onTickMock);
 
       gameLoop.start();
@@ -79,12 +98,13 @@ describe("GameLoop", () => {
       gameLoop.stop();
 
       // Check that player moved
-      const player = worldState.getPlayer("player-1");
+      const world = worldManager.getState();
+      const player = world.players.get("player-1");
       expect(player?.position.x).toBeGreaterThan(0);
     });
 
     test("should acknowledge processed inputs", async () => {
-      worldState.addPlayer("player-1", { x: 0, y: 0 });
+      addPlayer("player-1", 0, 0);
 
       inputQueue.enqueue("player-1", {
         seq: 0,
@@ -93,9 +113,10 @@ describe("GameLoop", () => {
       });
 
       let lastAck = -1;
-      gameLoop.onTick((snapshot) => {
-        if (snapshot.acks["player-1"] !== undefined) {
-          lastAck = snapshot.acks["player-1"]!;
+      gameLoop.onTick((snapshot: Snapshot<PlatformerWorld>) => {
+        const ack = snapshot.inputAcks.get("player-1");
+        if (ack !== undefined) {
+          lastAck = ack;
         }
       });
 
@@ -106,19 +127,19 @@ describe("GameLoop", () => {
       expect(lastAck).toBe(0);
     });
 
-    test("should add snapshots to history", async () => {
+    test("should add snapshots to buffer", async () => {
       gameLoop.start();
       await new Promise((resolve) => setTimeout(resolve, 150));
       gameLoop.stop();
 
-      expect(snapshotHistory.size()).toBeGreaterThan(0);
+      expect(snapshotBuffer.size()).toBeGreaterThan(0);
     });
   });
 
   describe("real-world scenarios", () => {
     test("idle player: gravity should apply even when no inputs are received", async () => {
       // Player spawns in the air (simulating spawn point above ground)
-      worldState.addPlayer("player-1", { x: 0, y: 0 }); // y=0 is above the floor
+      addPlayer("player-1", 0, 0); // y=0 is above the floor
 
       // NO inputs sent - player is AFK or tabbed out
 
@@ -127,14 +148,15 @@ describe("GameLoop", () => {
       gameLoop.stop();
 
       // Player should have fallen due to gravity
-      const player = worldState.getPlayer("player-1");
+      const world = worldManager.getState();
+      const player = world.players.get("player-1");
       expect(player?.position.y).toBeGreaterThan(0); // Y increases downward
     });
 
     test("two players: active player inputs should not affect idle player physics", async () => {
       // Two players spawn in the air
-      worldState.addPlayer("active-player", { x: 0, y: 0 });
-      worldState.addPlayer("idle-player", { x: 100, y: 0 });
+      addPlayer("active-player", 0, 0);
+      addPlayer("idle-player", 100, 0);
 
       // Only active player sends inputs (moving right)
       inputQueue.enqueue("active-player", {
@@ -147,8 +169,9 @@ describe("GameLoop", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
       gameLoop.stop();
 
-      const activePlayer = worldState.getPlayer("active-player");
-      const idlePlayer = worldState.getPlayer("idle-player");
+      const world = worldManager.getState();
+      const activePlayer = world.players.get("active-player");
+      const idlePlayer = world.players.get("idle-player");
 
       // Active player moved right and fell
       expect(activePlayer?.position.x).toBeGreaterThan(0);
@@ -161,8 +184,8 @@ describe("GameLoop", () => {
 
     test("input burst: multiple inputs per tick should not multiply physics", async () => {
       // Player on the ground
-      worldState.addPlayer("player-1", { x: 0, y: 190 }); // Near floor
-      
+      addPlayer("player-1", 0, 190); // Near floor
+
       // Simulate 60fps client sending 3 inputs before server tick (at 20fps)
       const now = Date.now();
       inputQueue.enqueue("player-1", {
@@ -185,8 +208,9 @@ describe("GameLoop", () => {
       await new Promise((resolve) => setTimeout(resolve, 60)); // ~1 tick
       gameLoop.stop();
 
-      const player = worldState.getPlayer("player-1");
-      
+      const world = worldManager.getState();
+      const player = world.players.get("player-1");
+
       // Should have moved roughly 10 units (200 units/sec * 0.05 sec = 10 units)
       // NOT 30 units (which would happen if physics ran 3x)
       expect(player?.position.x).toBeGreaterThan(5);
@@ -196,17 +220,18 @@ describe("GameLoop", () => {
     test("jump input in burst: jump should register even if not in last input", async () => {
       // Player on the ground - spawn at floor level so first tick grounds them
       // Floor is at y=200, player height is 20, so center at y=190 is on floor
-      worldState.addPlayer("player-1", { x: 0, y: 190 });
-      
+      addPlayer("player-1", 0, 190);
+
       // Let one tick run to ground the player (spawns with isGrounded=false)
       gameLoop.start();
       await new Promise((resolve) => setTimeout(resolve, 60));
       gameLoop.stop();
-      
+
       // Verify player is now grounded
-      const groundedPlayer = worldState.getPlayer("player-1");
-      expect(groundedPlayer?.isGrounded).toBe(true);
-      
+      let world = worldManager.getState();
+      let player = world.players.get("player-1");
+      expect(player?.isGrounded).toBe(true);
+
       // Now player presses jump, then releases it before next tick processes
       const now = Date.now();
       inputQueue.enqueue("player-1", {
@@ -224,8 +249,9 @@ describe("GameLoop", () => {
       await new Promise((resolve) => setTimeout(resolve, 60));
       gameLoop.stop();
 
-      const player = worldState.getPlayer("player-1");
-      
+      world = worldManager.getState();
+      player = world.players.get("player-1");
+
       // Jump should have registered (velocity negative = upward)
       expect(player?.velocity.y).toBeLessThan(0);
     });

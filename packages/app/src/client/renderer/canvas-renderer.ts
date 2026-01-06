@@ -1,10 +1,25 @@
-import type { DebugData, PlayerState, PositionHistoryEntry, WorldSnapshot } from "@game/netcode";
+import type { PlatformerPlayer, PlatformerWorld } from "@game/netcode";
 import { DEFAULT_FLOOR_Y } from "@game/netcode";
+
+/** Position history entry for debug visualization */
+export interface PositionHistoryEntry {
+  x: number;
+  y: number;
+  timestamp: number;
+}
+
+/** Debug data for visualization */
+export interface DebugData {
+  localPredictedHistory: PositionHistoryEntry[];
+  localServerHistory: PositionHistoryEntry[];
+  otherPlayersHistory: Map<string, PositionHistoryEntry[]>;
+  otherPlayersServerHistory: Map<string, PositionHistoryEntry[]>;
+}
 
 /** Render options including debug visualization */
 export interface RenderOptions {
   debugData: DebugData | null;
-  serverSnapshot: WorldSnapshot | null;
+  serverSnapshot: PlatformerWorld | null;
   showTrails: boolean;
   showServerPositions: boolean;
 }
@@ -49,7 +64,7 @@ export class CanvasRenderer {
   /**
    * Draw a player
    */
-  drawPlayer(player: PlayerState, isLocal: boolean = false): void {
+  drawPlayer(player: PlatformerPlayer, isLocal: boolean = false): void {
     this.ctx.save();
 
     if (isLocal) {
@@ -66,18 +81,8 @@ export class CanvasRenderer {
 
     // Draw player as a square
     const size = 20;
-    this.ctx.fillRect(
-      player.position.x - size / 2,
-      player.position.y - size / 2,
-      size,
-      size,
-    );
-    this.ctx.strokeRect(
-      player.position.x - size / 2,
-      player.position.y - size / 2,
-      size,
-      size,
-    );
+    this.ctx.fillRect(player.position.x - size / 2, player.position.y - size / 2, size, size);
+    this.ctx.strokeRect(player.position.x - size / 2, player.position.y - size / 2, size, size);
 
     // Draw player ID above
     this.ctx.fillStyle = "#ffffff";
@@ -95,7 +100,7 @@ export class CanvasRenderer {
   /**
    * Draw all players
    */
-  drawPlayers(players: PlayerState[], localPlayerId: string | null): void {
+  drawPlayers(players: PlatformerPlayer[], localPlayerId: string | null): void {
     for (const player of players) {
       const isLocal = player.id === localPlayerId;
       this.drawPlayer(player, isLocal);
@@ -211,7 +216,7 @@ export class CanvasRenderer {
   /**
    * Draw a ghost player (server position)
    */
-  drawGhostPlayer(player: PlayerState, color: string): void {
+  drawGhostPlayer(player: PlatformerPlayer, color: string): void {
     this.ctx.save();
     this.ctx.globalAlpha = 0.4;
     this.ctx.strokeStyle = color;
@@ -219,12 +224,7 @@ export class CanvasRenderer {
     this.ctx.setLineDash([4, 4]);
 
     const size = 20;
-    this.ctx.strokeRect(
-      player.position.x - size / 2,
-      player.position.y - size / 2,
-      size,
-      size,
-    );
+    this.ctx.strokeRect(player.position.x - size / 2, player.position.y - size / 2, size, size);
 
     this.ctx.restore();
   }
@@ -234,7 +234,7 @@ export class CanvasRenderer {
    */
   drawDebug(
     debugData: DebugData,
-    serverSnapshot: WorldSnapshot | null,
+    serverSnapshot: PlatformerWorld | null,
     localPlayerId: string | null,
     showTrails: boolean,
     showServerPositions: boolean,
@@ -263,8 +263,8 @@ export class CanvasRenderer {
 
     if (showServerPositions && serverSnapshot) {
       // Draw ghost players at server positions
-      for (const player of serverSnapshot.players) {
-        if (player.id === localPlayerId) {
+      for (const [playerId, player] of serverSnapshot.players) {
+        if (playerId === localPlayerId) {
           // Local player server position (orange ghost)
           this.drawGhostPlayer(player, "#f97316");
         } else {
@@ -278,11 +278,7 @@ export class CanvasRenderer {
   /**
    * Render a frame
    */
-  render(
-    players: PlayerState[],
-    localPlayerId: string | null,
-    options?: RenderOptions,
-  ): void {
+  render(players: PlatformerPlayer[], localPlayerId: string | null, options?: RenderOptions): void {
     this.clear();
     this.drawGrid();
     this.drawFloor();
@@ -311,14 +307,14 @@ export class CanvasRenderer {
    */
   drawDebugLegend(showTrails: boolean, showServerPositions: boolean): void {
     this.ctx.save();
-    
+
     // Position in top-left (accounting for centered coordinate system)
     const startX = -this.width / 2 + 10;
     const startY = -this.height / 2 + 20;
-    
+
     this.ctx.font = "11px monospace";
     this.ctx.textAlign = "left";
-    
+
     let y = startY;
     const lineHeight = 16;
 
