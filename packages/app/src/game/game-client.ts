@@ -1,7 +1,10 @@
+import type { WorldSnapshot } from "@game/netcode";
 import { NetcodeClient } from "@game/netcode";
 import type { Socket } from "socket.io-client";
-import type { WorldSnapshot } from "@game/netcode";
 import { CanvasRenderer } from "../client/renderer/canvas-renderer.js";
+
+/** Input send rate: 60 times per second */
+const INPUT_RATE_MS = 1000 / 60;
 
 /**
  * Game client that integrates NetcodeClient with rendering
@@ -10,7 +13,10 @@ export class GameClient {
   private netcodeClient: NetcodeClient;
   private renderer: CanvasRenderer;
   private animationFrameId: number | null = null;
+  private inputIntervalId: number | null = null;
   private keys: Set<string> = new Set();
+  private keydownHandler: (e: KeyboardEvent) => void;
+  private keyupHandler: (e: KeyboardEvent) => void;
 
   constructor(socket: Socket, canvas: HTMLCanvasElement) {
     // Create renderer
@@ -30,32 +36,49 @@ export class GameClient {
       },
     });
 
+    // Bind handlers so we can remove them later
+    this.keydownHandler = (e: KeyboardEvent) => {
+      // Prevent default for arrow keys to avoid scrolling
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+      }
+      this.keys.add(e.key.toLowerCase());
+    };
+    this.keyupHandler = (e: KeyboardEvent) => {
+      this.keys.delete(e.key.toLowerCase());
+    };
+
     // Set up input handling
     this.setupInputHandling();
 
     // Start render loop
     this.startRenderLoop();
+
+    // Start input loop (separate from render for consistent input rate)
+    this.startInputLoop();
   }
 
   /**
    * Set up keyboard input handling
    */
   private setupInputHandling(): void {
-    window.addEventListener("keydown", (e) => {
-      this.keys.add(e.key.toLowerCase());
-      this.updateInput();
-    });
-
-    window.addEventListener("keyup", (e) => {
-      this.keys.delete(e.key.toLowerCase());
-      this.updateInput();
-    });
+    window.addEventListener("keydown", this.keydownHandler);
+    window.addEventListener("keyup", this.keyupHandler);
   }
 
   /**
-   * Update input based on current key state
+   * Start the input loop - sends input at a fixed rate while keys are held
    */
-  private updateInput(): void {
+  private startInputLoop(): void {
+    this.inputIntervalId = window.setInterval(() => {
+      this.sendCurrentInput();
+    }, INPUT_RATE_MS);
+  }
+
+  /**
+   * Send input based on current key state
+   */
+  private sendCurrentInput(): void {
     let moveX = 0;
     let moveY = 0;
 
@@ -78,7 +101,7 @@ export class GameClient {
       moveY *= 0.707;
     }
 
-    // Send input to server
+    // Only send if there's actual input
     if (moveX !== 0 || moveY !== 0) {
       this.netcodeClient.sendInput({ moveX, moveY });
     }
@@ -104,12 +127,18 @@ export class GameClient {
   }
 
   /**
-   * Stop the render loop
+   * Stop the game client
    */
   stop(): void {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+    if (this.inputIntervalId !== null) {
+      clearInterval(this.inputIntervalId);
+      this.inputIntervalId = null;
+    }
+    window.removeEventListener("keydown", this.keydownHandler);
+    window.removeEventListener("keyup", this.keyupHandler);
   }
 }

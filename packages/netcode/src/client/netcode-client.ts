@@ -40,17 +40,36 @@ export class NetcodeClient {
     // Set up socket event handlers
     this.setupSocketHandlers();
 
-    // Get player ID when connected
+    // Handle case where socket is already connected
+    if (socket.connected && socket.id) {
+      this.initializePlayer(socket.id);
+    }
+
+    // Get player ID when connected (for future connections/reconnections)
     socket.on("connect", () => {
-      this.playerId = socket.id ?? null;
-      if (this.playerId) {
-        this.reconciler = new Reconciler(
-          this.inputBuffer,
-          this.predictor,
-          this.playerId,
-        );
+      if (socket.id) {
+        this.initializePlayer(socket.id);
       }
     });
+  }
+
+  /**
+   * Initialize player state when connected
+   */
+  private initializePlayer(id: string): void {
+    this.playerId = id;
+    this.reconciler = new Reconciler(
+      this.inputBuffer,
+      this.predictor,
+      this.playerId,
+    );
+    // Initialize local player state at origin
+    this.localPlayerState = {
+      id: this.playerId,
+      position: { x: 0, y: 0 },
+      velocity: { x: 0, y: 0 },
+      tick: 0,
+    };
   }
 
   /**

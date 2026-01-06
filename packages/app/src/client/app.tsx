@@ -43,7 +43,7 @@ function App() {
     };
   }, []);
 
-  // Connection management and game initialization
+  // Connection management
   useEffect(() => {
     socket.connect();
 
@@ -52,11 +52,6 @@ function App() {
         socket.emit("ping", { timestamp: Date.now() });
       }
     }, 2000);
-
-    // Initialize game client when canvas is ready and socket is connected
-    if (canvasRef.current && socket.connected && !gameClientRef.current) {
-      gameClientRef.current = new GameClient(socket, canvasRef.current);
-    }
 
     return () => {
       clearInterval(pingInterval);
@@ -68,12 +63,12 @@ function App() {
     };
   }, []);
 
-  // Initialize game when socket connects
+  // Initialize game when socket connects and canvas is ready
   useEffect(() => {
-    if (socket.connected && canvasRef.current && !gameClientRef.current) {
+    if (isConnected && canvasRef.current && !gameClientRef.current) {
       gameClientRef.current = new GameClient(socket, canvasRef.current);
     }
-  }, [socket.connected]);
+  }, [isConnected]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
