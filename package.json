@@ -16,10 +16,13 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@socket.io/bun-engine": "^0.1.0",
     "@tanstack/react-query": "^5.90.16",
     "bun-plugin-tailwind": "^0.1.2",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.1.18"
   }
 }
