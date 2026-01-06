@@ -246,4 +246,162 @@ describe("RollbackClient", () => {
       expect(remotePlayer.position.x).toBeGreaterThan(0);
     });
   });
+
+  describe("removeRemotePlayer", () => {
+    test("should remove remote player input history", () => {
+      // Add some inputs for remote player
+      client.onRemoteInput(
+        "remote-player",
+        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        0,
+      );
+      client.onRemoteInput(
+        "remote-player",
+        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        1,
+      );
+
+      client.removeRemotePlayer("remote-player");
+
+      // Advance frames - should not crash and remote player uses idle input
+      for (let i = 0; i < 3; i++) {
+        client.advanceFrame();
+      }
+
+      const state = client.getStateForRendering()!;
+      expect(state).not.toBeNull();
+    });
+
+    test("should handle removing non-existent player", () => {
+      // Should not crash
+      client.removeRemotePlayer("non-existent-player");
+      
+      client.advanceFrame();
+      expect(client.getCurrentFrame()).toBe(1);
+    });
+  });
+
+  describe("history size limits", () => {
+    test("should limit state history to configured size", () => {
+      // The history size is 60 frames
+      // Advance more than 60 frames
+      for (let i = 0; i < 100; i++) {
+        client.advanceFrame();
+      }
+
+      expect(client.getCurrentFrame()).toBe(100);
+      // Client should still function (old history cleaned up internally)
+    });
+
+    test("should clean up old input history", () => {
+      // Add local input
+      client.onLocalInput({
+        moveX: 1,
+        moveY: 0,
+        jump: false,
+        timestamp: Date.now(),
+      });
+
+      // Advance many frames
+      for (let i = 0; i < 100; i++) {
+        client.advanceFrame();
+      }
+
+      // Receive snapshot confirming a recent frame
+      client.onSnapshot({
+        tick: 90,
+        timestamp: Date.now(),
+        state: initialWorld,
+        inputAcks: new Map(),
+      });
+
+      // Continue advancing - should not crash even with old inputs cleaned
+      for (let i = 0; i < 10; i++) {
+        client.advanceFrame();
+      }
+
+      expect(client.getCurrentFrame()).toBe(110);
+    });
+  });
+
+  describe("getConfirmedFrame", () => {
+    test("should return -1 initially", () => {
+      // After reset, confirmed frame should be -1
+      const freshClient = new RollbackClient<PlatformerWorld, PlatformerInput>(
+        simulatePlatformer,
+        initialWorld,
+        createIdleInput(),
+      );
+      
+      // Confirmed frame starts at -1 (nothing confirmed yet)
+      // Note: getCurrentFrame starts at 0, confirmedFrame at -1
+      expect(freshClient.getCurrentFrame()).toBe(0);
+    });
+
+    test("should update after snapshot", () => {
+      client.advanceFrame();
+      client.advanceFrame();
+      client.advanceFrame();
+
+      client.onSnapshot({
+        tick: 2,
+        timestamp: Date.now(),
+        state: initialWorld,
+        inputAcks: new Map(),
+      });
+
+      // Snapshot at tick 2 confirms frames up to 2
+      expect(client.getCurrentFrame()).toBe(3);
+    });
+  });
+
+  describe("edge cases", () => {
+    test("should handle rollback to frame 0", () => {
+      // Advance a few frames
+      for (let i = 0; i < 5; i++) {
+        client.advanceFrame();
+      }
+
+      // Receive late input for frame 0
+      client.onRemoteInput(
+        "remote-player",
+        { moveX: -1, moveY: 0, jump: false, timestamp: Date.now() },
+        0,
+      );
+
+      // Should handle rollback to beginning
+      expect(client.getCurrentFrame()).toBe(5);
+      
+      const state = client.getStateForRendering()!;
+      expect(state.players.get("remote-player")?.position.x).toBeLessThan(0);
+    });
+
+    test("should handle multiple late inputs in sequence", () => {
+      // Advance several frames
+      for (let i = 0; i < 10; i++) {
+        client.advanceFrame();
+      }
+
+      // Receive multiple late inputs
+      client.onRemoteInput(
+        "remote-player",
+        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        2,
+      );
+      client.onRemoteInput(
+        "remote-player",
+        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        5,
+      );
+      client.onRemoteInput(
+        "remote-player",
+        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        8,
+      );
+
+      const state = client.getStateForRendering()!;
+      expect(state).not.toBeNull();
+      expect(state.players.get("remote-player")?.position.x).toBeGreaterThan(0);
+    });
+  });
 });

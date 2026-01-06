@@ -255,5 +255,118 @@ describe("GameLoop", () => {
       // Jump should have registered (velocity negative = upward)
       expect(player?.velocity.y).toBeLessThan(0);
     });
+
+    test("three players: gravity applied correctly to all", async () => {
+      // Regression test for gravity multiplying with number of players
+      addPlayer("player-1", 0, 0);
+      addPlayer("player-2", 100, 0);
+      addPlayer("player-3", 200, 0);
+
+      // No inputs - all players should fall due to gravity
+      gameLoop.start();
+      await new Promise((resolve) => setTimeout(resolve, 100)); // ~2 ticks
+      gameLoop.stop();
+
+      const world = worldManager.getState();
+      const p1 = world.players.get("player-1");
+      const p2 = world.players.get("player-2");
+      const p3 = world.players.get("player-3");
+
+      // All players should have fallen the same amount
+      expect(p1?.position.y).toBeCloseTo(p2!.position.y, 2);
+      expect(p2?.position.y).toBeCloseTo(p3!.position.y, 2);
+
+      // Position should be reasonable (not 3x gravity)
+      // After 100ms at 980 gravity: y ≈ 0.5 * 980 * 0.1^2 = 4.9 units
+      expect(p1?.position.y).toBeLessThan(15);
+    });
+
+    test("mixed input rates: different clients can send different amounts", async () => {
+      addPlayer("fast-client", 0, 190); // On ground
+      addPlayer("slow-client", 100, 190); // On ground
+
+      // Fast client sends 3 inputs
+      const now = Date.now();
+      inputQueue.enqueue("fast-client", {
+        seq: 0,
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: now },
+        timestamp: now,
+      });
+      inputQueue.enqueue("fast-client", {
+        seq: 1,
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 },
+        timestamp: now + 16,
+      });
+      inputQueue.enqueue("fast-client", {
+        seq: 2,
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: now + 32 },
+        timestamp: now + 32,
+      });
+
+      // Slow client sends only 1 input
+      inputQueue.enqueue("slow-client", {
+        seq: 0,
+        input: { moveX: -1, moveY: 0, jump: false, timestamp: now },
+        timestamp: now,
+      });
+
+      gameLoop.start();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      gameLoop.stop();
+
+      const world = worldManager.getState();
+      const fastPlayer = world.players.get("fast-client");
+      const slowPlayer = world.players.get("slow-client");
+
+      // Fast client moved right
+      expect(fastPlayer?.position.x).toBeGreaterThan(0);
+      // Slow client moved left (but less total distance due to fewer inputs)
+      expect(slowPlayer?.position.x).toBeLessThan(100);
+    });
+
+    test("client disconnect: remaining clients unaffected", async () => {
+      addPlayer("staying", 0, 0);
+      addPlayer("leaving", 100, 0);
+
+      // Both send inputs
+      const now = Date.now();
+      inputQueue.enqueue("staying", {
+        seq: 0,
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: now },
+        timestamp: now,
+      });
+      inputQueue.enqueue("leaving", {
+        seq: 0,
+        input: { moveX: -1, moveY: 0, jump: false, timestamp: now },
+        timestamp: now,
+      });
+
+      gameLoop.start();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      // Record position of staying player
+      let world = worldManager.getState();
+      const stayingX1 = world.players.get("staying")?.position.x ?? 0;
+      const stayingY1 = world.players.get("staying")?.position.y ?? 0;
+
+      // Remove leaving player
+      const newWorld = {
+        ...world,
+        players: new Map([...world.players].filter(([id]) => id !== "leaving")),
+      };
+      worldManager.setState(newWorld);
+
+      // Continue running
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      gameLoop.stop();
+
+      world = worldManager.getState();
+      const stayingPlayer = world.players.get("staying");
+
+      // Staying player should have continued falling normally
+      expect(stayingPlayer?.position.y).toBeGreaterThan(stayingY1);
+      // Should NOT be affected by the other player's removal
+      expect(world.players.has("leaving")).toBe(false);
+    });
   });
 });

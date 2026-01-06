@@ -130,4 +130,134 @@ describe("InputQueue", () => {
       expect(clients).toHaveLength(0);
     });
   });
+
+  describe("getAllPendingInputsBatched", () => {
+    test("should return empty map when no inputs", () => {
+      const batched = inputQueue.getAllPendingInputsBatched();
+      expect(batched.size).toBe(0);
+    });
+
+    test("should return all inputs for all clients", () => {
+      inputQueue.enqueue("client-1", createInput(0));
+      inputQueue.enqueue("client-1", createInput(1));
+      inputQueue.enqueue("client-2", createInput(0));
+
+      const batched = inputQueue.getAllPendingInputsBatched();
+      
+      expect(batched.size).toBe(2);
+      expect(batched.get("client-1")?.length).toBe(2);
+      expect(batched.get("client-2")?.length).toBe(1);
+    });
+
+    test("should return copies not references", () => {
+      inputQueue.enqueue("client-1", createInput(0));
+      
+      const batched1 = inputQueue.getAllPendingInputsBatched();
+      const batched2 = inputQueue.getAllPendingInputsBatched();
+      
+      // Should be different array instances
+      expect(batched1.get("client-1")).not.toBe(batched2.get("client-1"));
+    });
+
+    test("should not include clients with empty queues", () => {
+      inputQueue.enqueue("client-1", createInput(0));
+      inputQueue.enqueue("client-2", createInput(0));
+      inputQueue.acknowledge("client-2", 0);
+
+      const batched = inputQueue.getAllPendingInputsBatched();
+      
+      expect(batched.has("client-1")).toBe(true);
+      expect(batched.has("client-2")).toBe(false);
+    });
+
+    test("should preserve input order", () => {
+      inputQueue.enqueue("client-1", createInput(2));
+      inputQueue.enqueue("client-1", createInput(0));
+      inputQueue.enqueue("client-1", createInput(1));
+
+      const batched = inputQueue.getAllPendingInputsBatched();
+      const inputs = batched.get("client-1")!;
+      
+      expect(inputs[0]?.seq).toBe(0);
+      expect(inputs[1]?.seq).toBe(1);
+      expect(inputs[2]?.seq).toBe(2);
+    });
+  });
+
+  describe("getAllPendingInputs", () => {
+    test("should return empty map when no inputs", () => {
+      const inputs = inputQueue.getAllPendingInputs();
+      expect(inputs.size).toBe(0);
+    });
+
+    test("should return last input for each client", () => {
+      const now = Date.now();
+      inputQueue.enqueue("client-1", { 
+        seq: 0, 
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: now }, 
+        timestamp: now 
+      });
+      inputQueue.enqueue("client-1", { 
+        seq: 1, 
+        input: { moveX: -1, moveY: 0, jump: true, timestamp: now + 16 }, 
+        timestamp: now + 16 
+      });
+
+      const inputs = inputQueue.getAllPendingInputs();
+      
+      // Should return the last input (seq 1)
+      expect(inputs.get("client-1")?.moveX).toBe(-1);
+      expect(inputs.get("client-1")?.jump).toBe(true);
+    });
+  });
+
+  describe("getLastProcessedSeq", () => {
+    test("should return -1 for unknown client", () => {
+      expect(inputQueue.getLastProcessedSeq("unknown")).toBe(-1);
+    });
+
+    test("should return -1 for client with empty queue", () => {
+      inputQueue.enqueue("client-1", createInput(0));
+      inputQueue.acknowledge("client-1", 0);
+      
+      expect(inputQueue.getLastProcessedSeq("client-1")).toBe(-1);
+    });
+
+    test("should return seq before first pending input", () => {
+      inputQueue.enqueue("client-1", createInput(5));
+      inputQueue.enqueue("client-1", createInput(6));
+      inputQueue.enqueue("client-1", createInput(7));
+
+      // First pending is 5, so last processed is 4
+      expect(inputQueue.getLastProcessedSeq("client-1")).toBe(4);
+    });
+  });
+
+  describe("edge cases", () => {
+    test("should handle many clients", () => {
+      for (let i = 0; i < 100; i++) {
+        inputQueue.enqueue(`client-${i}`, createInput(0));
+      }
+
+      expect(inputQueue.getClientsWithInputs().length).toBe(100);
+      expect(inputQueue.getAllPendingInputsBatched().size).toBe(100);
+    });
+
+    test("should handle many inputs per client", () => {
+      for (let i = 0; i < 500; i++) {
+        inputQueue.enqueue("client-1", createInput(i));
+      }
+
+      expect(inputQueue.getPendingInputs("client-1").length).toBe(500);
+    });
+
+    test("should handle duplicate sequence numbers gracefully", () => {
+      inputQueue.enqueue("client-1", createInput(5));
+      inputQueue.enqueue("client-1", createInput(5)); // Duplicate
+
+      const pending = inputQueue.getPendingInputs("client-1");
+      // Both should be in queue (no deduplication in current implementation)
+      expect(pending.length).toBe(2);
+    });
+  });
 });

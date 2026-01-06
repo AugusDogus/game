@@ -282,5 +282,261 @@ describe("ServerAuthoritativeServer", () => {
       // Should return the snapshot closest to the requested timestamp
       expect(snapshot?.timestamp).toBe(pastTimestamp);
     });
+
+    test("two clients: gravity should not double", () => {
+      // This is a regression test for the bug where adding a second client
+      // caused gravity to be applied multiple times per tick
+      server.addClient("player-1");
+      server.addClient("player-2");
+
+      // Both players send idle inputs (just standing)
+      const now = Date.now();
+      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("player-2", { moveX: 0, moveY: 0, jump: false, timestamp: now }, 0);
+
+      const snapshot = server.tick();
+
+      const player1 = snapshot.state.players.get("player-1");
+      const player2 = snapshot.state.players.get("player-2");
+
+      // Both players should have fallen the same amount
+      expect(player1?.position.y).toBeCloseTo(player2!.position.y, 5);
+      
+      // Position should be reasonable for one tick of gravity
+      // At 980 gravity, 50ms tick: y = 0.5 * 980 * 0.05^2 ≈ 1.225 units
+      // Should NOT be ~2.45 (which would indicate double gravity)
+      expect(player1?.position.y).toBeLessThan(3);
+    });
+
+    test("two clients with different input counts: physics isolation", () => {
+      server.addClient("active");
+      server.addClient("idle");
+
+      // Active player sends 3 inputs
+      const now = Date.now();
+      server.onClientInput("active", { moveX: 1, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("active", { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 }, 1);
+      server.onClientInput("active", { moveX: 1, moveY: 0, jump: false, timestamp: now + 32 }, 2);
+
+      // Idle player sends no inputs
+
+      const snapshot = server.tick();
+
+      const activePlayer = snapshot.state.players.get("active");
+      const idlePlayer = snapshot.state.players.get("idle");
+
+      // Active player should have moved
+      expect(activePlayer?.position.x).toBeGreaterThan(0);
+
+      // Idle player should NOT have moved horizontally
+      expect(idlePlayer?.position.x).toBe(0);
+
+      // But idle player SHOULD have fallen (gravity for tickInterval)
+      expect(idlePlayer?.position.y).toBeGreaterThan(0);
+    });
+
+    test("stop movement: no extra distance when releasing key", () => {
+      server.addClient("player-1");
+
+      // Run ticks to ground the player
+      for (let i = 0; i < 10; i++) {
+        server.tick();
+      }
+
+      // Player moves right then stops
+      const now = Date.now();
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 }, 1);
+      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now + 32 }, 2); // Stop
+      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now + 48 }, 3); // Still stopped
+
+      const snapshot = server.tick();
+      const player = snapshot.state.players.get("player-1");
+
+      // Movement should be reasonable for 2 inputs of movement at 16ms each
+      // 200 units/sec * 0.032 sec = 6.4 units approximately
+      expect(player?.position.x).toBeGreaterThan(5);
+      expect(player?.position.x).toBeLessThan(15);
+    });
+
+    test("variable delta: irregular timing should be handled correctly", () => {
+      server.addClient("player-1");
+
+      // Wait for player to land
+      for (let i = 0; i < 10; i++) {
+        server.tick();
+      }
+
+      // Inputs with irregular timing
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1000 }, 0);
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1010 }, 1); // 10ms
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1040 }, 2); // 30ms
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1055 }, 3); // 15ms
+
+      const snapshot = server.tick();
+      const player = snapshot.state.players.get("player-1");
+
+      // Total time: 16.67 (default) + 10 + 30 + 15 = ~72ms of movement
+      // 200 units/sec * 0.072 sec = 14.4 units approximately
+      expect(player?.position.x).toBeGreaterThan(10);
+      expect(player?.position.x).toBeLessThan(20);
+    });
+
+    test("three clients: physics remains consistent", () => {
+      server.addClient("player-1");
+      server.addClient("player-2");
+      server.addClient("player-3");
+
+      const now = Date.now();
+      // All three send different inputs
+      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("player-2", { moveX: -1, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("player-3", { moveX: 0, moveY: 0, jump: false, timestamp: now }, 0);
+
+      const snapshot = server.tick();
+
+      const p1 = snapshot.state.players.get("player-1");
+      const p2 = snapshot.state.players.get("player-2");
+      const p3 = snapshot.state.players.get("player-3");
+
+      // Player 1 moved right
+      expect(p1?.position.x).toBeGreaterThan(0);
+      // Player 2 moved left
+      expect(p2?.position.x).toBeLessThan(0);
+      // Player 3 stayed put horizontally
+      expect(p3?.position.x).toBe(0);
+
+      // All three should have fallen the same amount (same physics applied once each)
+      expect(p1?.position.y).toBeCloseTo(p2!.position.y, 3);
+      expect(p2?.position.y).toBeCloseTo(p3!.position.y, 3);
+    });
+
+    test("getSnapshotAtTimestamp: future timestamp should return latest", () => {
+      server.addClient("player-1");
+
+      // Run a few ticks
+      server.tick();
+      server.tick();
+      const lastSnapshot = server.tick();
+
+      // Request snapshot at a future timestamp
+      const futureTimestamp = Date.now() + 10000;
+      const snapshot = server.getSnapshotAtTimestamp(futureTimestamp);
+
+      // Should return the latest available snapshot (or close to it)
+      expect(snapshot).toBeDefined();
+      // Since all ticks happen quickly, we just verify we get a snapshot
+      expect(snapshot?.tick).toBeGreaterThanOrEqual(1);
+      expect(snapshot?.tick).toBeLessThanOrEqual(lastSnapshot.tick);
+    });
+
+    test("getSnapshotAtTimestamp: very old timestamp should return earliest", () => {
+      server.addClient("player-1");
+
+      // Run several ticks
+      for (let i = 0; i < 10; i++) {
+        server.tick();
+      }
+
+      // Request snapshot at a very old timestamp
+      const oldTimestamp = Date.now() - 100000;
+      const snapshot = server.getSnapshotAtTimestamp(oldTimestamp);
+
+      // Should return something (earliest or closest)
+      expect(snapshot).toBeDefined();
+    });
+
+    test("getConnectedClients: should return clients in consistent order", () => {
+      server.addClient("charlie");
+      server.addClient("alice");
+      server.addClient("bob");
+
+      const clients1 = server.getConnectedClients();
+      const clients2 = server.getConnectedClients();
+
+      // Should return same order each time
+      expect(clients1).toEqual(clients2);
+      expect(clients1.length).toBe(3);
+    });
+
+    test("getConnectedClients: should update after add/remove", () => {
+      server.addClient("player-1");
+      server.addClient("player-2");
+      
+      let clients = server.getConnectedClients();
+      expect(clients.length).toBe(2);
+      
+      server.removeClient("player-1");
+      
+      clients = server.getConnectedClients();
+      expect(clients.length).toBe(1);
+      expect(clients).toContain("player-2");
+      expect(clients).not.toContain("player-1");
+    });
+  });
+
+  describe("edge cases", () => {
+    test("should handle client disconnect and reconnect", () => {
+      server.addClient("player-1");
+      server.tick();
+      
+      server.removeClient("player-1");
+      server.tick();
+      
+      // Re-add the same player
+      server.addClient("player-1");
+      const snapshot = server.tick();
+      
+      expect(snapshot.state.players.has("player-1")).toBe(true);
+      // Player should start fresh (default position)
+      expect(snapshot.state.players.get("player-1")?.position.x).toBe(0);
+    });
+
+    test("should handle input for non-existent client", () => {
+      // Send input for client that was never added
+      server.onClientInput(
+        "ghost-player",
+        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        0,
+      );
+
+      // Should not crash, tick should work
+      const snapshot = server.tick();
+      expect(snapshot).toBeDefined();
+    });
+
+    test("should handle empty tick (no clients, no inputs)", () => {
+      const snapshot = server.tick();
+      
+      expect(snapshot.tick).toBe(1);
+      expect(snapshot.state.players.size).toBe(0);
+    });
+
+    test("should handle very high tick rate", () => {
+      // Create server with 120Hz tick rate
+      const fastWorldManager = new DefaultWorldManager(createPlatformerWorld());
+      const fastServer = new ServerAuthoritativeServer<PlatformerWorld, PlatformerInput>(
+        fastWorldManager,
+        {
+          initialWorld: createPlatformerWorld(),
+          simulate: simulatePlatformer,
+          addPlayerToWorld: addPlayerToWorld,
+          removePlayerFromWorld: removePlayerFromWorld,
+          tickIntervalMs: 1000 / 120, // 120Hz
+          snapshotHistorySize: 60,
+          mergeInputs: mergePlatformerInputs,
+        },
+      );
+
+      fastServer.addClient("player-1");
+      
+      // Run many fast ticks
+      for (let i = 0; i < 240; i++) {
+        fastServer.tick();
+      }
+
+      const state = fastServer.getWorldState();
+      expect(state.players.has("player-1")).toBe(true);
+    });
   });
 });

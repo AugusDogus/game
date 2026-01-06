@@ -115,6 +115,169 @@ describe("Predictor", () => {
     });
   });
 
+  describe("other players in world state", () => {
+    test("should only extract local player from world with multiple players", () => {
+      const localPlayer = createGroundedPlayer(playerId, 0);
+      const otherPlayer = createGroundedPlayer("other-player", 100);
+      
+      const world: PlatformerWorld = {
+        players: new Map([
+          [playerId, localPlayer],
+          ["other-player", otherPlayer],
+        ]),
+        tick: 0,
+      };
+
+      predictor.setBaseState(world, playerId);
+      
+      const state = predictor.getState();
+      // Should only have the local player
+      expect(state?.players?.size).toBe(1);
+      expect(state?.players?.has(playerId)).toBe(true);
+      expect(state?.players?.has("other-player")).toBe(false);
+    });
+
+    test("inputs should only affect local player prediction", () => {
+      const localPlayer = createGroundedPlayer(playerId, 0);
+      const otherPlayer = createGroundedPlayer("other-player", 100);
+      
+      const world: PlatformerWorld = {
+        players: new Map([
+          [playerId, localPlayer],
+          ["other-player", otherPlayer],
+        ]),
+        tick: 0,
+      };
+
+      predictor.setBaseState(world, playerId);
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+
+      const state = predictor.getState();
+      // Local player should have moved
+      expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
+      // Other player should not be in prediction state
+      expect(state?.players?.has("other-player")).toBe(false);
+    });
+  });
+
+  describe("mergeWithServer", () => {
+    test("should merge predicted local player with server world", () => {
+      const localPlayer = createGroundedPlayer(playerId, 0);
+      const otherPlayer = createGroundedPlayer("other-player", 500);
+      
+      // Setup server world with both players
+      const serverWorld: PlatformerWorld = {
+        players: new Map([
+          [playerId, { ...localPlayer, position: { x: 10, y: DEFAULT_FLOOR_Y - 10 } }],
+          ["other-player", otherPlayer],
+        ]),
+        tick: 5,
+      };
+
+      // Setup prediction with local player moved further
+      predictor.setBaseState(serverWorld, playerId);
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+
+      const merged = predictor.mergeWithServer(serverWorld);
+
+      // Should have both players
+      expect(merged.players.size).toBe(2);
+      // Local player should use predicted position (ahead of server)
+      expect(merged.players.get(playerId)?.position.x).toBeGreaterThan(10);
+      // Other player should use server position
+      expect(merged.players.get("other-player")?.position.x).toBe(500);
+      // Tick should be from server
+      expect(merged.tick).toBe(5);
+    });
+
+    test("should return server world when no prediction", () => {
+      const serverWorld: PlatformerWorld = {
+        players: new Map([["player", createGroundedPlayer("player")]]),
+        tick: 10,
+      };
+
+      const merged = predictor.mergeWithServer(serverWorld);
+
+      expect(merged).toBe(serverWorld);
+    });
+  });
+
+  describe("applyInputWithDelta", () => {
+    test("should apply input with explicit delta time", () => {
+      const world = createWorld(createGroundedPlayer(playerId));
+      predictor.setBaseState(world, playerId);
+
+      // Apply with specific delta (50ms)
+      predictor.applyInputWithDelta(
+        { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
+        50,
+      );
+
+      const state = predictor.getState();
+      // At 200 units/sec, 50ms should move 10 units
+      expect(state?.players?.get(playerId)?.position.x).toBeCloseTo(10, 0);
+    });
+
+    test("should not update internal timestamp tracking", () => {
+      const world = createWorld(createGroundedPlayer(playerId));
+      predictor.setBaseState(world, playerId);
+
+      // First, apply a normal input
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      
+      // Apply with delta (doesn't affect timestamp tracking)
+      predictor.applyInputWithDelta(
+        { moveX: 1, moveY: 0, jump: false, timestamp: 9999 },
+        16,
+      );
+
+      // Apply another normal input - should calculate delta from 1000, not 9999
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 });
+
+      // Should work without issues
+      const state = predictor.getState();
+      expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
+    });
+  });
+
+  describe("timestamp management", () => {
+    test("resetTimestamp should clear last input timestamp", () => {
+      const world = createWorld(createGroundedPlayer(playerId));
+      predictor.setBaseState(world, playerId);
+
+      // Apply input to set timestamp
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      const pos1 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
+
+      predictor.resetTimestamp();
+
+      // Next input should use default delta (16.67ms) instead of calculating from 1000
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 5000 });
+      
+      // If timestamp wasn't reset, delta would be 4000ms (clamped to 100ms)
+      // With reset, delta is 16.67ms - so movement should be similar to first input
+      const pos2 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
+      const movement = pos2 - pos1;
+      
+      // Movement should be small (16.67ms worth, not 100ms worth)
+      expect(movement).toBeLessThan(10);
+    });
+
+    test("setLastInputTimestamp should set custom timestamp", () => {
+      const world = createWorld(createGroundedPlayer(playerId));
+      predictor.setBaseState(world, playerId);
+
+      predictor.setLastInputTimestamp(1000);
+      
+      // Apply input 50ms later
+      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1050 });
+
+      const state = predictor.getState();
+      // Should have moved for 50ms (10 units at 200 units/sec)
+      expect(state?.players?.get(playerId)?.position.x).toBeCloseTo(10, 0);
+    });
+  });
+
   describe("real-world scenarios", () => {
     test("variable frame rate: 30fps and 60fps players should move similar distances over same real time", () => {
       // Player A: 60fps (16.67ms between inputs) for 100ms = 6 inputs
