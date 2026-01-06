@@ -1,14 +1,35 @@
 import type { Socket } from "socket.io-client";
+import { DEFAULT_INTERPOLATION_DELAY_MS } from "../constants.js";
 import type {
   NetcodeClientConfig,
-  WorldSnapshot,
   PlayerState,
+  WorldSnapshot,
 } from "../types.js";
 import { InputBuffer } from "./input-buffer.js";
+import { Interpolator } from "./interpolation.js";
 import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
-import { Interpolator } from "./interpolation.js";
-import { DEFAULT_INTERPOLATION_DELAY_MS } from "../constants.js";
+
+/** Position history entry for debug visualization */
+export interface PositionHistoryEntry {
+  x: number;
+  y: number;
+  timestamp: number;
+}
+
+/** Debug data for visualization */
+export interface DebugData {
+  /** Local player's predicted positions (green trail) */
+  localPredictedHistory: PositionHistoryEntry[];
+  /** Local player's server-confirmed positions (red trail) */
+  localServerHistory: PositionHistoryEntry[];
+  /** Other players' interpolated positions (blue trail) */
+  otherPlayersHistory: Map<string, PositionHistoryEntry[]>;
+  /** Other players' raw server positions (orange trail) */
+  otherPlayersServerHistory: Map<string, PositionHistoryEntry[]>;
+}
+
+const MAX_HISTORY_LENGTH = 60; // ~3 seconds at 20Hz
 
 /**
  * High-level client class that orchestrates all client-side netcode primitives
@@ -22,11 +43,21 @@ export class NetcodeClient {
   private config: NetcodeClientConfig;
   private playerId: string | null = null;
   private localPlayerState: PlayerState | null = null;
+  private simulatedLatency: number;
+
+  // Debug history tracking
+  private localPredictedHistory: PositionHistoryEntry[] = [];
+  private localServerHistory: PositionHistoryEntry[] = [];
+  private otherPlayersHistory: Map<string, PositionHistoryEntry[]> = new Map();
+  private otherPlayersServerHistory: Map<string, PositionHistoryEntry[]> = new Map();
+  private lastServerSnapshot: WorldSnapshot | null = null;
 
   constructor(socket: Socket, config: NetcodeClientConfig = {}) {
     this.socket = socket;
+    this.simulatedLatency = config.simulatedLatency ?? 0;
     this.config = {
       interpolationDelay: config.interpolationDelay ?? DEFAULT_INTERPOLATION_DELAY_MS,
+      simulatedLatency: this.simulatedLatency,
       onWorldUpdate: config.onWorldUpdate,
       onPlayerJoin: config.onPlayerJoin,
       onPlayerLeave: config.onPlayerLeave,
@@ -76,19 +107,31 @@ export class NetcodeClient {
    * Set up Socket.IO event handlers
    */
   private setupSocketHandlers(): void {
-    // Handle world snapshots
+    // Handle world snapshots (with simulated latency)
     this.socket.on("netcode:snapshot", (snapshot: WorldSnapshot) => {
-      this.handleSnapshot(snapshot);
+      if (this.simulatedLatency > 0) {
+        setTimeout(() => this.handleSnapshot(snapshot), this.simulatedLatency);
+      } else {
+        this.handleSnapshot(snapshot);
+      }
     });
 
-    // Handle player join
+    // Handle player join (with simulated latency)
     this.socket.on("netcode:join", (data: { playerId: string; state: PlayerState }) => {
-      this.config.onPlayerJoin?.(data.playerId, data.state);
+      if (this.simulatedLatency > 0) {
+        setTimeout(() => this.config.onPlayerJoin?.(data.playerId, data.state), this.simulatedLatency);
+      } else {
+        this.config.onPlayerJoin?.(data.playerId, data.state);
+      }
     });
 
-    // Handle player leave
+    // Handle player leave (with simulated latency)
     this.socket.on("netcode:leave", (data: { playerId: string }) => {
-      this.config.onPlayerLeave?.(data.playerId);
+      if (this.simulatedLatency > 0) {
+        setTimeout(() => this.config.onPlayerLeave?.(data.playerId), this.simulatedLatency);
+      } else {
+        this.config.onPlayerLeave?.(data.playerId);
+      }
     });
 
     // Handle disconnect
@@ -108,6 +151,33 @@ export class NetcodeClient {
       return;
     }
 
+    // Store for debug
+    this.lastServerSnapshot = snapshot;
+
+    // Track server position for local player (debug)
+    const localServerState = snapshot.players.find((p) => p.id === this.playerId);
+    if (localServerState) {
+      this.addToHistory(this.localServerHistory, {
+        x: localServerState.position.x,
+        y: localServerState.position.y,
+        timestamp: Date.now(),
+      });
+    }
+
+    // Track server positions for other players (debug)
+    for (const player of snapshot.players) {
+      if (player.id !== this.playerId) {
+        if (!this.otherPlayersServerHistory.has(player.id)) {
+          this.otherPlayersServerHistory.set(player.id, []);
+        }
+        this.addToHistory(this.otherPlayersServerHistory.get(player.id)!, {
+          x: player.position.x,
+          y: player.position.y,
+          timestamp: Date.now(),
+        });
+      }
+    }
+
     // Reconcile local player state
     const reconciledState = this.reconciler.reconcile(snapshot);
     this.localPlayerState = reconciledState;
@@ -117,6 +187,16 @@ export class NetcodeClient {
 
     // Notify callback
     this.config.onWorldUpdate?.(snapshot);
+  }
+
+  /**
+   * Add entry to history, maintaining max length
+   */
+  private addToHistory(history: PositionHistoryEntry[], entry: PositionHistoryEntry): void {
+    history.push(entry);
+    while (history.length > MAX_HISTORY_LENGTH) {
+      history.shift();
+    }
   }
 
   /**
@@ -134,8 +214,7 @@ export class NetcodeClient {
       timestamp,
     });
 
-    // Send to server
-    this.socket.emit("netcode:input", {
+    const inputMessage = {
       seq,
       input: {
         moveX: input.moveX,
@@ -143,9 +222,16 @@ export class NetcodeClient {
         timestamp,
       },
       timestamp,
-    });
+    };
 
-    // Apply locally for prediction
+    // Send to server (with simulated latency for outgoing messages)
+    if (this.simulatedLatency > 0) {
+      setTimeout(() => this.socket.emit("netcode:input", inputMessage), this.simulatedLatency);
+    } else {
+      this.socket.emit("netcode:input", inputMessage);
+    }
+
+    // Apply locally for prediction (immediately, no delay - this is the point of prediction!)
     if (this.localPlayerState) {
       this.predictor.setBaseState(this.localPlayerState);
       this.predictor.applyInput({
@@ -154,6 +240,13 @@ export class NetcodeClient {
         timestamp,
       });
       this.localPlayerState = this.predictor.getState() ?? this.localPlayerState;
+
+      // Track predicted position (debug)
+      this.addToHistory(this.localPredictedHistory, {
+        x: this.localPlayerState.position.x,
+        y: this.localPlayerState.position.y,
+        timestamp,
+      });
     }
   }
 
@@ -168,7 +261,23 @@ export class NetcodeClient {
    * Get interpolated states for other entities
    */
   getInterpolatedStates(): PlayerState[] {
-    return this.interpolator.getInterpolatedStates();
+    const states = this.interpolator.getInterpolatedStates();
+
+    // Track interpolated positions for debug
+    for (const state of states) {
+      if (state.id !== this.playerId) {
+        if (!this.otherPlayersHistory.has(state.id)) {
+          this.otherPlayersHistory.set(state.id, []);
+        }
+        this.addToHistory(this.otherPlayersHistory.get(state.id)!, {
+          x: state.position.x,
+          y: state.position.y,
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    return states;
   }
 
   /**
@@ -197,5 +306,48 @@ export class NetcodeClient {
    */
   getPlayerId(): string | null {
     return this.playerId;
+  }
+
+  /**
+   * Set simulated network latency (for testing)
+   */
+  setSimulatedLatency(latencyMs: number): void {
+    this.simulatedLatency = Math.max(0, latencyMs);
+  }
+
+  /**
+   * Get current simulated latency
+   */
+  getSimulatedLatency(): number {
+    return this.simulatedLatency;
+  }
+
+  /**
+   * Get debug data for visualization
+   */
+  getDebugData(): DebugData {
+    return {
+      localPredictedHistory: [...this.localPredictedHistory],
+      localServerHistory: [...this.localServerHistory],
+      otherPlayersHistory: new Map(this.otherPlayersHistory),
+      otherPlayersServerHistory: new Map(this.otherPlayersServerHistory),
+    };
+  }
+
+  /**
+   * Get the last raw server snapshot (for debug visualization)
+   */
+  getLastServerSnapshot(): WorldSnapshot | null {
+    return this.lastServerSnapshot;
+  }
+
+  /**
+   * Clear debug history (useful when toggling debug mode)
+   */
+  clearDebugHistory(): void {
+    this.localPredictedHistory = [];
+    this.localServerHistory = [];
+    this.otherPlayersHistory.clear();
+    this.otherPlayersServerHistory.clear();
   }
 }

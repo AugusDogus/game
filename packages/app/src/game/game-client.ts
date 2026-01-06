@@ -3,6 +3,14 @@ import { NetcodeClient } from "@game/netcode";
 import type { Socket } from "socket.io-client";
 import { CanvasRenderer } from "../client/renderer/canvas-renderer.js";
 
+/** Debug rendering options */
+export interface DebugOptions {
+  /** Show breadcrumb trails */
+  showTrails: boolean;
+  /** Show server positions (ghost) */
+  showServerPositions: boolean;
+}
+
 /** Input send rate: 60 times per second */
 const INPUT_RATE_MS = 1000 / 60;
 
@@ -17,6 +25,7 @@ export class GameClient {
   private keys: Set<string> = new Set();
   private keydownHandler: (e: KeyboardEvent) => void;
   private keyupHandler: (e: KeyboardEvent) => void;
+  private debugOptions: DebugOptions = { showTrails: false, showServerPositions: false };
 
   constructor(socket: Socket, canvas: HTMLCanvasElement) {
     // Create renderer
@@ -116,8 +125,22 @@ export class GameClient {
       const players = this.netcodeClient.getAllPlayerStates();
       const localPlayerId = this.netcodeClient.getPlayerId();
 
+      // Get debug data if needed
+      const debugData = this.debugOptions.showTrails || this.debugOptions.showServerPositions
+        ? this.netcodeClient.getDebugData()
+        : null;
+
+      const serverSnapshot = this.debugOptions.showServerPositions
+        ? this.netcodeClient.getLastServerSnapshot()
+        : null;
+
       // Render
-      this.renderer.render(players, localPlayerId);
+      this.renderer.render(players, localPlayerId, {
+        debugData,
+        serverSnapshot,
+        showTrails: this.debugOptions.showTrails,
+        showServerPositions: this.debugOptions.showServerPositions,
+      });
 
       // Continue loop
       this.animationFrameId = requestAnimationFrame(render);
@@ -140,5 +163,37 @@ export class GameClient {
     }
     window.removeEventListener("keydown", this.keydownHandler);
     window.removeEventListener("keyup", this.keyupHandler);
+  }
+
+  /**
+   * Set simulated network latency (for testing)
+   */
+  setSimulatedLatency(latencyMs: number): void {
+    this.netcodeClient.setSimulatedLatency(latencyMs);
+  }
+
+  /**
+   * Get current simulated latency
+   */
+  getSimulatedLatency(): number {
+    return this.netcodeClient.getSimulatedLatency();
+  }
+
+  /**
+   * Set debug options
+   */
+  setDebugOptions(options: Partial<DebugOptions>): void {
+    this.debugOptions = { ...this.debugOptions, ...options };
+    // Clear history when disabling trails to start fresh next time
+    if (!options.showTrails && !options.showServerPositions) {
+      this.netcodeClient.clearDebugHistory();
+    }
+  }
+
+  /**
+   * Get current debug options
+   */
+  getDebugOptions(): DebugOptions {
+    return { ...this.debugOptions };
   }
 }

@@ -30,11 +30,12 @@ describe("Interpolator", () => {
     });
 
     test("should limit buffer size", () => {
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 30; i++) {
         interpolator.addSnapshot(createSnapshot(i, Date.now() + i * 50, []));
       }
 
-      expect(interpolator.size()).toBeLessThanOrEqual(10);
+      // Buffer is now 20 snapshots for smoother interpolation
+      expect(interpolator.size()).toBeLessThanOrEqual(20);
     });
   });
 

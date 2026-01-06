@@ -47,3 +47,6 @@ export {
   Reconciler,
   Interpolator,
 } from "./client/index.js";
+
+// Debug types
+export type { PositionHistoryEntry, DebugData } from "./client/netcode-client.js";

@@ -77,6 +77,12 @@ export interface NetcodeServerConfig {
 export interface NetcodeClientConfig {
   /** Interpolation delay in milliseconds (default: 100) */
   interpolationDelay?: number;
+  /** 
+   * Simulated network latency in milliseconds (default: 0).
+   * Useful for testing interpolation locally. Delays both incoming
+   * snapshots and outgoing inputs.
+   */
+  simulatedLatency?: number;
   /** Callback when world state updates */
   onWorldUpdate?: (snapshot: WorldSnapshot) => void;
   /** Callback when a player joins */
