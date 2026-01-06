@@ -25,8 +25,45 @@
         "typescript": "^5",
       },
     },
+    "packages/app": {
+      "name": "@game/app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@game/netcode": "workspace:*",
+        "@socket.io/bun-engine": "^0.1.0",
+        "@tanstack/react-query": "^5.90.16",
+        "bun-plugin-tailwind": "^0.1.2",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3",
+        "socket.io": "^4.8.3",
+        "socket.io-client": "^4.8.3",
+        "tailwindcss": "^4.1.18",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "typescript": "^5",
+      },
+    },
+    "packages/netcode": {
+      "name": "@game/netcode",
+      "version": "0.1.0",
+      "dependencies": {
+        "socket.io": "^4.8.3",
+        "socket.io-client": "^4.8.3",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5",
+      },
+    },
   },
   "packages": {
+    "@game/app": ["@game/app@workspace:packages/app"],
+
+    "@game/netcode": ["@game/netcode@workspace:packages/netcode"],
+
     "@oven/bun-darwin-aarch64": ["@oven/bun-darwin-aarch64@1.3.5", "", { "os": "darwin", "cpu": "arm64" }, "sha512-8GvNtMo0NINM7Emk9cNAviCG3teEgr3BUX9be0+GD029zIagx2Sf54jMui1Eu1IpFm7nWHODuLEefGOQNaJ0gQ=="],
 
     "@oven/bun-darwin-x64": ["@oven/bun-darwin-x64@1.3.5", "", { "os": "darwin", "cpu": "x64" }, "sha512-r33eHQOHAwkuiBJIwmkXIyqONQOQMnd1GMTpDzaxx9vf9+svby80LZO9Hcm1ns6KT/TBRFyODC/0loA7FAaffg=="],
