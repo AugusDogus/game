@@ -5,6 +5,7 @@ import homepage from "./client/index.html";
 const startTime = Date.now();
 
 // Create Socket.IO server and Bun engine
+// TODO: Add "webtransport" once Bun supports HTTP/3 (https://github.com/oven-sh/bun/issues/13656)
 const io = new Server();
 const engine = new Engine({
   path: "/socket.io/",
