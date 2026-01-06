@@ -1,5 +1,5 @@
 {
-  "name": "game-webtransport",
+  "name": "game",
   "private": true,
   "workspaces": [
     "packages/*"

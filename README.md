@@ -1,15 +1,21 @@
-# game-webtransport
+# game
 
-To install dependencies:
+Multiplayer game engine.
+
+## Setup
 
 ```bash
 bun install
+bun start
 ```
 
-To run:
+## Tests
 
 ```bash
-bun run index.ts
+bun test
 ```
 
-This project was created using `bun init` in bun v1.3.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Packages
+
+- `packages/netcode` - Netcode library (`@game/netcode`)
+- `packages/app` - Example platformer
