@@ -15,6 +15,7 @@ export type {
   InputMessage,
   NetcodeServerConfig,
   NetcodeClientConfig,
+  PhysicsFunction,
 } from "./types.js";
 
 // Constants
@@ -24,11 +25,14 @@ export {
   DEFAULT_INTERPOLATION_DELAY_MS,
   DEFAULT_SNAPSHOT_HISTORY_SIZE,
   DEFAULT_PLAYER_SPEED,
+  DEFAULT_GRAVITY,
+  DEFAULT_JUMP_VELOCITY,
+  DEFAULT_FLOOR_Y,
   MAX_INPUT_BUFFER_SIZE,
 } from "./constants.js";
 
-// Physics
-export { applyInput, createPlayerState } from "./physics.js";
+// Physics presets
+export { platformerPhysics, topDownPhysics, createPlayerState } from "./physics.js";
 
 // Server exports
 export {

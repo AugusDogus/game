@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { platformerPhysics } from "../physics.js";
 import type { InputMessage, WorldSnapshot } from "../types.js";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
@@ -15,7 +16,7 @@ describe("GameLoop", () => {
     worldState = new WorldState();
     inputQueue = new InputQueue();
     snapshotHistory = new SnapshotHistory(60);
-    gameLoop = new GameLoop(worldState, inputQueue, snapshotHistory, 50); // 20 Hz
+    gameLoop = new GameLoop(worldState, inputQueue, snapshotHistory, platformerPhysics, 50); // 20 Hz
   });
 
   afterEach(() => {
@@ -65,7 +66,7 @@ describe("GameLoop", () => {
 
       const input: InputMessage = {
         seq: 0,
-        input: { moveX: 1, moveY: 0, timestamp: Date.now() },
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
         timestamp: Date.now(),
       };
       inputQueue.enqueue("player-1", input);
@@ -87,7 +88,7 @@ describe("GameLoop", () => {
 
       inputQueue.enqueue("player-1", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, timestamp: Date.now() },
+        input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
         timestamp: Date.now(),
       });
 

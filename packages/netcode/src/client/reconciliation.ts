@@ -26,7 +26,7 @@ export class Reconciler {
     if (!serverState) {
       // Player not in snapshot, return current predicted state or create default
       const current = this.predictor.getState();
-      return current ?? { id: this.playerId, position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, tick: 0 };
+      return current ?? { id: this.playerId, position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: false, tick: 0 };
     }
 
     // Get the last processed sequence number for this player

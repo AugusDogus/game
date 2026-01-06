@@ -101,7 +101,7 @@ function App() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
       <div className="mb-4 text-center space-y-2">
         <h1 className="text-2xl font-bold text-slate-100">Game WebTransport</h1>
-        <p className="text-sm text-slate-400">Use WASD or Arrow Keys to move</p>
+        <p className="text-sm text-slate-400">A/D or Arrow Keys to move • Space/W/Up to jump</p>
       </div>
 
       <div className="mb-4 flex gap-4">

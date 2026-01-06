@@ -52,12 +52,17 @@ export class NetcodeClient {
   private otherPlayersServerHistory: Map<string, PositionHistoryEntry[]> = new Map();
   private lastServerSnapshot: WorldSnapshot | null = null;
 
-  constructor(socket: Socket, config: NetcodeClientConfig = {}) {
+  constructor(socket: Socket, config: NetcodeClientConfig) {
+    if (!config.applyInput) {
+      throw new Error("NetcodeClientConfig.applyInput is required");
+    }
+
     this.socket = socket;
     this.simulatedLatency = config.simulatedLatency ?? 0;
     this.config = {
       interpolationDelay: config.interpolationDelay ?? DEFAULT_INTERPOLATION_DELAY_MS,
       simulatedLatency: this.simulatedLatency,
+      applyInput: config.applyInput,
       onWorldUpdate: config.onWorldUpdate,
       onPlayerJoin: config.onPlayerJoin,
       onPlayerLeave: config.onPlayerLeave,
@@ -65,7 +70,7 @@ export class NetcodeClient {
 
     // Initialize primitives
     this.inputBuffer = new InputBuffer();
-    this.predictor = new Predictor();
+    this.predictor = new Predictor(config.applyInput);
     this.interpolator = new Interpolator(this.config.interpolationDelay);
 
     // Set up socket event handlers
@@ -94,11 +99,12 @@ export class NetcodeClient {
       this.predictor,
       this.playerId,
     );
-    // Initialize local player state at origin
+    // Initialize local player state at origin (will fall to floor due to gravity)
     this.localPlayerState = {
       id: this.playerId,
       position: { x: 0, y: 0 },
       velocity: { x: 0, y: 0 },
+      isGrounded: false,
       tick: 0,
     };
   }
@@ -202,7 +208,7 @@ export class NetcodeClient {
   /**
    * Send player input to server
    */
-  sendInput(input: { moveX: number; moveY: number }): void {
+  sendInput(input: { moveX: number; moveY: number; jump: boolean }): void {
     if (!this.socket.connected) {
       return;
     }
@@ -211,6 +217,7 @@ export class NetcodeClient {
     const seq = this.inputBuffer.add({
       moveX: input.moveX,
       moveY: input.moveY,
+      jump: input.jump,
       timestamp,
     });
 
@@ -219,6 +226,7 @@ export class NetcodeClient {
       input: {
         moveX: input.moveX,
         moveY: input.moveY,
+        jump: input.jump,
         timestamp,
       },
       timestamp,
@@ -237,6 +245,7 @@ export class NetcodeClient {
       this.predictor.applyInput({
         moveX: input.moveX,
         moveY: input.moveY,
+        jump: input.jump,
         timestamp,
       });
       this.localPlayerState = this.predictor.getState() ?? this.localPlayerState;

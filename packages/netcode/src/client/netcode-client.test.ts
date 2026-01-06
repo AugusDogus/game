@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { NetcodeClient } from "./netcode-client.js";
 import type { WorldSnapshot } from "../types.js";
+import { platformerPhysics } from "../physics.js";
 
 /**
  * Create a mock Socket.IO socket for testing
@@ -47,6 +48,7 @@ function createSnapshot(
       id: p.id,
       position: { x: p.x, y: p.y },
       velocity: { x: 0, y: 0 },
+      isGrounded: true,
       tick,
     })),
     acks,
@@ -57,7 +59,9 @@ describe("NetcodeClient", () => {
   describe("simulated latency", () => {
     it("should initialize with zero latency by default", () => {
       const socket = createMockSocket();
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       expect(client.getSimulatedLatency()).toBe(0);
     });
@@ -65,6 +69,7 @@ describe("NetcodeClient", () => {
     it("should initialize with configured latency", () => {
       const socket = createMockSocket();
       const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
         simulatedLatency: 100,
       });
 
@@ -73,7 +78,9 @@ describe("NetcodeClient", () => {
 
     it("should allow setting latency at runtime", () => {
       const socket = createMockSocket();
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       client.setSimulatedLatency(150);
       expect(client.getSimulatedLatency()).toBe(150);
@@ -84,7 +91,9 @@ describe("NetcodeClient", () => {
 
     it("should clamp negative latency to zero", () => {
       const socket = createMockSocket();
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       client.setSimulatedLatency(-50);
       expect(client.getSimulatedLatency()).toBe(0);
@@ -97,7 +106,9 @@ describe("NetcodeClient", () => {
 
     beforeEach(() => {
       socket = createMockSocket({ connected: true, id: "local-player" });
-      client = new NetcodeClient(socket as never);
+      client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
     });
 
     it("should return empty debug data initially", () => {
@@ -110,8 +121,8 @@ describe("NetcodeClient", () => {
     });
 
     it("should track local predicted positions when sending input", () => {
-      client.sendInput({ moveX: 1, moveY: 0 });
-      client.sendInput({ moveX: 1, moveY: 0 });
+      client.sendInput({ moveX: 1, moveY: 0, jump: false });
+      client.sendInput({ moveX: 1, moveY: 0, jump: false });
 
       const debugData = client.getDebugData();
       expect(debugData.localPredictedHistory.length).toBe(2);
@@ -169,7 +180,7 @@ describe("NetcodeClient", () => {
 
     it("should clear debug history", () => {
       // Add some data
-      client.sendInput({ moveX: 1, moveY: 0 });
+      client.sendInput({ moveX: 1, moveY: 0, jump: false });
       const snapshot = createSnapshot(1, [
         { id: "local-player", x: 100, y: 50 },
         { id: "other-player", x: 200, y: 150 },
@@ -196,7 +207,7 @@ describe("NetcodeClient", () => {
     it("should limit history length", () => {
       // Send more inputs than MAX_HISTORY_LENGTH (60)
       for (let i = 0; i < 70; i++) {
-        client.sendInput({ moveX: 1, moveY: 0 });
+        client.sendInput({ moveX: 1, moveY: 0, jump: false });
       }
 
       const debugData = client.getDebugData();
@@ -207,14 +218,18 @@ describe("NetcodeClient", () => {
   describe("server snapshot tracking", () => {
     it("should return null initially for last server snapshot", () => {
       const socket = createMockSocket();
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       expect(client.getLastServerSnapshot()).toBeNull();
     });
 
     it("should store the last server snapshot", () => {
       const socket = createMockSocket({ connected: true, id: "local-player" });
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       const snapshot = createSnapshot(5, [{ id: "local-player", x: 100, y: 200 }]);
       socket._trigger("netcode:snapshot", snapshot);
@@ -227,7 +242,9 @@ describe("NetcodeClient", () => {
 
     it("should update to the most recent snapshot", () => {
       const socket = createMockSocket({ connected: true, id: "local-player" });
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       socket._trigger(
         "netcode:snapshot",
@@ -251,14 +268,18 @@ describe("NetcodeClient", () => {
   describe("player ID", () => {
     it("should initialize player ID from connected socket", () => {
       const socket = createMockSocket({ connected: true, id: "my-player-id" });
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       expect(client.getPlayerId()).toBe("my-player-id");
     });
 
     it("should return null when socket not connected", () => {
       const socket = createMockSocket({ connected: false, id: undefined });
-      const client = new NetcodeClient(socket as never);
+      const client = new NetcodeClient(socket as never, {
+        applyInput: platformerPhysics,
+      });
 
       expect(client.getPlayerId()).toBeNull();
     });

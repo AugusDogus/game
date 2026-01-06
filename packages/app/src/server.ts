@@ -1,6 +1,6 @@
 import { Server } from "socket.io";
 import { Server as Engine } from "@socket.io/bun-engine";
-import { NetcodeServer } from "@game/netcode";
+import { NetcodeServer, platformerPhysics } from "@game/netcode";
 import homepage from "./client/index.html";
 
 const startTime = Date.now();
@@ -18,6 +18,7 @@ io.bind(engine);
 const netcodeServer = new NetcodeServer(io, {
   tickRate: 20,
   snapshotHistorySize: 60,
+  applyInput: platformerPhysics,
 });
 netcodeServer.start();
 

@@ -21,11 +21,16 @@ export class NetcodeServer {
   private config: Required<NetcodeServerConfig>;
   private connectedClients: Set<string> = new Set();
 
-  constructor(io: Server, config: NetcodeServerConfig = {}) {
+  constructor(io: Server, config: NetcodeServerConfig) {
+    if (!config.applyInput) {
+      throw new Error("NetcodeServerConfig.applyInput is required");
+    }
+
     this.io = io;
     this.config = {
       tickRate: config.tickRate ?? DEFAULT_TICK_RATE,
       snapshotHistorySize: config.snapshotHistorySize ?? DEFAULT_SNAPSHOT_HISTORY_SIZE,
+      applyInput: config.applyInput,
     };
 
     // Initialize primitives
@@ -38,6 +43,7 @@ export class NetcodeServer {
       this.worldState,
       this.inputQueue,
       this.snapshotHistory,
+      config.applyInput,
       tickInterval,
     );
 

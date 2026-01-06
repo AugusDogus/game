@@ -31,6 +31,22 @@ export const DEFAULT_SNAPSHOT_HISTORY_SIZE = 60;
 export const DEFAULT_PLAYER_SPEED = 200;
 
 /**
+ * Gravity acceleration (pixels per second squared)
+ * Positive value pulls downward (Y increases downward in canvas)
+ */
+export const DEFAULT_GRAVITY = 800;
+
+/**
+ * Jump velocity (pixels per second, negative = upward)
+ */
+export const DEFAULT_JUMP_VELOCITY = -400;
+
+/**
+ * Floor Y position (slightly below center)
+ */
+export const DEFAULT_FLOOR_Y = 200;
+
+/**
  * Maximum input buffer size (prevent memory issues)
  */
 export const MAX_INPUT_BUFFER_SIZE = 1024;

@@ -1,11 +1,16 @@
-import type { PlayerState, PlayerInput } from "../types.js";
-import { applyInput } from "../physics.js";
+import type { PlayerState, PlayerInput, PhysicsFunction } from "../types.js";
+import { DEFAULT_TICK_INTERVAL_MS } from "../constants.js";
 
 /**
  * Handles client-side prediction by applying inputs locally
  */
 export class Predictor {
   private localState: PlayerState | null = null;
+  private physicsFunction: PhysicsFunction;
+
+  constructor(physicsFunction: PhysicsFunction) {
+    this.physicsFunction = physicsFunction;
+  }
 
   /**
    * Set the base state (from server)
@@ -24,12 +29,12 @@ export class Predictor {
   /**
    * Apply an input to the local state (prediction)
    */
-  applyInput(input: PlayerInput): void {
+  applyInput(input: PlayerInput, deltaTime: number = DEFAULT_TICK_INTERVAL_MS): void {
     if (!this.localState) {
       return;
     }
 
-    this.localState = applyInput(this.localState, input);
+    this.localState = this.physicsFunction(this.localState, input, deltaTime);
   }
 
   /**

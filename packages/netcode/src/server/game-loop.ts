@@ -1,8 +1,7 @@
 import type { WorldState } from "./world-state.js";
 import type { InputQueue } from "./input-queue.js";
 import type { SnapshotHistory } from "./snapshot-history.js";
-import type { WorldSnapshot } from "../types.js";
-import { applyInput } from "../physics.js";
+import type { WorldSnapshot, PhysicsFunction } from "../types.js";
 import { DEFAULT_TICK_INTERVAL_MS } from "../constants.js";
 
 /**
@@ -12,6 +11,7 @@ export class GameLoop {
   private worldState: WorldState;
   private inputQueue: InputQueue;
   private snapshotHistory: SnapshotHistory;
+  private physicsFunction: PhysicsFunction;
   private tickInterval: number;
   private intervalId: NodeJS.Timeout | null = null;
   private onTickCallback?: (snapshot: WorldSnapshot) => void;
@@ -20,11 +20,13 @@ export class GameLoop {
     worldState: WorldState,
     inputQueue: InputQueue,
     snapshotHistory: SnapshotHistory,
+    physicsFunction: PhysicsFunction,
     tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
   ) {
     this.worldState = worldState;
     this.inputQueue = inputQueue;
     this.snapshotHistory = snapshotHistory;
+    this.physicsFunction = physicsFunction;
     this.tickInterval = tickIntervalMs;
   }
 
@@ -59,7 +61,7 @@ export class GameLoop {
       // Apply each input sequentially
       let currentState = player;
       for (const inputMsg of inputs) {
-        currentState = applyInput(currentState, inputMsg.input);
+        currentState = this.physicsFunction(currentState, inputMsg.input, this.tickInterval);
         acks[clientId] = inputMsg.seq;
       }
 

@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { PlayerState, WorldSnapshot } from "../types.js";
 import { Interpolator } from "./interpolation.js";
-import type { WorldSnapshot, PlayerState } from "../types.js";
 
 describe("Interpolator", () => {
   let interpolator: Interpolator;
@@ -50,6 +50,7 @@ describe("Interpolator", () => {
         id: "player-1",
         position: { x: 100, y: 200 },
         velocity: { x: 0, y: 0 },
+        isGrounded: true,
         tick: 0,
       };
       interpolator.addSnapshot(createSnapshot(0, Date.now(), [player]));
@@ -69,6 +70,7 @@ describe("Interpolator", () => {
             id: "player-1",
             position: { x: 0, y: 0 },
             velocity: { x: 100, y: 0 },
+            isGrounded: true,
             tick: 0,
           },
         ]),
@@ -81,6 +83,7 @@ describe("Interpolator", () => {
             id: "player-1",
             position: { x: 100, y: 0 },
             velocity: { x: 100, y: 0 },
+            isGrounded: true,
             tick: 1,
           },
         ]),
@@ -93,6 +96,7 @@ describe("Interpolator", () => {
             id: "player-1",
             position: { x: 200, y: 0 },
             velocity: { x: 100, y: 0 },
+            isGrounded: true,
             tick: 2,
           },
         ]),
@@ -118,6 +122,7 @@ describe("Interpolator", () => {
             id: "player-1",
             position: { x: 0, y: 0 },
             velocity: { x: 0, y: 0 },
+            isGrounded: true,
             tick: 0,
           },
         ]),
@@ -130,12 +135,14 @@ describe("Interpolator", () => {
             id: "player-1",
             position: { x: 50, y: 0 },
             velocity: { x: 0, y: 0 },
+            isGrounded: true,
             tick: 1,
           },
           {
             id: "player-2",
             position: { x: 100, y: 100 },
             velocity: { x: 0, y: 0 },
+            isGrounded: false,
             tick: 1,
           },
         ]),

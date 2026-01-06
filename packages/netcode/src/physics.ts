@@ -1,47 +1,94 @@
 import type { Vector2, PlayerInput, PlayerState } from "./types.js";
-import { DEFAULT_PLAYER_SPEED, DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
+import {
+  DEFAULT_PLAYER_SPEED,
+  DEFAULT_TICK_INTERVAL_MS,
+  DEFAULT_GRAVITY,
+  DEFAULT_JUMP_VELOCITY,
+  DEFAULT_FLOOR_Y,
+} from "./constants.js";
+
+import type { PhysicsFunction } from "./types.js";
 
 /**
- * Deterministic physics function that applies player input to state.
- * This function MUST be identical on both client and server for prediction to work.
- *
- * @param state - Current player state
- * @param input - Player input to apply
- * @param deltaTime - Time delta in milliseconds (defaults to tick interval)
- * @returns New player state after applying input
+ * Platformer physics: includes gravity, jumping, and floor collision.
+ * Y increases downward. Players fall due to gravity and can jump when grounded.
  */
-export function applyInput(
+export const platformerPhysics: PhysicsFunction = (
   state: PlayerState,
   input: PlayerInput,
   deltaTime: number = DEFAULT_TICK_INTERVAL_MS,
-): PlayerState {
-  // Calculate velocity from input direction
-  const speed = DEFAULT_PLAYER_SPEED;
-  const velocity: Vector2 = {
-    x: input.moveX * speed,
-    y: input.moveY * speed,
-  };
-
-  // Calculate position delta (convert from units/second to units per tick)
+): PlayerState => {
   const deltaSeconds = deltaTime / 1000;
-  const positionDelta: Vector2 = {
-    x: velocity.x * deltaSeconds,
-    y: velocity.y * deltaSeconds,
+
+  // Start with current velocity
+  let velocityX = input.moveX * DEFAULT_PLAYER_SPEED;
+  let velocityY = state.velocity.y;
+
+  // Apply gravity (Y increases downward)
+  velocityY += DEFAULT_GRAVITY * deltaSeconds;
+
+  // Handle jumping - only if grounded and jump pressed
+  if (input.jump && state.isGrounded) {
+    velocityY = DEFAULT_JUMP_VELOCITY;
+  }
+
+  // Calculate new position
+  let newX = state.position.x + velocityX * deltaSeconds;
+  let newY = state.position.y + velocityY * deltaSeconds;
+
+  // Check floor collision
+  let isGrounded = false;
+  const playerHeight = 20; // Half of player size (10 from center to bottom)
+
+  if (newY + playerHeight / 2 >= DEFAULT_FLOOR_Y) {
+    newY = DEFAULT_FLOOR_Y - playerHeight / 2;
+    velocityY = 0;
+    isGrounded = true;
+  }
+
+  return {
+    ...state,
+    position: { x: newX, y: newY },
+    velocity: { x: velocityX, y: velocityY },
+    isGrounded,
+    tick: state.tick + 1,
   };
+};
+
+/**
+ * Top-down physics: no gravity, direct movement in both X and Y axes.
+ * Perfect for top-down games like twin-stick shooters or RTS games.
+ */
+export const topDownPhysics: PhysicsFunction = (
+  state: PlayerState,
+  input: PlayerInput,
+  deltaTime: number = DEFAULT_TICK_INTERVAL_MS,
+): PlayerState => {
+  const deltaSeconds = deltaTime / 1000;
+  const speed = DEFAULT_PLAYER_SPEED;
+
+  // Calculate velocity from input direction
+  const velocityX = input.moveX * speed;
+  const velocityY = input.moveY * speed;
+
+  // Calculate position delta
+  const positionDeltaX = velocityX * deltaSeconds;
+  const positionDeltaY = velocityY * deltaSeconds;
 
   // Apply movement
-  const newPosition: Vector2 = {
-    x: state.position.x + positionDelta.x,
-    y: state.position.y + positionDelta.y,
+  const newPosition = {
+    x: state.position.x + positionDeltaX,
+    y: state.position.y + positionDeltaY,
   };
 
   return {
     ...state,
     position: newPosition,
-    velocity,
+    velocity: { x: velocityX, y: velocityY },
+    isGrounded: false, // Not applicable for top-down
     tick: state.tick + 1,
   };
-}
+};
 
 /**
  * Create an initial player state at a given position
@@ -51,6 +98,7 @@ export function createPlayerState(id: string, position: Vector2): PlayerState {
     id,
     position,
     velocity: { x: 0, y: 0 },
+    isGrounded: false,
     tick: 0,
   };
 }

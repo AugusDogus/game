@@ -60,6 +60,7 @@ describe("WorldState", () => {
         id: "player-1",
         position: { x: 100, y: 200 },
         velocity: { x: 10, y: 20 },
+        isGrounded: true,
         tick: 5,
       });
 
@@ -67,6 +68,7 @@ describe("WorldState", () => {
       expect(player?.position.x).toBe(100);
       expect(player?.position.y).toBe(200);
       expect(player?.velocity.x).toBe(10);
+      expect(player?.isGrounded).toBe(true);
       expect(player?.tick).toBe(5);
     });
   });

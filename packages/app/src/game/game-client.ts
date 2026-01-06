@@ -1,5 +1,5 @@
 import type { WorldSnapshot } from "@game/netcode";
-import { NetcodeClient } from "@game/netcode";
+import { NetcodeClient, platformerPhysics } from "@game/netcode";
 import type { Socket } from "socket.io-client";
 import { CanvasRenderer } from "../client/renderer/canvas-renderer.js";
 
@@ -34,6 +34,7 @@ export class GameClient {
     // Create netcode client
     this.netcodeClient = new NetcodeClient(socket, {
       interpolationDelay: 100,
+      applyInput: platformerPhysics,
       onWorldUpdate: (_snapshot: WorldSnapshot) => {
         // World update handled by render loop
       },
@@ -47,8 +48,8 @@ export class GameClient {
 
     // Bind handlers so we can remove them later
     this.keydownHandler = (e: KeyboardEvent) => {
-      // Prevent default for arrow keys to avoid scrolling
-      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      // Prevent default for arrow keys and space to avoid scrolling
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
         e.preventDefault();
       }
       this.keys.add(e.key.toLowerCase());
@@ -89,14 +90,8 @@ export class GameClient {
    */
   private sendCurrentInput(): void {
     let moveX = 0;
-    let moveY = 0;
 
-    if (this.keys.has("w") || this.keys.has("arrowup")) {
-      moveY -= 1;
-    }
-    if (this.keys.has("s") || this.keys.has("arrowdown")) {
-      moveY += 1;
-    }
+    // Horizontal movement (A/D or Left/Right arrows)
     if (this.keys.has("a") || this.keys.has("arrowleft")) {
       moveX -= 1;
     }
@@ -104,16 +99,12 @@ export class GameClient {
       moveX += 1;
     }
 
-    // Normalize diagonal movement
-    if (moveX !== 0 && moveY !== 0) {
-      moveX *= 0.707; // 1/sqrt(2)
-      moveY *= 0.707;
-    }
+    // Jump (Space, W, or Up arrow)
+    const jump = this.keys.has(" ") || this.keys.has("w") || this.keys.has("arrowup");
 
-    // Only send if there's actual input
-    if (moveX !== 0 || moveY !== 0) {
-      this.netcodeClient.sendInput({ moveX, moveY });
-    }
+    // Always send input so gravity/physics can be applied
+    // Even with no input, we need to process physics each frame
+    this.netcodeClient.sendInput({ moveX, moveY: 0, jump });
   }
 
   /**

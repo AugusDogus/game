@@ -17,6 +17,8 @@ export interface PlayerInput {
   /** Movement direction (-1 to 1 for each axis) */
   moveX: number;
   moveY: number;
+  /** Whether jump was pressed this frame */
+  jump: boolean;
   /** Timestamp when input was captured (client-side) */
   timestamp: number;
 }
@@ -31,6 +33,8 @@ export interface PlayerState {
   position: Vector2;
   /** Current velocity */
   velocity: Vector2;
+  /** Whether player is on the ground */
+  isGrounded: boolean;
   /** Last server tick this state was updated */
   tick: number;
 }
@@ -62,6 +66,21 @@ export interface InputMessage {
 }
 
 /**
+ * Physics function that applies player input to state.
+ * Must be deterministic - same inputs must produce same outputs.
+ * 
+ * @param state - Current player state
+ * @param input - Player input to apply
+ * @param deltaTime - Time delta in milliseconds (optional, implementations should provide defaults)
+ * @returns New player state after applying input
+ */
+export type PhysicsFunction = (
+  state: PlayerState,
+  input: PlayerInput,
+  deltaTime?: number,
+) => PlayerState;
+
+/**
  * Configuration for NetcodeServer
  */
 export interface NetcodeServerConfig {
@@ -69,6 +88,8 @@ export interface NetcodeServerConfig {
   tickRate?: number;
   /** Number of snapshots to keep in history for lag compensation (default: 60) */
   snapshotHistorySize?: number;
+  /** Physics function to apply inputs (required) */
+  applyInput: PhysicsFunction;
 }
 
 /**
@@ -83,6 +104,8 @@ export interface NetcodeClientConfig {
    * snapshots and outgoing inputs.
    */
   simulatedLatency?: number;
+  /** Physics function to apply inputs (required) */
+  applyInput: PhysicsFunction;
   /** Callback when world state updates */
   onWorldUpdate?: (snapshot: WorldSnapshot) => void;
   /** Callback when a player joins */

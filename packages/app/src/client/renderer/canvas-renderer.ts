@@ -1,4 +1,5 @@
 import type { DebugData, PlayerState, PositionHistoryEntry, WorldSnapshot } from "@game/netcode";
+import { DEFAULT_FLOOR_Y } from "@game/netcode";
 
 /** Render options including debug visualization */
 export interface RenderOptions {
@@ -133,6 +134,46 @@ export class CanvasRenderer {
   }
 
   /**
+   * Draw the floor/ground platform
+   */
+  drawFloor(): void {
+    this.ctx.save();
+
+    const floorY = DEFAULT_FLOOR_Y;
+    const startX = -this.width / 2;
+    const endX = this.width / 2;
+
+    // Draw floor surface (thick line)
+    this.ctx.strokeStyle = "#64748b";
+    this.ctx.lineWidth = 4;
+    this.ctx.beginPath();
+    this.ctx.moveTo(startX, floorY);
+    this.ctx.lineTo(endX, floorY);
+    this.ctx.stroke();
+
+    // Draw ground fill below floor
+    this.ctx.fillStyle = "#1e293b";
+    this.ctx.fillRect(startX, floorY, this.width, this.height / 2 - floorY);
+
+    // Draw grass/ground pattern on top
+    this.ctx.fillStyle = "#475569";
+    const grassHeight = 6;
+    this.ctx.fillRect(startX, floorY, this.width, grassHeight);
+
+    // Draw some ground texture lines
+    this.ctx.strokeStyle = "#334155";
+    this.ctx.lineWidth = 1;
+    for (let y = floorY + 20; y < this.height / 2; y += 30) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(startX, y);
+      this.ctx.lineTo(endX, y);
+      this.ctx.stroke();
+    }
+
+    this.ctx.restore();
+  }
+
+  /**
    * Draw a breadcrumb trail
    */
   drawTrail(history: PositionHistoryEntry[], color: string, alpha: number = 0.6): void {
@@ -244,6 +285,7 @@ export class CanvasRenderer {
   ): void {
     this.clear();
     this.drawGrid();
+    this.drawFloor();
 
     // Draw debug visualization first (behind players)
     if (options?.debugData && (options.showTrails || options.showServerPositions)) {

@@ -11,7 +11,7 @@ describe("InputQueue", () => {
 
   const createInput = (seq: number): InputMessage => ({
     seq,
-    input: { moveX: 1, moveY: 0, timestamp: Date.now() },
+    input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
     timestamp: Date.now(),
   });
 

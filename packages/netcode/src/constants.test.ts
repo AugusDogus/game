@@ -5,6 +5,9 @@ import {
   DEFAULT_INTERPOLATION_DELAY_MS,
   DEFAULT_SNAPSHOT_HISTORY_SIZE,
   DEFAULT_PLAYER_SPEED,
+  DEFAULT_GRAVITY,
+  DEFAULT_JUMP_VELOCITY,
+  DEFAULT_FLOOR_Y,
   MAX_INPUT_BUFFER_SIZE,
 } from "./constants.js";
 
@@ -30,6 +33,18 @@ describe("constants", () => {
 
   test("DEFAULT_PLAYER_SPEED should be positive", () => {
     expect(DEFAULT_PLAYER_SPEED).toBeGreaterThan(0);
+  });
+
+  test("DEFAULT_GRAVITY should be positive (pulls downward)", () => {
+    expect(DEFAULT_GRAVITY).toBeGreaterThan(0);
+  });
+
+  test("DEFAULT_JUMP_VELOCITY should be negative (upward)", () => {
+    expect(DEFAULT_JUMP_VELOCITY).toBeLessThan(0);
+  });
+
+  test("DEFAULT_FLOOR_Y should be below center (positive)", () => {
+    expect(DEFAULT_FLOOR_Y).toBeGreaterThan(0);
   });
 
   test("MAX_INPUT_BUFFER_SIZE should be reasonable", () => {

@@ -11,13 +11,14 @@ export class InputBuffer {
   /**
    * Add a new input and return its sequence number
    */
-  add(input: { moveX: number; moveY: number; timestamp: number }): number {
+  add(input: { moveX: number; moveY: number; jump: boolean; timestamp: number }): number {
     const seq = this.nextSeq++;
     const message: InputMessage = {
       seq,
       input: {
         moveX: input.moveX,
         moveY: input.moveY,
+        jump: input.jump,
         timestamp: input.timestamp,
       },
       timestamp: input.timestamp,
