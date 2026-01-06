@@ -23,7 +23,22 @@ Of course, your server can be exploited for vulnerabilities, but that’s out of
 
 You also don’t trust the player with its position in the world. If you did, a hacked client would tell the server “**I’m at (10,10)**” and a second later “**I’m at (20,10)**”, possibly going through a wall or moving faster than the other players. Instead, the server _knows_ the player is at (10,10), the client tells the server “**I want to move one square to the right**”, the server updates its internal state with the new player position at (11,10), and then replies to the player “**You’re at (11, 10)**”:
 
-![A simple client-server interaction.](img/fpm1-01.png)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Note over Client: p = (10, 10)
+    Note over Server: p = (10, 10)
+    
+    Client->>Server: Move right one unit
+    
+    Note over Server: p = (11, 10)
+    
+    Server->>Client: NEW STATE<br/>p = (11, 10)
+    
+    Note over Client: p = (11, 10)
+```
 
 In summary: the game state is managed by the server alone. Clients send their actions to the server. The server updates the game state periodically, and then sends the new game state back to clients, who just render it on the screen.
 

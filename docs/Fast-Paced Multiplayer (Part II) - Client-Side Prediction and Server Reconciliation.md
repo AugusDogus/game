@@ -6,7 +6,23 @@ In the [first article](client-server-game-architecture.html) of this series, we 
 
 A naive implementation of this scheme leads to a delay between user commands and changes on the screen; for example, the player presses the right arrow key, and the character takes half a second before it starts moving. This is because the client input must first travel to the server, the server must process the input and calculate a new game state, and the updated game state must reach the client again.
 
-![Effect of network delays.](img/fpm2-01.png)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Note over Client: p = (10, 10)
+    Note over Server: p = (10, 10)
+    
+    rect rgb(240, 240, 240)
+        Note left of Client: 100 ms<br/>round trip
+        Client->>Server: Move right one unit
+        Note over Server: p = (11, 10)
+        Server->>Client: NEW STATE<br/>p = (11, 10)
+    end
+    
+    Note over Client: p = (11, 10)
+```
 
 In a networked environment such as the internet, where delays can be ten or hundreds of milliseconds, a game may feel unresponsive at best, or in the worst case, be completely unplayable. In this article, we’ll find ways to minimize or even eliminate that problem.
 
@@ -16,13 +32,55 @@ We can use this to our advantage. If the game world is _deterministic_ enough (t
 
 Let’s suppose we have a 100 ms lag, and the animation of the character moving from one square to the next takes 100 ms. Using the naive implementation, the whole action would take 200 ms:
 
-![Network delay + animation.](img/fpm2-02.png)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Note over Client: p = (10, 10)
+    Note over Server: p = (10, 10)
+    
+    Client->>Server: Move right one unit
+    
+    rect rgb(240, 240, 240)
+        Note left of Client: 100 ms<br/>network delay
+    end
+    
+    Note over Server: p = (11, 10)
+    
+    Server->>Client: NEW STATE<br/>p = (11, 10)
+    
+    Note over Client: p = (10, 10)
+    
+    rect rgb(220, 255, 220)
+        Note left of Client: Animation<br/>100 ms
+    end
+    
+    Note over Client: p = (11, 10)
+```
 
 Since the world is deterministic, we can assume the inputs we send to the server will be executed successfully. Under this assumption, the client can predict the state of the game world after the inputs are processed, and most of the time this will be correct.
 
 Instead of sending the inputs and waiting for the new game state to start rendering it, we can send the input and start rendering the outcome of that inputs as if they had succeded, while we wait for the server to send the “true” game state – which more often than not, will match the state calculated locally :
 
-![Animation plays while the server confirms the action.](img/fpm2-03.png)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Note over Client: p = (10, 10)
+    Note over Server: p = (10, 10)
+    
+    Client->>Server: Move right one unit
+    
+    rect rgb(220, 255, 220)
+        Note left of Client: Animation<br/>100 ms
+        Note over Server: p = (11, 10)
+        Server->>Client: NEW STATE<br/>p = (11, 10)
+    end
+    
+    Note over Client: p = (11, 10)
+```
 
 Now there’s absolutely no delay between the player’s actions and the results on the screen, while the server is still authoritative (if a hacked client would send invalid inputs, it could render whatever it wanted on the screen, but it wouldn’t affect the state of the server, which is what the other players see).
 
@@ -33,7 +91,43 @@ In the example above, I chose the numbers carefully to make everything work fine
 
 Using the techniques so far, this is what would happen:
 
-![Predicted state and authoritative state mismatch.](img/fpm2-04.png)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Note over Client: p = (10, 10)
+    Note over Server: p = (10, 10)
+    
+    Client->>Server: Move right one unit
+    
+    rect rgb(220, 255, 220)
+        Note left of Client: Animation<br/>100 ms
+    end
+    
+    Note over Client: p = (11, 10)
+    
+    Client->>Server: Move right one unit
+    
+    rect rgb(220, 255, 220)
+        Note left of Client: Animation<br/>100 ms
+    end
+    
+    Note over Server: p = (11, 10)
+    
+    Note over Client: p = (12, 10)
+    
+    Server->>Client: p = (11, 10)
+    
+    Note over Client,Server: ⚠️ MISMATCH!
+    Note over Client: p = (11, 10)<br/>(jumped back!)
+    
+    Note over Server: p = (12, 10)
+    
+    Server->>Client: p = (12, 10)
+    
+    Note over Client: p = (12, 10)
+```
 
 We run into an interesting problem at **t = 250 ms**, when the new game state arrives. The predicted state at the client is **x = 12**, but the server says the new game state is **x = 11**. Because the server is authoritative, the client must move the character back to **x = 11**. But then, a new server state arrives at **t = 350**, which says **x = 12**, so the character jumps again, forward this time.
 
@@ -46,7 +140,42 @@ The key to fix this problem is to realize that the client sees the game world _i
 
 This isn’t terribly difficult to work around, though. First, the client adds a sequence number to each request; in our example, the first key press is request #1, and the second key press is request #2. Then, when the server replies, it includes the sequence number of the last input it processed:
 
-![Client-side prediction + server reconciliation.](img/fpm2-05.png)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+    
+    Note over Client: p = (10, 10)
+    Note over Server: p = (10, 10)
+    
+    Client->>Server: #1 Move right one unit
+    
+    rect rgb(220, 255, 220)
+        Note left of Client: Animation<br/>100 ms
+    end
+    
+    Note over Client: p = (11, 10)
+    
+    Client->>Server: #2 Move right one unit
+    
+    rect rgb(220, 255, 220)
+        Note left of Client: Animation<br/>100 ms
+    end
+    
+    Note over Server: p = (11, 10)
+    
+    Note over Client: p = (12, 10)
+    
+    Server->>Client: p = (11, 10) ack #1
+    
+    Note over Client: Got p = (11, 10) up to #1<br/>Accept it and re-apply input<br/>sent since #1 (#2)<br/>Result p = (12, 10)
+    
+    Note over Server: p = (12, 10)
+    
+    Server->>Client: p = (12, 10) ack #2
+    
+    Note over Client: p = (12, 10)
+```
 
 Now, at **t = 250**, the server says “**based on what I’ve seen up to your request #1, your position is x = 11**”. Because the server is authoritative, it sets the character position at **x = 11**. Now let’s assume the client keeps a copy of the requests it sends to the server. Based on the new game state, it knows the server has already processed request #1, so it can discard that copy. But it also knows the server still has to send back the result of processing request #2. So applying client-side prediction again, the client can calculate the “present” state of the game based on the last authoritative state sent by the server, plus the inputs the server hasn’t processed yet.
 

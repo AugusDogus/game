@@ -26,7 +26,60 @@ From the point of view of a client, this approach works as smoothly as before �
 
 A first implementation would update the position of other characters when it receives a state update; this immediately leads to very choppy movement, that is, discrete jumps every 100ms instead of smooth movement.
 
-![Client 1 as seen by Client 2.](img/fpm3-01.png)
+```mermaid
+sequenceDiagram
+    participant C1 as Client 1
+    participant S as Server
+    participant C2 as Client 2
+    
+    Note over C1: p = (10, 10)
+    Note over S: p = (10, 10)
+    Note over C2: p = (10, 10)
+    
+    C1->>S: Move right one unit
+    
+    rect rgb(220, 255, 220)
+        Note left of C1: Smooth<br/>movement
+    end
+    
+    Note over C1: p = (11, 10)
+    
+    C1->>S: Move right one unit
+    
+    Note over S: p = (11, 10)
+    
+    S->>C2: p = (11, 10)
+    
+    rect rgb(220, 255, 220)
+        Note left of C1: Smooth<br/>movement
+    end
+    
+    Note over C1: p = (12, 10)
+    
+    S->>C1: p = (11, 10)
+    
+    Note over S: p = (12, 10)
+    
+    rect rgb(255, 220, 220)
+        Note right of C2: Sudden<br/>Jump!
+    end
+    
+    Note over C2: p = (11, 10)
+    
+    S->>C2: p = (12, 10)
+    
+    Note over C1: Reconciliation result<br/>p = (12, 10)
+    
+    S->>C1: p = (12, 10)
+    
+    rect rgb(255, 220, 220)
+        Note right of C2: Sudden<br/>Jump!
+    end
+    
+    Note over C2: p = (12, 10)
+    
+    Note over C1: p = (12, 10)
+```
 
 Depending on the type of game you’re developing there are many ways to deal with this; in general, the more predictable your game entities are, the easier it is to get it right.
 
@@ -51,7 +104,40 @@ What you do have is authoritative position data every 100 ms; the trick is how t
 
 Say you receive position data at **t = 1000**. You already had received data at **t = 900**, so you know where the player was at **t = 900** and **t = 1000**. So, from **t = 1000** and **t = 1100**, you show what the other player did from **t = 900** to **t = 1000**. This way you’re always showing the user _actual movement data_, except you’re showing it 100 ms “late”.
 
-![Client 2 renders Client 1 “in the past”, interpolating last known positions.](img/fpm3-02.png)
+```mermaid
+sequenceDiagram
+    participant S as Server
+    participant C2 as Client 2
+    
+    Note over S: p = (11, 10)
+    Note over C2: p = (11, 10)
+    
+    S->>C2: p = (11, 10)
+    
+    rect rgb(240, 240, 240)
+        Note left of S: Server<br/>update<br/>timestep
+    end
+    
+    Note over C2: p = (11, 10)<br/>v = (11, 10)
+    
+    Note over S: p = (12, 10)
+    
+    S->>C2: p = (12, 10)
+    
+    rect rgb(240, 240, 240)
+        Note left of S: Server<br/>update<br/>timestep
+    end
+    
+    Note over C2: p = (12, 10)<br/>v = (11, 10)
+    
+    rect rgb(220, 255, 220)
+        Note right of C2: Visual position interpolated<br/>from past authoritative positions
+    end
+    
+    Note over C2: p = (12, 10)<br/>v = (11.75, 10)
+    
+    Note over C2: p = (12, 10)<br/>v = (12, 10)
+```
 
 The position data you use to interpolate from **t = 900** to **t = 1000** depends on the game. Interpolation usually works well enough. If it doesn’t, you can have the server send more detailed movement data with each update – for example, a sequence of straight segments followed by the player, or positions sampled every 10 ms which look better when interpolated (you don’t need to send 10 times more data – since you’re sending deltas for small movements, the format on the wire can be heavily optimized for this particular case).
 
