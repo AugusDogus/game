@@ -6,6 +6,9 @@
   "scripts": {
     "start": "bun run packages/app/src/server.ts",
     "dev": "bun --watch run packages/app/src/server.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
     "format": "bun oxfmt",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
