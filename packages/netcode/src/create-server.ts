@@ -30,9 +30,9 @@ export interface CreateServerConfig<TWorld, TInput extends { timestamp: number }
   addPlayer: (world: TWorld, playerId: string) => TWorld;
   /** Function to remove a player from the world state */
   removePlayer: (world: TWorld, playerId: string) => TWorld;
-  /** Server tick rate in Hz (default: 20). Higher = more responsive but more bandwidth. */
+  /** Server tick rate in Hz (default: DEFAULT_TICK_RATE). Higher = more responsive but more bandwidth. */
   tickRate?: number;
-  /** Number of snapshots to keep for lag compensation (default: 60) */
+  /** Number of snapshots to keep for lag compensation (default: DEFAULT_SNAPSHOT_HISTORY_SIZE) */
   snapshotHistorySize?: number;
   /** Function to merge multiple inputs that arrive in one tick (default: use last input) */
   mergeInputs?: InputMerger<TInput>;
@@ -103,6 +103,9 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
   config: CreateServerConfig<TWorld, TInput>,
 ): NetcodeServerHandle<TWorld> {
   const tickRate = config.tickRate ?? DEFAULT_TICK_RATE;
+  if (!Number.isFinite(tickRate) || tickRate <= 0) {
+    throw new Error(`[NetcodeServer] tickRate must be a positive finite number. Got: ${tickRate}`);
+  }
   const tickIntervalMs = 1000 / tickRate;
   const snapshotHistorySize = config.snapshotHistorySize ?? DEFAULT_SNAPSHOT_HISTORY_SIZE;
 
@@ -138,8 +141,8 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
     // Notify other clients
     socket.broadcast.emit("netcode:join", { playerId: clientId });
 
-    // Handle input messages
-    socket.on("netcode:input", (message: { seq: number; input: TInput; timestamp: number }) => {
+    // Handle input messages (timestamp is embedded in input.timestamp, not the wrapper)
+    socket.on("netcode:input", (message: { seq: number; input: TInput }) => {
       strategy.onClientInput(clientId, message.input, message.seq);
     });
 

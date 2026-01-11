@@ -10,7 +10,7 @@ The server maintains the authoritative game state while clients predict their ow
 - **Client-side prediction** - Local player movement feels instant
 - **Server reconciliation** - Corrects mispredictions without visible snapping
 - **Entity interpolation** - Other players render smoothly between snapshots
-- **Rollback netcode** - GGPO-style alternative for fighting games (basic implementation)
+- **Rollback netcode** - GGPO-style alternative for fighting games [Experimental]
 - **Generic world state** - Works with any game type, not just platformers
 - **Socket.IO integration** - Easy setup with automatic Map/Set serialization
 
@@ -38,7 +38,7 @@ const server = createNetcodeServer({
   simulate: simulatePlatformer,
   addPlayer: addPlayerToWorld,
   removePlayer: removePlayerFromWorld,
-  createIdleInput,
+  createIdleInput: () => ({ moveX: 0, moveY: 0, jump: false, timestamp: 0 }),
   tickRate: 20, // 20 Hz server tick rate
 });
 
@@ -71,6 +71,7 @@ function gameLoop() {
   client.sendInput({ moveX: getHorizontalInput(), moveY: 0, jump: isJumpPressed() });
   requestAnimationFrame(gameLoop);
 }
+gameLoop(); // Start the loop
 ```
 
 ## Packages
