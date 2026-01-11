@@ -200,6 +200,18 @@ export function createNetcodeClient<
     }
   };
 
+  // Handle clock sync ping from server
+  const handleClockSync = (data: { serverTimestamp: number }) => {
+    // Respond immediately with both timestamps
+    // Note: We don't apply simulatedLatency here because clock sync
+    // needs to measure actual network conditions, not simulated ones
+    const clientTimestamp = Date.now();
+    config.socket.emit("netcode:clock_sync_response", {
+      serverTimestamp: data.serverTimestamp,
+      clientTimestamp,
+    });
+  };
+
   // Set up socket handlers
   if (config.socket.connected && config.socket.id) {
     strategy.setLocalPlayerId(config.socket.id);
@@ -210,6 +222,7 @@ export function createNetcodeClient<
   config.socket.on("netcode:join", handleJoin);
   config.socket.on("netcode:leave", handleLeave);
   config.socket.on("netcode:action_result", handleActionResult);
+  config.socket.on("netcode:clock_sync", handleClockSync);
   config.socket.on("disconnect", handleDisconnect);
 
   return {

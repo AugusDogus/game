@@ -15,6 +15,9 @@ import {
   type ServerAuthoritativeServerConfig,
 } from "./strategies/server-authoritative.js";
 
+/** Default interval for clock sync pings (5 seconds) */
+const DEFAULT_CLOCK_SYNC_INTERVAL_MS = 5000;
+
 /**
  * Configuration for creating a netcode server.
  *
@@ -78,6 +81,12 @@ export interface CreateServerConfig<
     action: TAction,
     result: ActionResult<TActionResult>,
   ) => void;
+  /**
+   * Interval in milliseconds between clock sync pings to clients.
+   * Set to 0 to disable automatic clock sync.
+   * Default: 5000ms (5 seconds)
+   */
+  clockSyncIntervalMs?: number;
 }
 
 /**
@@ -204,6 +213,10 @@ export function createNetcodeServer<
   // Game loop state
   let intervalId: NodeJS.Timeout | null = null;
 
+  // Clock sync state
+  const clockSyncIntervalMs = config.clockSyncIntervalMs ?? DEFAULT_CLOCK_SYNC_INTERVAL_MS;
+  const pendingClockSyncs: Map<string, number> = new Map(); // clientId -> serverSendTime
+
   // Connection handler (extracted for cleanup in stop())
   const connectionHandler = (socket: Socket) => {
     const clientId = socket.id;
@@ -249,12 +262,48 @@ export function createNetcodeServer<
       });
     }
 
+    // Handle clock sync response (for lag compensation accuracy)
+    socket.on("netcode:clock_sync_response", (message: unknown) => {
+      if (!lagCompensator) return;
+      if (typeof message !== "object" || message === null) return;
+
+      const { serverTimestamp, clientTimestamp } = message as {
+        serverTimestamp?: unknown;
+        clientTimestamp?: unknown;
+      };
+      if (typeof serverTimestamp !== "number" || typeof clientTimestamp !== "number") return;
+
+      const serverSendTime = pendingClockSyncs.get(clientId);
+      if (serverSendTime === undefined) return;
+      pendingClockSyncs.delete(clientId);
+
+      const serverReceiveTime = Date.now();
+      const rtt = serverReceiveTime - serverSendTime;
+
+      // Calculate clock offset: serverTime ≈ clientTime + clockOffset
+      // At the moment the client captured clientTimestamp, the server time was approximately:
+      // serverSendTime + (rtt / 2)
+      // So: serverSendTime + (rtt / 2) ≈ clientTimestamp + clockOffset
+      // clockOffset ≈ serverSendTime + (rtt / 2) - clientTimestamp
+      const clockOffset = serverSendTime + rtt / 2 - clientTimestamp;
+
+      lagCompensator.updateClientClock(clientId, { clockOffset, rtt });
+    });
+
+    // Send initial clock sync ping
+    if (lagCompensator && clockSyncIntervalMs > 0) {
+      const serverTimestamp = Date.now();
+      pendingClockSyncs.set(clientId, serverTimestamp);
+      socket.emit("netcode:clock_sync", { serverTimestamp });
+    }
+
     // Handle disconnect
     socket.on("disconnect", () => {
       console.log(`[NetcodeServer] Client disconnected: ${clientId}`);
       strategy.removeClient(clientId);
       lagCompensator?.removeClient(clientId);
       actionQueue?.removeClient(clientId);
+      pendingClockSyncs.delete(clientId);
       config.onPlayerLeave?.(clientId);
       config.io.emit("netcode:leave", { playerId: clientId });
     });
@@ -307,11 +356,29 @@ export function createNetcodeServer<
     processActions();
   };
 
+  // Clock sync interval
+  let clockSyncIntervalId: NodeJS.Timeout | null = null;
+
+  const sendClockSyncToAll = () => {
+    if (!lagCompensator) return;
+
+    const serverTimestamp = Date.now();
+    for (const [, socket] of config.io.sockets.sockets) {
+      pendingClockSyncs.set(socket.id, serverTimestamp);
+      socket.emit("netcode:clock_sync", { serverTimestamp });
+    }
+  };
+
   return {
     start() {
       if (intervalId !== null) return;
       intervalId = setInterval(tick, tickIntervalMs);
       console.log(`[NetcodeServer] Started game loop at ${tickRate} Hz`);
+
+      // Start periodic clock sync if enabled
+      if (lagCompensator && clockSyncIntervalMs > 0) {
+        clockSyncIntervalId = setInterval(sendClockSyncToAll, clockSyncIntervalMs);
+      }
     },
 
     stop() {
@@ -321,6 +388,11 @@ export function createNetcodeServer<
         config.io.off("connection", connectionHandler);
         console.log("[NetcodeServer] Stopped game loop");
       }
+      if (clockSyncIntervalId !== null) {
+        clearInterval(clockSyncIntervalId);
+        clockSyncIntervalId = null;
+      }
+      pendingClockSyncs.clear();
     },
 
     isRunning() {
