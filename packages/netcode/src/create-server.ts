@@ -1,70 +1,102 @@
 /**
- * High-level server factory for easy setup with Socket.IO
+ * High-level server factory for easy setup with Socket.IO.
+ *
+ * @module create-server
  */
 
 import type { Server, Socket } from "socket.io";
-import type { SimulateFunction, InputMerger } from "./core/types.js";
+import { DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE } from "./constants.js";
+import type { InputMerger, SimulateFunction } from "./core/types.js";
 import { DefaultWorldManager } from "./core/world.js";
 import {
   ServerAuthoritativeServer,
   type ServerAuthoritativeServerConfig,
 } from "./strategies/server-authoritative.js";
-import { DEFAULT_TICK_RATE, DEFAULT_SNAPSHOT_HISTORY_SIZE } from "./constants.js";
 
 /**
- * Configuration for creating a netcode server
+ * Configuration for creating a netcode server.
+ *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
  */
 export interface CreateServerConfig<TWorld, TInput extends { timestamp: number }> {
   /** Socket.IO server instance */
   io: Server;
-  /** Initial world state */
+  /** Initial world state before any players join */
   initialWorld: TWorld;
-  /** Simulation function */
+  /** Function that simulates one tick of the game world. Must be deterministic. */
   simulate: SimulateFunction<TWorld, TInput>;
-  /** Function to add a player to the world */
+  /** Function to add a new player to the world state */
   addPlayer: (world: TWorld, playerId: string) => TWorld;
-  /** Function to remove a player from the world */
+  /** Function to remove a player from the world state */
   removePlayer: (world: TWorld, playerId: string) => TWorld;
-  /** Server tick rate in Hz (default: 20) */
+  /** Server tick rate in Hz (default: 20). Higher = more responsive but more bandwidth. */
   tickRate?: number;
-  /** Snapshot history size (default: 60) */
+  /** Number of snapshots to keep for lag compensation (default: 60) */
   snapshotHistorySize?: number;
-  /** Function to merge multiple inputs per tick (default: use last input) */
+  /** Function to merge multiple inputs that arrive in one tick (default: use last input) */
   mergeInputs?: InputMerger<TInput>;
-  /** Function to create an idle input for clients without inputs */
+  /** Function to create an idle/neutral input for players who sent no input this tick */
   createIdleInput: () => TInput;
-  /** Callback when a player joins */
+  /** Called when a player connects */
   onPlayerJoin?: (playerId: string) => void;
-  /** Callback when a player leaves */
+  /** Called when a player disconnects */
   onPlayerLeave?: (playerId: string) => void;
 }
 
 /**
- * Netcode server handle
+ * Handle returned by {@link createNetcodeServer} to control the game loop.
+ *
+ * @typeParam TWorld - The type of your game's world state
  */
 export interface NetcodeServerHandle<TWorld> {
-  /** Start the game loop */
+  /** Start the server game loop. Begins processing inputs and broadcasting snapshots. */
   start(): void;
-  /** Stop the game loop */
+  /** Stop the server game loop. */
   stop(): void;
-  /** Check if running */
+  /** Check if the game loop is currently running. */
   isRunning(): boolean;
-  /** Get current world state */
+  /** Get the current authoritative world state. */
   getWorldState(): TWorld;
-  /** Get current tick */
+  /** Get the current server tick number. */
   getTick(): number;
-  /** Get connected client count */
+  /** Get the number of currently connected clients. */
   getClientCount(): number;
 }
 
 /**
  * Create a netcode server with Socket.IO integration.
  *
- * IMPORTANT: Make sure to use the superjsonParser when creating the Socket.IO server:
+ * Sets up a server-authoritative game loop that:
+ * - Accepts player connections and adds them to the world
+ * - Receives input from clients and queues it for processing
+ * - Runs a fixed-timestep simulation at the configured tick rate
+ * - Broadcasts world snapshots to all connected clients
  *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
+ *
+ * @param config - Server configuration
+ * @returns A handle to control the server game loop
+ *
+ * @example
  * ```ts
- * import { superjsonParser } from "@game/netcode";
+ * import { Server } from "socket.io";
+ * import { createNetcodeServer, superjsonParser } from "@game/netcode";
+ *
  * const io = new Server({ parser: superjsonParser });
+ *
+ * const server = createNetcodeServer({
+ *   io,
+ *   initialWorld: { players: new Map(), tick: 0 },
+ *   simulate: (world, inputs, dt) => { ... },
+ *   addPlayer: (world, id) => { ... },
+ *   removePlayer: (world, id) => { ... },
+ *   createIdleInput: () => ({ moveX: 0, moveY: 0, jump: false, timestamp: 0 }),
+ * });
+ *
+ * server.start();
+ * io.listen(3000);
  * ```
  */
 export function createNetcodeServer<TWorld, TInput extends { timestamp: number }>(
