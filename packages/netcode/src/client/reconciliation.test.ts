@@ -333,8 +333,7 @@ describe("Reconciler", () => {
       newerSnapshot.tick = 10;
 
       reconciler.reconcile(newerSnapshot);
-      const afterNewer = predictor.getState();
-      
+
       // Now receive an "older" snapshot (arrived late due to network)
       const olderPlayer: PlatformerPlayer = {
         id: playerId,

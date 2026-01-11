@@ -3,18 +3,13 @@
  */
 
 import type { Server, Socket } from "socket.io";
-import type { SimulateFunction } from "./core/types.js";
+import type { SimulateFunction, InputMerger } from "./core/types.js";
 import { DefaultWorldManager } from "./core/world.js";
 import {
   ServerAuthoritativeServer,
   type ServerAuthoritativeServerConfig,
 } from "./strategies/server-authoritative.js";
 import { DEFAULT_TICK_RATE, DEFAULT_SNAPSHOT_HISTORY_SIZE } from "./constants.js";
-
-/**
- * Function to merge multiple inputs into one for a tick.
- */
-export type InputMerger<TInput> = (inputs: TInput[]) => TInput;
 
 /**
  * Configuration for creating a netcode server
@@ -36,6 +31,8 @@ export interface CreateServerConfig<TWorld, TInput extends { timestamp: number }
   snapshotHistorySize?: number;
   /** Function to merge multiple inputs per tick (default: use last input) */
   mergeInputs?: InputMerger<TInput>;
+  /** Function to create an idle input for clients without inputs */
+  createIdleInput: () => TInput;
   /** Callback when a player joins */
   onPlayerJoin?: (playerId: string) => void;
   /** Callback when a player leaves */
@@ -89,6 +86,7 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
     tickIntervalMs,
     snapshotHistorySize,
     mergeInputs: config.mergeInputs,
+    createIdleInput: config.createIdleInput,
   };
 
   const strategy = new ServerAuthoritativeServer<TWorld, TInput>(worldManager, serverConfig);

@@ -1,3 +1,4 @@
+import { DEFAULT_FRAME_DELTA_MS, MIN_DELTA_MS, MAX_DELTA_MS } from "../constants.js";
 import type { Snapshot } from "../core/types.js";
 import type { InputBuffer } from "./input-buffer.js";
 import type { PredictionScope } from "./prediction-scope.js";
@@ -54,11 +55,11 @@ export class Reconciler<TWorld, TInput extends { timestamp: number }> {
       let deltaTime: number;
       if (lastTimestamp !== null) {
         deltaTime = inputMsg.input.timestamp - lastTimestamp;
-        // Clamp to reasonable bounds (1ms to 100ms)
-        deltaTime = Math.max(1, Math.min(100, deltaTime));
+        // Clamp to reasonable bounds
+        deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, deltaTime));
       } else {
         // First input ever - use reasonable default (~16.67ms for 60Hz)
-        deltaTime = 16.67;
+        deltaTime = DEFAULT_FRAME_DELTA_MS;
       }
       lastTimestamp = inputMsg.input.timestamp;
 

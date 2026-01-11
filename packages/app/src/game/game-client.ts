@@ -1,4 +1,4 @@
-import type { NetcodeClientHandle, PlatformerInput, PlatformerWorld, PlatformerPlayer } from "@game/netcode";
+import type { NetcodeClientHandle, PlatformerInput, PlatformerWorld } from "@game/netcode";
 import {
   createNetcodeClient,
   interpolatePlatformer,

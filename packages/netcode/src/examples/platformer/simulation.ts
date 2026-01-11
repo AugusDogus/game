@@ -8,8 +8,7 @@ import {
   DEFAULT_JUMP_VELOCITY,
   DEFAULT_FLOOR_Y,
 } from "../../constants.js";
-import type { SimulateFunction } from "../../core/types.js";
-import type { InputMerger } from "../../server/game-loop.js";
+import type { SimulateFunction, InputMerger } from "../../core/types.js";
 import type { PlatformerWorld, PlatformerInput, PlatformerPlayer } from "./types.js";
 import { createPlatformerPlayer, createIdleInput } from "./types.js";
 

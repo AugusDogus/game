@@ -1,15 +1,17 @@
-import { DEFAULT_TICK_INTERVAL_MS } from "../constants.js";
+import {
+  DEFAULT_TICK_INTERVAL_MS,
+  DEFAULT_FRAME_DELTA_MS,
+  MIN_DELTA_MS,
+  MAX_DELTA_MS,
+} from "../constants.js";
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
-import type { InputMessage, SimulateFunction, Snapshot } from "../core/types.js";
+import type { SimulateFunction, Snapshot, InputMerger } from "../core/types.js";
 import type { WorldManager } from "../core/world.js";
 import type { InputQueue } from "./input-queue.js";
-
-/**
- * Function to merge multiple inputs into one for a tick.
- * Used when multiple inputs arrive between ticks.
- * Default behavior: use the last input.
- */
-export type InputMerger<TInput> = (inputs: TInput[]) => TInput;
+import {
+  processTickInputs,
+  type TickProcessorConfig,
+} from "./tick-processor.js";
 
 /**
  * Fixed timestep game loop that processes inputs and updates world state.
@@ -27,6 +29,8 @@ export class GameLoop<TWorld, TInput> {
   private intervalId: NodeJS.Timeout | null = null;
   private onTickCallback?: (snapshot: Snapshot<TWorld>) => void;
   private mergeInputs: InputMerger<TInput>;
+  private getConnectedClients?: () => Iterable<string>;
+  private createIdleInput?: () => TInput;
   // Track last processed timestamp per client for delta calculation (persists across ticks)
   private lastInputTimestamps: Map<string, number> = new Map();
 
@@ -37,6 +41,8 @@ export class GameLoop<TWorld, TInput> {
     simulate: SimulateFunction<TWorld, TInput>,
     tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
     mergeInputs?: InputMerger<TInput>,
+    getConnectedClients?: () => Iterable<string>,
+    createIdleInput?: () => TInput,
   ) {
     this.worldManager = worldManager;
     this.inputQueue = inputQueue;
@@ -44,7 +50,18 @@ export class GameLoop<TWorld, TInput> {
     this.simulate = simulate;
     this.tickInterval = tickIntervalMs;
     // Default: use the last input
-    this.mergeInputs = mergeInputs ?? ((inputs: TInput[]) => inputs[inputs.length - 1]!);
+    this.mergeInputs =
+      mergeInputs ??
+      ((inputs: TInput[]) => {
+        if (inputs.length === 0) {
+          throw new Error(
+            "mergeInputs called with empty array - provide a custom merger that handles idle inputs",
+          );
+        }
+        return inputs[inputs.length - 1]!;
+      });
+    this.getConnectedClients = getConnectedClients;
+    this.createIdleInput = createIdleInput;
   }
 
   /**
@@ -75,63 +92,82 @@ export class GameLoop<TWorld, TInput> {
       }
     }
 
-    // Process each input with its actual timestamp delta
-    // This matches client-side prediction exactly
-    let currentWorld = this.worldManager.getState();
+    // Process inputs using shared tick processor if getConnectedClients and createIdleInput are provided
+    // Otherwise, use legacy logic (for backward compatibility)
+    const currentWorld = this.worldManager.getState();
+    let updatedWorld: TWorld;
 
-    // Find the maximum number of inputs from any client
-    let maxInputs = 0;
-    for (const [, inputMsgs] of batchedInputs) {
-      maxInputs = Math.max(maxInputs, inputMsgs.length);
-    }
-
-    // Track which clients had inputs this tick
-    const clientsWithInputs = new Set<string>();
-    
-    if (maxInputs === 0) {
-      // No inputs - simulate with idle inputs for all players using tick interval
-      // Empty map triggers "simulate all with idle" behavior in simulation function
-      const idleInputs = new Map<string, TInput>();
-      currentWorld = this.simulate(currentWorld, idleInputs, this.tickInterval);
+    if (this.getConnectedClients && this.createIdleInput) {
+      // Use shared tick processor (removes type assertion)
+      const tickConfig: TickProcessorConfig<TWorld, TInput> = {
+        simulate: this.simulate,
+        mergeInputs: this.mergeInputs,
+        tickIntervalMs: this.tickInterval,
+        getConnectedClients: this.getConnectedClients,
+        createIdleInput: this.createIdleInput,
+      };
+      updatedWorld = processTickInputs(
+        currentWorld,
+        batchedInputs,
+        this.lastInputTimestamps,
+        tickConfig,
+      );
     } else {
-      // Process each client's inputs INDEPENDENTLY (not interleaved)
-      // This ensures each client's physics matches their local prediction exactly
-      for (const [clientId, inputMsgs] of batchedInputs) {
-        if (inputMsgs.length === 0) continue;
-        clientsWithInputs.add(clientId);
-        
-        // Process this client's inputs with their individual deltas
-        for (const inputMsg of inputMsgs) {
-          let deltaTime = 16.67;
-          const lastTs = this.lastInputTimestamps.get(clientId);
-          if (lastTs !== null && lastTs !== undefined) {
-            const delta = inputMsg.timestamp - lastTs;
-            deltaTime = Math.max(1, Math.min(100, delta));
-          }
-          this.lastInputTimestamps.set(clientId, inputMsg.timestamp);
-
-          // Simulate ONLY this client
-          const singleInput = new Map<string, TInput>();
-          singleInput.set(clientId, inputMsg.input);
-          currentWorld = this.simulate(currentWorld, singleInput, deltaTime);
-        }
+      // Legacy logic (for backward compatibility with tests)
+      // Find the maximum number of inputs from any client
+      let maxInputs = 0;
+      for (const [, inputMsgs] of batchedInputs) {
+        maxInputs = Math.max(maxInputs, inputMsgs.length);
       }
-      
-      // Apply idle physics to players who had NO inputs this tick
-      // Get all player IDs from the world state
-      const worldState = currentWorld as { players?: Map<string, unknown> };
-      if (worldState.players) {
-        for (const playerId of worldState.players.keys()) {
-          if (!clientsWithInputs.has(playerId)) {
-            const idleInput = new Map<string, TInput>();
-            idleInput.set(playerId, this.mergeInputs([])); // Get idle input
-            currentWorld = this.simulate(currentWorld, idleInput, this.tickInterval);
+
+      // Track which clients had inputs this tick
+      const clientsWithInputs = new Set<string>();
+
+      if (maxInputs === 0) {
+        // No inputs - simulate with idle inputs for all players using tick interval
+        // Empty map triggers "simulate all with idle" behavior in simulation function
+        const idleInputs = new Map<string, TInput>();
+        updatedWorld = this.simulate(currentWorld, idleInputs, this.tickInterval);
+      } else {
+        // Process each client's inputs INDEPENDENTLY (not interleaved)
+        // This ensures each client's physics matches their local prediction exactly
+        updatedWorld = currentWorld;
+        for (const [clientId, inputMsgs] of batchedInputs) {
+          if (inputMsgs.length === 0) continue;
+          clientsWithInputs.add(clientId);
+
+          // Process this client's inputs with their individual deltas
+          for (const inputMsg of inputMsgs) {
+            let deltaTime = DEFAULT_FRAME_DELTA_MS;
+            const lastTs = this.lastInputTimestamps.get(clientId);
+            if (lastTs != null) {
+              const delta = inputMsg.timestamp - lastTs;
+              deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, delta));
+            }
+            this.lastInputTimestamps.set(clientId, inputMsg.timestamp);
+
+            // Simulate ONLY this client
+            const singleInput = new Map<string, TInput>();
+            singleInput.set(clientId, inputMsg.input);
+            updatedWorld = this.simulate(updatedWorld, singleInput, deltaTime);
+          }
+        }
+
+        // Apply idle physics to players who had NO inputs this tick
+        // Legacy: use type assertion if getConnectedClients not provided
+        const worldState = updatedWorld as { players?: Map<string, unknown> };
+        if (worldState.players) {
+          for (const playerId of worldState.players.keys()) {
+            if (!clientsWithInputs.has(playerId)) {
+              // Skip - can't create idle input without createIdleInput function
+              // This maintains backward compatibility but may miss idle physics
+            }
           }
         }
       }
     }
 
-    this.worldManager.setState(currentWorld);
+    this.worldManager.setState(updatedWorld);
 
     // Increment world tick
     this.worldManager.incrementTick();
@@ -140,7 +176,7 @@ export class GameLoop<TWorld, TInput> {
     const snapshot: Snapshot<TWorld> = {
       tick: this.worldManager.getTick(),
       timestamp,
-      state: currentWorld,
+      state: updatedWorld,
       inputAcks,
     };
     this.snapshotBuffer.add(snapshot);

@@ -7,6 +7,7 @@ import {
   addPlayerToWorld,
   removePlayerFromWorld,
   mergePlatformerInputs,
+  createIdleInput,
   superjsonParser,
 } from "@game/netcode";
 import homepage from "./client/index.html";
@@ -32,6 +33,7 @@ const netcodeServer = createNetcodeServer({
   tickRate: 20,
   snapshotHistorySize: 60,
   mergeInputs: mergePlatformerInputs,
+  createIdleInput,
 });
 netcodeServer.start();
 

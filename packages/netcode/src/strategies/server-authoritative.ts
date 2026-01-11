@@ -9,9 +9,13 @@ import type { PredictionScope } from "../client/prediction-scope.js";
 import { Predictor } from "../client/prediction.js";
 import { Reconciler } from "../client/reconciliation.js";
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
-import type { InterpolateFunction, Snapshot } from "../core/types.js";
+import type { InterpolateFunction, Snapshot, InputMerger } from "../core/types.js";
 import type { WorldManager } from "../core/world.js";
 import { InputQueue } from "../server/input-queue.js";
+import {
+  processTickInputs,
+  type TickProcessorConfig,
+} from "../server/tick-processor.js";
 import type { ClientStrategy, ServerStrategy } from "./types.js";
 
 /**
@@ -43,15 +47,13 @@ export class ServerAuthoritativeClient<
   }
 
   onLocalInput(input: TInput): void {
-    // Add to input buffer and get sequence number
-    const seq = this.inputBuffer.add(input);
+    // Add to input buffer (seq returned but not needed here)
+    this.inputBuffer.add(input);
 
     // Apply prediction locally
     this.predictor.applyInput(input);
 
     // Return seq for sending to server (caller handles network)
-    // Store it on the input for the caller to access
-    (input as TInput & { _seq?: number })._seq = seq;
   }
 
   /**
@@ -128,11 +130,6 @@ export class ServerAuthoritativeClient<
 }
 
 /**
- * Function to merge multiple inputs into one for a tick.
- */
-export type InputMerger<TInput> = (inputs: TInput[]) => TInput;
-
-/**
  * Server-side server-authoritative strategy configuration
  */
 export interface ServerAuthoritativeServerConfig<TWorld, TInput> {
@@ -150,6 +147,8 @@ export interface ServerAuthoritativeServerConfig<TWorld, TInput> {
   snapshotHistorySize: number;
   /** Function to merge multiple inputs per tick (default: use last input) */
   mergeInputs?: InputMerger<TInput>;
+  /** Function to create an idle input for clients without inputs */
+  createIdleInput: () => TInput;
 }
 
 /**
@@ -169,6 +168,7 @@ export class ServerAuthoritativeServer<
   private tickIntervalMs: number;
   private connectedClients: Set<string> = new Set();
   private mergeInputs: InputMerger<TInput>;
+  private createIdleInput: () => TInput;
   // Track last processed timestamp per client for delta calculation (persists across ticks)
   private lastInputTimestamps: Map<string, number> = new Map();
 
@@ -184,7 +184,17 @@ export class ServerAuthoritativeServer<
     this.removePlayerFromWorld = config.removePlayerFromWorld;
     this.tickIntervalMs = config.tickIntervalMs;
     // Default: use the last input
-    this.mergeInputs = config.mergeInputs ?? ((inputs: TInput[]) => inputs[inputs.length - 1]!);
+    this.mergeInputs =
+      config.mergeInputs ??
+      ((inputs: TInput[]) => {
+        if (inputs.length === 0) {
+          throw new Error(
+            "mergeInputs called with empty array - provide a custom merger that handles idle inputs",
+          );
+        }
+        return inputs[inputs.length - 1]!;
+      });
+    this.createIdleInput = config.createIdleInput;
   }
 
   onClientInput(clientId: string, input: TInput, seq: number): void {
@@ -210,6 +220,7 @@ export class ServerAuthoritativeServer<
     }
     this.connectedClients.delete(clientId);
     this.inputQueue.removeClient(clientId);
+    this.lastInputTimestamps.delete(clientId);
     const newWorld = this.removePlayerFromWorld(this.worldManager.getState(), clientId);
     this.worldManager.setState(newWorld);
   }
@@ -231,74 +242,31 @@ export class ServerAuthoritativeServer<
       }
     }
 
-    // Process each input with its actual timestamp delta
-    // This matches client-side prediction exactly (as per Gabriel Gambetta's docs)
-    let currentWorld = this.worldManager.getState();
+    // Process inputs using shared tick processor
+    const currentWorld = this.worldManager.getState();
+    const tickConfig: TickProcessorConfig<TWorld, TInput> = {
+      simulate: this.simulate,
+      mergeInputs: this.mergeInputs,
+      tickIntervalMs: this.tickIntervalMs,
+      getConnectedClients: () => this.connectedClients,
+      createIdleInput: this.createIdleInput,
+    };
 
-    // Check if any clients have inputs
-    let hasInputs = false;
-    for (const [, inputMsgs] of batchedInputs) {
-      if (inputMsgs.length > 0) {
-        hasInputs = true;
-        break;
-      }
-    }
+    const updatedWorld = processTickInputs(
+      currentWorld,
+      batchedInputs,
+      this.lastInputTimestamps,
+      tickConfig,
+    );
 
-    // Track which clients had inputs this tick
-    const clientsWithInputs = new Set<string>();
-    
-    if (!hasInputs) {
-      // No inputs - simulate with idle inputs for all players using tick interval
-      const idleInputs = new Map<string, TInput>();
-      currentWorld = this.simulate(currentWorld, idleInputs, this.tickIntervalMs);
-    } else {
-      // Process each client's inputs INDEPENDENTLY (not interleaved)
-      // This ensures:
-      // 1. Each client's physics matches their local prediction exactly
-      // 2. Other clients' physics are NOT affected by this client's simulation steps
-      // Per Gabriel Gambetta: "all the unprocessed client input is applied"
-      // but we process each client separately to avoid physics multiplication
-      for (const [clientId, inputMsgs] of batchedInputs) {
-        if (inputMsgs.length === 0) continue;
-        clientsWithInputs.add(clientId);
-        
-        // Process this client's inputs with their individual deltas
-        for (const inputMsg of inputMsgs) {
-          let deltaTime = 16.67;
-          const lastTs = this.lastInputTimestamps.get(clientId);
-          if (lastTs !== null && lastTs !== undefined) {
-            const delta = inputMsg.timestamp - lastTs;
-            deltaTime = Math.max(1, Math.min(100, delta));
-          }
-          this.lastInputTimestamps.set(clientId, inputMsg.timestamp);
-
-          // Simulate ONLY this client
-          // The simulation function only applies physics to players with inputs
-          const singleInput = new Map<string, TInput>();
-          singleInput.set(clientId, inputMsg.input);
-          currentWorld = this.simulate(currentWorld, singleInput, deltaTime);
-        }
-      }
-      
-      // Apply idle physics to connected clients who had NO inputs this tick
-      // They still need gravity, etc. for the tick interval
-      for (const connectedClient of this.connectedClients) {
-        if (!clientsWithInputs.has(connectedClient)) {
-          const idleInput = new Map<string, TInput>();
-          idleInput.set(connectedClient, this.mergeInputs([])); // Get idle input
-          currentWorld = this.simulate(currentWorld, idleInput, this.tickIntervalMs);
-        }
-      }
-    }
-
-    this.worldManager.setState(currentWorld);
+    this.worldManager.setState(updatedWorld);
     this.worldManager.incrementTick();
 
     // Create snapshot
     const snapshot: Snapshot<TWorld> = {
       tick: this.worldManager.getTick(),
       timestamp,
-      state: currentWorld,
+      state: updatedWorld,
       inputAcks,
     };
     this.snapshotBuffer.add(snapshot);

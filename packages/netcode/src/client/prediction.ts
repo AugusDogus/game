@@ -1,3 +1,4 @@
+import { DEFAULT_FRAME_DELTA_MS, MIN_DELTA_MS, MAX_DELTA_MS } from "../constants.js";
 import type { PredictionScope } from "./prediction-scope.js";
 
 /**
@@ -48,11 +49,11 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
     let deltaTime: number;
     if (this.lastInputTimestamp !== null) {
       deltaTime = input.timestamp - this.lastInputTimestamp;
-      // Clamp to reasonable bounds (1ms to 100ms)
-      deltaTime = Math.max(1, Math.min(100, deltaTime));
+      // Clamp to reasonable bounds
+      deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, deltaTime));
     } else {
       // First input - use a reasonable default (~16.67ms for 60Hz)
-      deltaTime = 16.67;
+      deltaTime = DEFAULT_FRAME_DELTA_MS;
     }
 
     this.lastInputTimestamp = input.timestamp;

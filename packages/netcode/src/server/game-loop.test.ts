@@ -3,15 +3,15 @@ import { SnapshotBuffer } from "../core/snapshot-buffer.js";
 import type { Snapshot } from "../core/types.js";
 import { DefaultWorldManager } from "../core/world.js";
 import {
-    addPlayerToWorld,
-    mergePlatformerInputs,
-    simulatePlatformer,
+  addPlayerToWorld,
+  mergePlatformerInputs,
+  simulatePlatformer,
 } from "../examples/platformer/simulation.js";
 import type { PlatformerInput, PlatformerWorld } from "../examples/platformer/types.js";
 import { createPlatformerWorld } from "../examples/platformer/types.js";
+import { getPlayer } from "../test-utils.js";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
-import { getPlayer } from "../test-utils.js";
 
 describe("GameLoop", () => {
   let worldManager: DefaultWorldManager<PlatformerWorld>;
@@ -345,9 +345,8 @@ describe("GameLoop", () => {
       gameLoop.start();
       await new Promise((resolve) => setTimeout(resolve, 60));
 
-      // Record position of staying player
+      // Record Y position of staying player (testing gravity/falling)
       let world = worldManager.getState();
-      const stayingX1 = world.players.get("staying")?.position.x ?? 0;
       const stayingY1 = world.players.get("staying")?.position.y ?? 0;
 
       // Remove leaving player

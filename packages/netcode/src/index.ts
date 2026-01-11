@@ -31,6 +31,7 @@ export type {
   DeserializeFunction,
   Snapshot,
   InputMessage,
+  InputMerger,
 } from "./core/types.js";
 
 export type { WorldManager } from "./core/world.js";
@@ -53,7 +54,6 @@ export { NoPredictionScope } from "./client/prediction-scope.js";
 // =============================================================================
 export { InputQueue } from "./server/input-queue.js";
 export { GameLoop } from "./server/game-loop.js";
-export type { InputMerger } from "./server/game-loop.js";
 
 // =============================================================================
 // Strategies
@@ -108,4 +108,7 @@ export {
   DEFAULT_JUMP_VELOCITY,
   DEFAULT_FLOOR_Y,
   MAX_INPUT_BUFFER_SIZE,
+  DEFAULT_FRAME_DELTA_MS,
+  MIN_DELTA_MS,
+  MAX_DELTA_MS,
 } from "./constants.js";

@@ -66,7 +66,7 @@ describe("superjsonParser", () => {
     });
 
     test("should encode BigInt correctly", () => {
-      const packet = { type: 2, data: { bigNumber: BigInt(9007199254740993) } };
+      const packet = { type: 2, data: { bigNumber: 9007199254740993n } };
       const encoded = encoder.encode(packet);
       
       expect(encoded[0]).toContain("bigint");

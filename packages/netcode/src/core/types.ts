@@ -88,3 +88,10 @@ export interface InputMessage<TInput> {
   /** Client timestamp when input was captured */
   timestamp: number;
 }
+
+/**
+ * Function to merge multiple inputs into one for a tick.
+ * Used when multiple inputs arrive between ticks.
+ * Default behavior: use the last input.
+ */
+export type InputMerger<TInput> = (inputs: TInput[]) => TInput;

@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { InputBuffer } from "./client/input-buffer.js";
 import { Predictor } from "./client/prediction.js";
 import { Reconciler } from "./client/reconciliation.js";
+import { DEFAULT_FRAME_DELTA_MS, MAX_DELTA_MS, MIN_DELTA_MS } from "./constants.js";
 import type { Snapshot } from "./core/types.js";
 import {
   platformerPredictionScope,
@@ -18,7 +19,7 @@ import {
 import type { PlatformerInput, PlatformerWorld } from "./examples/platformer/types.js";
 import { createIdleInput, createPlatformerWorld } from "./examples/platformer/types.js";
 import { InputQueue } from "./server/input-queue.js";
-import { getPlayer, getAt, getLast, getFromMap } from "./test-utils.js";
+import { getAt, getFromMap, getLast, getPlayer } from "./test-utils.js";
 
 describe("Client-Server Integration", () => {
   const PLAYER_ID = "test-player";
@@ -65,11 +66,11 @@ describe("Client-Server Integration", () => {
         clientsWithInputs.add(clientId);
         
         for (const inputMsg of inputMsgs) {
-          let deltaTime = 16.67;
+          let deltaTime = DEFAULT_FRAME_DELTA_MS;
           const lastTs = lastTimestamps.get(clientId);
-          if (lastTs !== null && lastTs !== undefined) {
+          if (lastTs != null) {
             const delta = inputMsg.timestamp - lastTs;
-            deltaTime = Math.max(1, Math.min(100, delta));
+            deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, delta));
           }
           lastTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -959,7 +960,7 @@ describe("Scale Tests", () => {
       for (const inputMsg of inputMsgs) {
         const singleInput = new Map<string, PlatformerInput>();
         singleInput.set(clientId, inputMsg.input);
-        currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+        currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
       }
     }
 
@@ -1015,7 +1016,7 @@ describe("Scale Tests", () => {
       for (const inputMsg of inputMsgs) {
         const singleInput = new Map<string, PlatformerInput>();
         singleInput.set(clientId, inputMsg.input);
-        currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+        currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
       }
     }
 
@@ -1026,7 +1027,7 @@ describe("Scale Tests", () => {
     expect(player0.position.y).toBeCloseTo(player49.position.y, 3);
     
     // Critical: gravity should be applied only once, not 50x
-    // At 980 gravity, 16.67ms: y = 0.5 * 980 * 0.01667^2 ≈ 0.136 units
+    // At 980 gravity, DEFAULT_FRAME_DELTA_MSms: y = 0.5 * 980 * 0.01667^2 ≈ 0.136 units
     expect(player0.position.y).toBeLessThan(1); // Should be ~0.136, not ~6.8
   });
 
@@ -1061,7 +1062,7 @@ describe("Scale Tests", () => {
       for (const inputMsg of inputMsgs) {
         const singleInput = new Map<string, PlatformerInput>();
         singleInput.set(clientId, inputMsg.input);
-        currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+        currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
       }
     }
 
@@ -1111,7 +1112,7 @@ describe("Player Disconnect Tests", () => {
       for (const inputMsg of inputMsgs) {
         const singleInput = new Map<string, PlatformerInput>();
         singleInput.set(clientId, inputMsg.input);
-        currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+        currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
       }
     }
 
@@ -1185,7 +1186,7 @@ describe("Player Disconnect Tests", () => {
       for (const inputMsg of inputMsgs) {
         const singleInput = new Map<string, PlatformerInput>();
         singleInput.set(clientId, inputMsg.input);
-        currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+        currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
       }
     }
 
@@ -1242,7 +1243,7 @@ describe("Player Disconnect Tests", () => {
       for (const inputMsg of inputMsgs) {
         const singleInput = new Map<string, PlatformerInput>();
         singleInput.set(clientId, inputMsg.input);
-        currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+        currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
       }
     }
 
@@ -1334,10 +1335,10 @@ describe("Network Condition Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1383,10 +1384,10 @@ describe("Network Condition Tests", () => {
     // Process in correct order
     let currentWorld = serverWorld;
     for (const inputMsg of pending) {
-      let deltaTime = 16.67;
+      let deltaTime = DEFAULT_FRAME_DELTA_MS;
       const lastTs = serverTimestamps.get("player");
-      if (lastTs !== null && lastTs !== undefined) {
-        deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+      if (lastTs != null) {
+        deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
       }
       serverTimestamps.set("player", inputMsg.timestamp);
 
@@ -1428,7 +1429,7 @@ describe("Network Condition Tests", () => {
     for (const inputMsg of uniqueBySeq) {
       const singleInput = new Map<string, PlatformerInput>();
       singleInput.set("player", inputMsg.input);
-      currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+      currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
     }
 
     const player = currentWorld.players.get("player");
@@ -1464,10 +1465,10 @@ describe("Network Condition Tests", () => {
     // Process available inputs
     let currentWorld = serverWorld;
     for (const inputMsg of pending) {
-      let deltaTime = 16.67;
+      let deltaTime = DEFAULT_FRAME_DELTA_MS;
       const lastTs = serverTimestamps.get("player");
-      if (lastTs !== null && lastTs !== undefined) {
-        deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+      if (lastTs != null) {
+        deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
       }
       serverTimestamps.set("player", inputMsg.timestamp);
 
@@ -1507,7 +1508,7 @@ describe("Network Condition Tests", () => {
     for (const inputMsg of pending) {
       const singleInput = new Map<string, PlatformerInput>();
       singleInput.set("player", inputMsg.input);
-      currentWorld = simulatePlatformer(currentWorld, singleInput, 16.67);
+      currentWorld = simulatePlatformer(currentWorld, singleInput, DEFAULT_FRAME_DELTA_MS);
     }
     
     // Acknowledge up to seq 1
@@ -1565,10 +1566,10 @@ describe("Network Condition Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1631,10 +1632,10 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1681,10 +1682,10 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1728,11 +1729,11 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
+        if (lastTs != null) {
           // Clamp large deltas to 100ms max
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1787,10 +1788,10 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1838,8 +1839,8 @@ describe("Chaos/Fuzz Tests", () => {
         // Track time-weighted movement
         const lastTs = lastTimestamps.get(`player-${p}`);
         const effectiveDelta = lastTs !== undefined 
-          ? Math.max(1, Math.min(100, timestamp - lastTs)) 
-          : 16.67;
+          ? Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, timestamp - lastTs)) 
+          : DEFAULT_FRAME_DELTA_MS;
         lastTimestamps.set(`player-${p}`, timestamp);
         timeWeightedMovement.set(
           `player-${p}`, 
@@ -1866,10 +1867,10 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -1945,10 +1946,10 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -2004,10 +2005,10 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67;
+        let deltaTime = DEFAULT_FRAME_DELTA_MS;
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
-          deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+        if (lastTs != null) {
+          deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -2049,12 +2050,12 @@ describe("Chaos/Fuzz Tests", () => {
 
     for (const [clientId, inputMsgs] of batchedInputs) {
       for (const inputMsg of inputMsgs) {
-        let deltaTime = 16.67; // Default for first input
+        let deltaTime = DEFAULT_FRAME_DELTA_MS; // Default for first input
         const lastTs = serverTimestamps.get(clientId);
-        if (lastTs !== null && lastTs !== undefined) {
+        if (lastTs != null) {
           const delta = inputMsg.timestamp - lastTs;
-          // When delta is 0, use minimum of 1ms to prevent zero-time simulation
-          deltaTime = delta > 0 ? Math.max(1, Math.min(100, delta)) : 1;
+          // When delta is 0, use minimum to prevent zero-time simulation
+          deltaTime = delta > 0 ? Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, delta)) : MIN_DELTA_MS;
         }
         serverTimestamps.set(clientId, inputMsg.timestamp);
 
@@ -2070,7 +2071,7 @@ describe("Chaos/Fuzz Tests", () => {
     expect(serverPlayer?.position.x).toBeGreaterThan(0);
     
     // Movement should be small since we used 1ms deltas for duplicates
-    // First input: 16.67ms, inputs 2-5: 1ms each = 20.67ms total
+    // First input: DEFAULT_FRAME_DELTA_MSms, inputs 2-5: 1ms each = 20.67ms total
     // 200 units/sec * 0.02067 sec ≈ 4.13 units
     expect(serverPlayer?.position.x).toBeGreaterThan(3);
     expect(serverPlayer?.position.x).toBeLessThan(6);
@@ -2127,10 +2128,10 @@ describe("Chaos/Fuzz Tests", () => {
 
       for (const [clientId, inputMsgs] of batchedInputs) {
         for (const inputMsg of inputMsgs) {
-          let deltaTime = 16.67;
+          let deltaTime = DEFAULT_FRAME_DELTA_MS;
           const lastTs = serverTimestamps.get(clientId);
-          if (lastTs !== null && lastTs !== undefined) {
-            deltaTime = Math.max(1, Math.min(100, inputMsg.timestamp - lastTs));
+          if (lastTs != null) {
+            deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, inputMsg.timestamp - lastTs));
           }
           serverTimestamps.set(clientId, inputMsg.timestamp);
 

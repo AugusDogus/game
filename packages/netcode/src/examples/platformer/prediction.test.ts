@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import { platformerPredictionScope } from "./prediction.js";
 import { createIdleInput } from "./types.js";
 import type { PlatformerWorld, PlatformerPlayer, PlatformerInput } from "./types.js";
-import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED, DEFAULT_JUMP_VELOCITY, DEFAULT_GRAVITY } from "../../constants.js";
+import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED, DEFAULT_JUMP_VELOCITY } from "../../constants.js";
 
 function createPlayer(overrides: Partial<PlatformerPlayer> = {}): PlatformerPlayer {
   return {

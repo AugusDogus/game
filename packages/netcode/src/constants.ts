@@ -50,3 +50,21 @@ export const DEFAULT_FLOOR_Y = 200;
  * Maximum input buffer size (prevent memory issues)
  */
 export const MAX_INPUT_BUFFER_SIZE = 1024;
+
+/**
+ * Default frame delta time: ~16.67ms (60Hz)
+ * Used when no previous timestamp is available for delta calculation
+ */
+export const DEFAULT_FRAME_DELTA_MS = 1000 / 60; // ~16.67ms
+
+/**
+ * Minimum delta time clamp (1ms)
+ * Prevents division by zero and unrealistic physics
+ */
+export const MIN_DELTA_MS = 1;
+
+/**
+ * Maximum delta time clamp (100ms)
+ * Prevents large jumps from network delays or paused clients
+ */
+export const MAX_DELTA_MS = 100;

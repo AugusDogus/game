@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { DefaultWorldManager } from "../core/world.js";
 import type { PlatformerWorld, PlatformerInput } from "../examples/platformer/types.js";
-import { createPlatformerWorld } from "../examples/platformer/types.js";
+import { createPlatformerWorld, createIdleInput } from "../examples/platformer/types.js";
 import {
   simulatePlatformer,
   addPlayerToWorld,
@@ -114,6 +114,7 @@ describe("ServerAuthoritativeServer", () => {
       tickIntervalMs: 50,
       snapshotHistorySize: 60,
       mergeInputs: mergePlatformerInputs,
+      createIdleInput: createIdleInput,
     });
   });
 
@@ -526,6 +527,7 @@ describe("ServerAuthoritativeServer", () => {
           tickIntervalMs: 1000 / 120, // 120Hz
           snapshotHistorySize: 60,
           mergeInputs: mergePlatformerInputs,
+          createIdleInput,
         },
       );
 

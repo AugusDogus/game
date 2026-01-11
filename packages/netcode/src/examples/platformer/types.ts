@@ -16,7 +16,11 @@ export interface Vector2 {
 export interface PlatformerInput {
   /** Horizontal movement (-1 to 1) */
   moveX: number;
-  /** Vertical movement (-1 to 1) - unused in platformer but kept for compatibility */
+  /**
+   * Vertical movement (-1 to 1)
+   * Currently unused in platformer game logic (jump is handled separately),
+   * but kept for API compatibility and potential future use (e.g., vertical movement in 3D platformers)
+   */
   moveY: number;
   /** Whether jump was pressed */
   jump: boolean;
@@ -75,12 +79,13 @@ export function createPlatformerPlayer(
 
 /**
  * Create an idle input (no movement, no jump)
+ * @param timestamp - Optional timestamp (defaults to current time)
  */
-export function createIdleInput(): PlatformerInput {
+export function createIdleInput(timestamp?: number): PlatformerInput {
   return {
     moveX: 0,
     moveY: 0,
     jump: false,
-    timestamp: Date.now(),
+    timestamp: timestamp ?? Date.now(),
   };
 }
