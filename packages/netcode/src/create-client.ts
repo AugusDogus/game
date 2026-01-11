@@ -38,6 +38,8 @@ export interface NetcodeClientHandle<TWorld, TInput extends { timestamp: number 
   sendInput(input: Omit<TInput, "timestamp">): void;
   /** Get current world state for rendering */
   getStateForRendering(): TWorld | null;
+  /** Get the last raw server snapshot (for debug visualization) */
+  getLastServerSnapshot(): Snapshot<TWorld> | null;
   /** Get local player ID */
   getPlayerId(): string | null;
   /** Set simulated latency for testing */
@@ -154,6 +156,10 @@ export function createNetcodeClient<TWorld, TInput extends { timestamp: number }
 
     getStateForRendering() {
       return strategy.getStateForRendering();
+    },
+
+    getLastServerSnapshot() {
+      return strategy.getLastServerSnapshot();
     },
 
     getPlayerId() {

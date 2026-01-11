@@ -29,6 +29,7 @@ export class ServerAuthoritativeClient<
   private predictionScope: PredictionScope<TWorld, TInput>;
   private playerId: string | null = null;
   private lastServerState: TWorld | null = null;
+  private lastServerSnapshot: Snapshot<TWorld> | null = null;
 
   constructor(
     predictionScope: PredictionScope<TWorld, TInput>,
@@ -65,11 +66,19 @@ export class ServerAuthoritativeClient<
     // Store for interpolation
     this.interpolator.addSnapshot(snapshot);
     this.lastServerState = snapshot.state;
+    this.lastServerSnapshot = snapshot;
 
     // Reconcile if we have a player ID
     if (this.playerId && this.reconciler) {
       this.reconciler.reconcile(snapshot);
     }
+  }
+
+  /**
+   * Get the last received server snapshot (for debug visualization)
+   */
+  getLastServerSnapshot(): Snapshot<TWorld> | null {
+    return this.lastServerSnapshot;
   }
 
   getStateForRendering(): TWorld | null {

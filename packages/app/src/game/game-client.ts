@@ -1,11 +1,14 @@
-import type { NetcodeClientHandle, PlatformerInput, PlatformerWorld } from "@game/netcode";
+import type { NetcodeClientHandle, PlatformerInput, PlatformerWorld, PlatformerPlayer } from "@game/netcode";
 import {
   createNetcodeClient,
   interpolatePlatformer,
   platformerPredictionScope,
 } from "@game/netcode";
 import type { Socket } from "socket.io-client";
-import { CanvasRenderer } from "../client/renderer/canvas-renderer.js";
+import { CanvasRenderer, type DebugData, type PositionHistoryEntry } from "../client/renderer/canvas-renderer.js";
+
+/** Maximum number of position history entries to keep */
+const MAX_HISTORY_SIZE = 60;
 
 /** Debug rendering options */
 export interface DebugOptions {
@@ -30,6 +33,12 @@ export class GameClient {
   private keydownHandler: (e: KeyboardEvent) => void;
   private keyupHandler: (e: KeyboardEvent) => void;
   private debugOptions: DebugOptions = { showTrails: false, showServerPositions: false };
+
+  // Position history for debug visualization
+  private localPredictedHistory: PositionHistoryEntry[] = [];
+  private localServerHistory: PositionHistoryEntry[] = [];
+  private otherPlayersHistory: Map<string, PositionHistoryEntry[]> = new Map();
+  private otherPlayersServerHistory: Map<string, PositionHistoryEntry[]> = new Map();
 
   constructor(socket: Socket, canvas: HTMLCanvasElement) {
     // Create renderer
@@ -113,6 +122,104 @@ export class GameClient {
   }
 
   /**
+   * Add a position to history, maintaining max size
+   */
+  private addToHistory(history: PositionHistoryEntry[], entry: PositionHistoryEntry): void {
+    history.push(entry);
+    if (history.length > MAX_HISTORY_SIZE) {
+      history.shift();
+    }
+  }
+
+  /**
+   * Update position histories for debug visualization
+   */
+  private updatePositionHistories(
+    world: PlatformerWorld,
+    localPlayerId: string | null,
+  ): void {
+    const now = Date.now();
+
+    // Update local player predicted position
+    if (localPlayerId) {
+      const localPlayer = world.players.get(localPlayerId);
+      if (localPlayer) {
+        this.addToHistory(this.localPredictedHistory, {
+          x: localPlayer.position.x,
+          y: localPlayer.position.y,
+          timestamp: now,
+        });
+      }
+    }
+
+    // Update other players' interpolated positions
+    for (const [playerId, player] of world.players) {
+      if (playerId !== localPlayerId) {
+        if (!this.otherPlayersHistory.has(playerId)) {
+          this.otherPlayersHistory.set(playerId, []);
+        }
+        this.addToHistory(this.otherPlayersHistory.get(playerId)!, {
+          x: player.position.x,
+          y: player.position.y,
+          timestamp: now,
+        });
+      }
+    }
+
+    // Update server position histories from raw snapshot
+    const serverSnapshot = this.netcodeClient.getLastServerSnapshot();
+    if (serverSnapshot) {
+      const serverWorld = serverSnapshot.state as PlatformerWorld;
+      
+      // Local player server position
+      if (localPlayerId) {
+        const serverLocalPlayer = serverWorld.players.get(localPlayerId);
+        if (serverLocalPlayer) {
+          this.addToHistory(this.localServerHistory, {
+            x: serverLocalPlayer.position.x,
+            y: serverLocalPlayer.position.y,
+            timestamp: now,
+          });
+        }
+      }
+
+      // Other players' raw server positions
+      for (const [playerId, player] of serverWorld.players) {
+        if (playerId !== localPlayerId) {
+          if (!this.otherPlayersServerHistory.has(playerId)) {
+            this.otherPlayersServerHistory.set(playerId, []);
+          }
+          this.addToHistory(this.otherPlayersServerHistory.get(playerId)!, {
+            x: player.position.x,
+            y: player.position.y,
+            timestamp: now,
+          });
+        }
+      }
+    }
+
+    // Clean up histories for disconnected players
+    for (const playerId of this.otherPlayersHistory.keys()) {
+      if (!world.players.has(playerId)) {
+        this.otherPlayersHistory.delete(playerId);
+        this.otherPlayersServerHistory.delete(playerId);
+      }
+    }
+  }
+
+  /**
+   * Build debug data for renderer
+   */
+  private buildDebugData(): DebugData {
+    return {
+      localPredictedHistory: this.localPredictedHistory,
+      localServerHistory: this.localServerHistory,
+      otherPlayersHistory: this.otherPlayersHistory,
+      otherPlayersServerHistory: this.otherPlayersServerHistory,
+    };
+  }
+
+  /**
    * Start the render loop
    */
   private startRenderLoop(): void {
@@ -124,12 +231,21 @@ export class GameClient {
       // Convert to array for renderer
       const players = world ? Array.from(world.players.values()) : [];
 
-      // Render (debug visualization temporarily disabled - needs refactoring)
+      // Update position histories if debug visualization is enabled
+      if (world && (this.debugOptions.showTrails || this.debugOptions.showServerPositions)) {
+        this.updatePositionHistories(world, localPlayerId);
+      }
+
+      // Get server snapshot for ghost rendering
+      const serverSnapshot = this.netcodeClient.getLastServerSnapshot();
+      const serverWorld = serverSnapshot?.state as PlatformerWorld | null;
+
+      // Render with debug options
       this.renderer.render(players, localPlayerId, {
-        debugData: null,
-        serverSnapshot: null,
-        showTrails: false,
-        showServerPositions: false,
+        debugData: this.buildDebugData(),
+        serverSnapshot: serverWorld ?? null,
+        showTrails: this.debugOptions.showTrails,
+        showServerPositions: this.debugOptions.showServerPositions,
       });
 
       // Continue loop
