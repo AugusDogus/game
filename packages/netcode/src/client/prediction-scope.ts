@@ -29,14 +29,17 @@
  *   extractPredictable(world, playerId) {
  *     // Only predict the local player
  *     const player = world.players.get(playerId);
+ *     if (!player) return { players: new Map() };
  *     return { players: new Map([[playerId, player]]) };
  *   },
  *
  *   mergePrediction(serverWorld, predicted) {
  *     // Replace server's version of local player with predicted version
  *     const merged = new Map(serverWorld.players);
- *     for (const [id, player] of predicted.players) {
- *       merged.set(id, player);
+ *     if (predicted.players) {
+ *       for (const [id, player] of predicted.players) {
+ *         merged.set(id, player);
+ *       }
  *     }
  *     return { ...serverWorld, players: merged };
  *   },

@@ -65,7 +65,7 @@ sequenceDiagram
 
 ## Considerations
 
-- **Maximum rewind time**: Cap how far back server will rewind (e.g., 200ms) to prevent abuse
+- **Maximum rewind time**: Cap how far back server will rewind (e.g., 200 ms wall-clock, or ~4 snapshots at 20 Hz tick rate) to prevent abuse. Use `SnapshotBuffer` history depth as the implementation limit.
 - **Interpolation awareness**: Client timestamp should account for their interpolation delay
 - **Hit priority**: When multiple clients shoot simultaneously, use server-received timestamp as tiebreaker (first processed wins). For truly simultaneous hits, use client ID as deterministic tiebreaker.
 - **Action message format**: `ActionMessage<TAction>` should include monotonic `seq` number and `clientTimestamp`. Server deduplicates by `(clientId, seq)` before processing.
