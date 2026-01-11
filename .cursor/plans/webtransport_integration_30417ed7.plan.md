@@ -74,8 +74,12 @@ flowchart LR
 
 ### 2. Server Setup
 
-- Bun supports WebTransport via `Bun.serve()` with HTTP/3
-- Requires TLS certificates (self-signed for dev)
+- **Note**: Bun does NOT currently support HTTP/3 or WebTransport (as of Jan 2026, this is an open feature request)
+- **Options**:
+  - Use an HTTP/3-capable proxy (Caddy, nginx with quiche) in front of Bun
+  - Use a different server runtime that supports HTTP/3 (e.g., Deno, or native QUIC libraries)
+  - Wait for Bun to add HTTP/3 support
+- Requires TLS certificates (self-signed for dev, Let's Encrypt for prod)
 - Fallback to WebSocket for browsers without WebTransport support
 
 ### 3. Client Setup
@@ -91,6 +95,6 @@ flowchart LR
 
 ## Considerations
 
-- **Browser support**: WebTransport is Chrome 97+, need fallback
-- **TLS requirement**: WebTransport requires HTTPS, complicates local dev
-- **Bun support**: Verify Bun's WebTransport server capabilities
+- **Browser support**: WebTransport is supported in Chrome 97+ (enabled by default), Edge, and Opera. Firefox and Safari do not yet support it. Fallback to WebSocket is required for broad compatibility.
+- **TLS requirement**: WebTransport requires HTTPS (HTTP/3 over QUIC), which complicates local dev. Use mkcert for local TLS certs.
+- **Bun support**: Bun does NOT support HTTP/3/WebTransport server-side as of Jan 2026. Plan for a proxy layer (Caddy recommended) or alternative runtime.

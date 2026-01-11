@@ -67,4 +67,6 @@ sequenceDiagram
 
 - **Maximum rewind time**: Cap how far back server will rewind (e.g., 200ms) to prevent abuse
 - **Interpolation awareness**: Client timestamp should account for their interpolation delay
-- **Hit priority**: When multiple clients shoot simultaneously, define resolution order
+- **Hit priority**: When multiple clients shoot simultaneously, use server-received timestamp as tiebreaker (first processed wins). For truly simultaneous hits, use client ID as deterministic tiebreaker.
+- **Action message format**: `ActionMessage<TAction>` should include monotonic `seq` number and `clientTimestamp`. Server deduplicates by `(clientId, seq)` before processing.
+- **Network reliability**: Actions use reliable transport (Socket.IO events / WebTransport streams). Server sends `ActionResult` ack. Client can retry unacked actions with same `seq` (server ignores duplicates via idempotency check).
