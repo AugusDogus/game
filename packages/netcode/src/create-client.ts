@@ -5,7 +5,7 @@
  */
 
 import type { Socket } from "socket.io-client";
-import type { Snapshot, InterpolateFunction } from "./core/types.js";
+import type { Snapshot, InterpolateFunction, ActionResult } from "./core/types.js";
 import type { PredictionScope } from "./client/prediction-scope.js";
 import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js";
 import { DEFAULT_INTERPOLATION_DELAY_MS } from "./constants.js";
@@ -15,8 +15,15 @@ import { DEFAULT_INTERPOLATION_DELAY_MS } from "./constants.js";
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
+ * @typeParam TActionResult - The type of action results (optional)
  */
-export interface CreateClientConfig<TWorld, TInput extends { timestamp: number }> {
+export interface CreateClientConfig<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+> {
   /** Socket.IO client socket instance */
   socket: Socket;
   /** Defines how to predict and merge local player state. See {@link PredictionScope}. */
@@ -33,6 +40,8 @@ export interface CreateClientConfig<TWorld, TInput extends { timestamp: number }
   onPlayerJoin?: (playerId: string) => void;
   /** Called when another player leaves the game */
   onPlayerLeave?: (playerId: string) => void;
+  /** Called when an action result is received from the server */
+  onActionResult?: (result: ActionResult<TActionResult>) => void;
 }
 
 /**
@@ -40,10 +49,24 @@ export interface CreateClientConfig<TWorld, TInput extends { timestamp: number }
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
  */
-export interface NetcodeClientHandle<TWorld, TInput extends { timestamp: number }> {
+export interface NetcodeClientHandle<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+> {
   /** Send player input to the server. Timestamp is added automatically. */
   sendInput(input: Omit<TInput, "timestamp">): void;
+  /**
+   * Send a discrete action to the server (e.g., attack, shoot, use ability).
+   * Actions are validated server-side with lag compensation.
+   * The client timestamp is added automatically.
+   *
+   * @param action - The action to send
+   * @returns The sequence number assigned to this action
+   */
+  sendAction(action: TAction): number;
   /** Get the current world state for rendering. Combines predicted local player with interpolated remote players. */
   getStateForRendering(): TWorld | null;
   /** Get the last raw server snapshot (useful for debug visualization) */
@@ -56,6 +79,8 @@ export interface NetcodeClientHandle<TWorld, TInput extends { timestamp: number 
   getSimulatedLatency(): number;
   /** Reset all client state (prediction, interpolation, input buffer) */
   reset(): void;
+  /** Get the interpolation delay used by this client (for calculating action timestamps) */
+  getInterpolationDelayMs(): number;
 }
 
 /**
@@ -66,12 +91,15 @@ export interface NetcodeClientHandle<TWorld, TInput extends { timestamp: number 
  * - Sends inputs to the server with timestamps
  * - Receives world snapshots and reconciles any mispredictions
  * - Interpolates other players between past snapshots for smooth rendering
+ * - Sends discrete actions for lag-compensated validation
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
+ * @typeParam TActionResult - The type of action results (optional)
  *
  * @param config - Client configuration
- * @returns A handle to send input and get world state for rendering
+ * @returns A handle to send input/actions and get world state for rendering
  *
  * @example
  * ```ts
@@ -85,18 +113,30 @@ export interface NetcodeClientHandle<TWorld, TInput extends { timestamp: number 
  *   predictionScope: myPredictionScope,
  *   interpolate: (from, to, alpha) => { ... },
  *   onWorldUpdate: (world) => render(world),
+ *   onActionResult: (result) => {
+ *     if (result.success) console.log('Hit!', result.result);
+ *   },
  * });
  *
  * // In your game loop:
  * client.sendInput({ moveX: 1, moveY: 0, jump: false });
  * const worldToRender = client.getStateForRendering();
+ *
+ * // When player attacks:
+ * client.sendAction({ type: 'attack', targetX: 100, targetY: 50 });
  * ```
  */
-export function createNetcodeClient<TWorld, TInput extends { timestamp: number }>(
-  config: CreateClientConfig<TWorld, TInput>,
-): NetcodeClientHandle<TWorld, TInput> {
+export function createNetcodeClient<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+>(
+  config: CreateClientConfig<TWorld, TInput, TAction, TActionResult>,
+): NetcodeClientHandle<TWorld, TInput, TAction> {
   const interpolationDelayMs = config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
   let simulatedLatency = config.simulatedLatency ?? 0;
+  let actionSeq = 0;
 
   // Create client strategy
   const strategy = new ServerAuthoritativeClient<TWorld, TInput>(
@@ -149,6 +189,17 @@ export function createNetcodeClient<TWorld, TInput extends { timestamp: number }
   // Handle disconnect
   const handleDisconnect = () => {
     strategy.reset();
+    actionSeq = 0;
+  };
+
+  // Handle action result
+  const handleActionResult = (result: ActionResult<TActionResult>) => {
+    const apply = () => config.onActionResult?.(result);
+    if (simulatedLatency > 0) {
+      setTimeout(apply, simulatedLatency);
+    } else {
+      apply();
+    }
   };
 
   // Set up socket handlers
@@ -160,6 +211,7 @@ export function createNetcodeClient<TWorld, TInput extends { timestamp: number }
   config.socket.on("netcode:snapshot", handleSnapshot);
   config.socket.on("netcode:join", handleJoin);
   config.socket.on("netcode:leave", handleLeave);
+  config.socket.on("netcode:action_result", handleActionResult);
   config.socket.on("disconnect", handleDisconnect);
 
   return {
@@ -186,6 +238,23 @@ export function createNetcodeClient<TWorld, TInput extends { timestamp: number }
       }
     },
 
+    sendAction(action: TAction): number {
+      const seq = ++actionSeq;
+      const clientTimestamp = Date.now();
+
+      // Create action message
+      const message = { seq, action, clientTimestamp };
+
+      // Send to server (actions use reliable transport)
+      if (simulatedLatency > 0) {
+        setTimeout(() => config.socket.emit("netcode:action", message), simulatedLatency);
+      } else {
+        config.socket.emit("netcode:action", message);
+      }
+
+      return seq;
+    },
+
     getStateForRendering() {
       return strategy.getStateForRendering();
     },
@@ -208,6 +277,11 @@ export function createNetcodeClient<TWorld, TInput extends { timestamp: number }
 
     reset() {
       strategy.reset();
+      actionSeq = 0;
+    },
+
+    getInterpolationDelayMs() {
+      return interpolationDelayMs;
     },
   };
 }

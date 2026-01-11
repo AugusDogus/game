@@ -293,4 +293,11 @@ export class ServerAuthoritativeServer<
   getConnectedClients(): string[] {
     return Array.from(this.connectedClients);
   }
+
+  /**
+   * Get the snapshot buffer (for lag compensation)
+   */
+  getSnapshotBuffer(): SnapshotBuffer<TWorld> {
+    return this.snapshotBuffer;
+  }
 }

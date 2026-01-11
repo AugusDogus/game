@@ -199,3 +199,98 @@ export interface InputMessage<TInput> {
  * ```
  */
 export type InputMerger<TInput> = (inputs: TInput[]) => TInput;
+
+// =============================================================================
+// Action Types (for Lag Compensation)
+// =============================================================================
+
+/**
+ * Action message sent from client to server for discrete game events.
+ *
+ * Actions are distinct from inputs:
+ * - Inputs = continuous state (movement, aiming direction)
+ * - Actions = discrete events (shoot, attack, use ability)
+ *
+ * Actions include a client timestamp for lag compensation - the server can
+ * rewind to validate hits against where targets were from the shooter's perspective.
+ *
+ * @typeParam TAction - Your game's action type
+ */
+export interface ActionMessage<TAction> {
+  /** Client-assigned sequence number (monotonically increasing per client) */
+  seq: number;
+
+  /** The actual action data */
+  action: TAction;
+
+  /**
+   * Client timestamp when action occurred (Date.now() on client).
+   * Server uses this + clock offset to calculate rewind time.
+   */
+  clientTimestamp: number;
+}
+
+/**
+ * Result of an action after server validation.
+ *
+ * Sent back to the client to confirm or deny the action's effect.
+ *
+ * @typeParam TResult - Your game's result type (e.g., damage dealt, ability effect)
+ */
+export interface ActionResult<TResult> {
+  /** Sequence number of the action this result corresponds to */
+  seq: number;
+
+  /** Whether the action was successful (e.g., hit landed) */
+  success: boolean;
+
+  /** Optional result data (e.g., damage dealt, target hit) */
+  result?: TResult;
+
+  /** Server timestamp when action was processed */
+  serverTimestamp: number;
+}
+
+/**
+ * Function to validate an action against a historical world state.
+ *
+ * This is the core of lag compensation - given the action and the world state
+ * at the time the client performed the action, determine if it succeeds.
+ *
+ * @typeParam TWorld - Your game's world state type
+ * @typeParam TAction - Your game's action type
+ * @typeParam TResult - Your game's result type
+ *
+ * @param world - Historical world state (rewound to client's perspective)
+ * @param clientId - ID of the client who performed the action
+ * @param action - The action to validate
+ * @returns Validation result with success flag and optional result data
+ *
+ * @example
+ * ```ts
+ * const validateAttack: ActionValidator<MyWorld, AttackAction, DamageResult> = (
+ *   world, clientId, action
+ * ) => {
+ *   const attacker = world.players.get(clientId);
+ *   if (!attacker) return { success: false };
+ *
+ *   // Check if any player is within attack range at historical position
+ *   for (const [id, player] of world.players) {
+ *     if (id === clientId) continue;
+ *     const distance = Math.hypot(
+ *       player.position.x - action.targetX,
+ *       player.position.y - action.targetY
+ *     );
+ *     if (distance < ATTACK_RADIUS) {
+ *       return { success: true, result: { targetId: id, damage: 10 } };
+ *     }
+ *   }
+ *   return { success: false };
+ * };
+ * ```
+ */
+export type ActionValidator<TWorld, TAction, TResult> = (
+  world: TWorld,
+  clientId: string,
+  action: TAction,
+) => { success: boolean; result?: TResult };
