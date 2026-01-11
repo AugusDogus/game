@@ -103,6 +103,31 @@ describe("ActionQueue", () => {
       expect(actions[1]?.clientId).toBe("client2");
     });
 
+    it("should capture serverReceiveTime at enqueue, not dequeue", async () => {
+      const beforeEnqueue = Date.now();
+      
+      queue.enqueue("client1", {
+        seq: 1,
+        action: { type: "attack", value: 10 },
+        clientTimestamp: 1000,
+      });
+
+      const afterEnqueue = Date.now();
+
+      // Wait a bit before dequeuing
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const beforeDequeue = Date.now();
+      const actions = queue.dequeueAll();
+      
+      // serverReceiveTime should be from enqueue time, not dequeue time
+      const receiveTime = actions[0]?.serverReceiveTime ?? 0;
+      expect(receiveTime).toBeGreaterThanOrEqual(beforeEnqueue);
+      expect(receiveTime).toBeLessThanOrEqual(afterEnqueue);
+      // Should NOT be close to dequeue time
+      expect(receiveTime).toBeLessThan(beforeDequeue);
+    });
+
     it("should clear queues after dequeue", () => {
       queue.enqueue("client1", {
         seq: 1,
