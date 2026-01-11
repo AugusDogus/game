@@ -108,6 +108,11 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
   }
   const tickIntervalMs = 1000 / tickRate;
   const snapshotHistorySize = config.snapshotHistorySize ?? DEFAULT_SNAPSHOT_HISTORY_SIZE;
+  if (!Number.isInteger(snapshotHistorySize) || snapshotHistorySize <= 0) {
+    throw new Error(
+      `[NetcodeServer] snapshotHistorySize must be a positive integer. Got: ${snapshotHistorySize}`,
+    );
+  }
 
   // Create world manager
   const worldManager = new DefaultWorldManager<TWorld>(config.initialWorld);
@@ -129,8 +134,8 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
   // Game loop state
   let intervalId: NodeJS.Timeout | null = null;
 
-  // Set up Socket.IO handlers
-  config.io.on("connection", (socket: Socket) => {
+  // Connection handler (extracted for cleanup in stop())
+  const connectionHandler = (socket: Socket) => {
     const clientId = socket.id;
     console.log(`[NetcodeServer] Client connected: ${clientId}`);
 
@@ -141,9 +146,14 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
     // Notify other clients
     socket.broadcast.emit("netcode:join", { playerId: clientId });
 
-    // Handle input messages (timestamp is embedded in input.timestamp, not the wrapper)
-    socket.on("netcode:input", (message: { seq: number; input: TInput }) => {
-      strategy.onClientInput(clientId, message.input, message.seq);
+    // Handle input messages with validation (untrusted client data)
+    socket.on("netcode:input", (message: unknown) => {
+      if (typeof message !== "object" || message === null) return;
+      const { seq, input } = message as { seq?: unknown; input?: unknown };
+      if (!Number.isInteger(seq) || (seq as number) < 0) return;
+      if (typeof input !== "object" || input === null) return;
+      if (typeof (input as { timestamp?: unknown }).timestamp !== "number") return;
+      strategy.onClientInput(clientId, input as TInput, seq as number);
     });
 
     // Handle disconnect
@@ -153,7 +163,10 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
       config.onPlayerLeave?.(clientId);
       config.io.emit("netcode:leave", { playerId: clientId });
     });
-  });
+  };
+
+  // Set up Socket.IO handlers
+  config.io.on("connection", connectionHandler);
 
   // Game loop tick function
   const tick = () => {
@@ -173,6 +186,7 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
       if (intervalId !== null) {
         clearInterval(intervalId);
         intervalId = null;
+        config.io.off("connection", connectionHandler);
         console.log("[NetcodeServer] Stopped game loop");
       }
     },
