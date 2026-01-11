@@ -89,3 +89,46 @@ export function createIdleInput(timestamp?: number): PlatformerInput {
     timestamp: timestamp ?? Date.now(),
   };
 }
+
+// =============================================================================
+// Action Types (for Lag Compensation)
+// =============================================================================
+
+/**
+ * Attack action in the platformer game.
+ * Represents a melee attack at a target position.
+ */
+export interface PlatformerAttackAction {
+  /** Type discriminator for action handling */
+  type: "attack";
+  /** Target X position of the attack */
+  targetX: number;
+  /** Target Y position of the attack */
+  targetY: number;
+}
+
+/**
+ * Union type for all platformer actions
+ */
+export type PlatformerAction = PlatformerAttackAction;
+
+/**
+ * Result of a successful attack action
+ */
+export interface PlatformerAttackResult {
+  /** ID of the player that was hit */
+  targetId: string;
+  /** Damage dealt */
+  damage: number;
+}
+
+/**
+ * Union type for all platformer action results
+ */
+export type PlatformerActionResult = PlatformerAttackResult;
+
+/**
+ * Attack configuration constants
+ */
+export const ATTACK_RADIUS = 50; // pixels
+export const ATTACK_DAMAGE = 10;

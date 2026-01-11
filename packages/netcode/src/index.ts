@@ -32,6 +32,10 @@ export type {
   Snapshot,
   InputMessage,
   InputMerger,
+  // Action types for lag compensation
+  ActionMessage,
+  ActionResult,
+  ActionValidator,
 } from "./core/types.js";
 
 export type { WorldManager } from "./core/world.js";
@@ -54,6 +58,14 @@ export { NoPredictionScope } from "./client/prediction-scope.js";
 // =============================================================================
 export { InputQueue } from "./server/input-queue.js";
 export { GameLoop } from "./server/game-loop.js";
+export { LagCompensator } from "./server/lag-compensator.js";
+export type {
+  LagCompensatorConfig,
+  ClientClockInfo,
+  LagCompensationResult,
+} from "./server/lag-compensator.js";
+export { ActionQueue } from "./server/action-queue.js";
+export type { QueuedAction } from "./server/action-queue.js";
 
 // =============================================================================
 // Strategies
@@ -74,12 +86,20 @@ export type {
   PlatformerInput,
   PlatformerPlayer,
   PlatformerWorld,
+  // Action types
+  PlatformerAttackAction,
+  PlatformerAction,
+  PlatformerAttackResult,
+  PlatformerActionResult,
 } from "./examples/platformer/types.js";
 
 export {
   createPlatformerWorld,
   createPlatformerPlayer,
   createIdleInput,
+  // Action constants
+  ATTACK_RADIUS,
+  ATTACK_DAMAGE,
 } from "./examples/platformer/types.js";
 
 export {
@@ -92,6 +112,8 @@ export {
 export { interpolatePlatformer } from "./examples/platformer/interpolation.js";
 
 export { platformerPredictionScope } from "./examples/platformer/prediction.js";
+
+export { validatePlatformerAction, isInAttackRange } from "./examples/platformer/action-validator.js";
 
 export { platformerGame } from "./examples/platformer/index.js";
 

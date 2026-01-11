@@ -5,9 +5,11 @@
  */
 
 import type { Server, Socket } from "socket.io";
-import { DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE } from "./constants.js";
-import type { InputMerger, SimulateFunction } from "./core/types.js";
+import { DEFAULT_INTERPOLATION_DELAY_MS, DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE } from "./constants.js";
+import type { ActionMessage, ActionResult, ActionValidator, InputMerger, SimulateFunction } from "./core/types.js";
 import { DefaultWorldManager } from "./core/world.js";
+import { ActionQueue } from "./server/action-queue.js";
+import { LagCompensator } from "./server/lag-compensator.js";
 import {
   ServerAuthoritativeServer,
   type ServerAuthoritativeServerConfig,
@@ -18,8 +20,15 @@ import {
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
+ * @typeParam TActionResult - The type of action results (optional)
  */
-export interface CreateServerConfig<TWorld, TInput extends { timestamp: number }> {
+export interface CreateServerConfig<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+> {
   /** Socket.IO server instance */
   io: Server;
   /** Initial world state before any players join */
@@ -42,6 +51,33 @@ export interface CreateServerConfig<TWorld, TInput extends { timestamp: number }
   onPlayerJoin?: (playerId: string) => void;
   /** Called when a player disconnects */
   onPlayerLeave?: (playerId: string) => void;
+  /**
+   * Function to validate actions with lag compensation.
+   * If provided, enables the action system. Actions are validated against
+   * historical world state based on client timestamps.
+   */
+  validateAction?: ActionValidator<TWorld, TAction, TActionResult>;
+  /**
+   * Maximum time in milliseconds the server will rewind for lag compensation.
+   * Default: 200ms
+   */
+  maxRewindMs?: number;
+  /**
+   * Interpolation delay used by clients (must match client config).
+   * Default: DEFAULT_INTERPOLATION_DELAY_MS (100ms)
+   */
+  interpolationDelayMs?: number;
+  /**
+   * Called when an action is validated (for logging/debugging).
+   * @param clientId - The client who performed the action
+   * @param action - The action that was validated
+   * @param result - The validation result
+   */
+  onActionValidated?: (
+    clientId: string,
+    action: TAction,
+    result: ActionResult<TActionResult>,
+  ) => void;
 }
 
 /**
@@ -62,6 +98,17 @@ export interface NetcodeServerHandle<TWorld> {
   getTick(): number;
   /** Get the number of currently connected clients. */
   getClientCount(): number;
+  /**
+   * Update clock synchronization data for a client.
+   * Call this when you implement clock sync (ping/pong) with clients.
+   *
+   * @param clientId - The client's ID
+   * @param clockOffset - Estimated offset: serverTime ≈ clientTime + clockOffset
+   * @param rtt - Round-trip time in milliseconds
+   */
+  updateClientClock(clientId: string, clockOffset: number, rtt: number): void;
+  /** Get the lag compensator instance (for advanced use cases) */
+  getLagCompensator(): LagCompensator<TWorld> | null;
 }
 
 /**
@@ -72,9 +119,12 @@ export interface NetcodeServerHandle<TWorld> {
  * - Receives input from clients and queues it for processing
  * - Runs a fixed-timestep simulation at the configured tick rate
  * - Broadcasts world snapshots to all connected clients
+ * - Validates discrete actions with lag compensation (if validateAction is provided)
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
+ * @typeParam TActionResult - The type of action results (optional)
  *
  * @param config - Server configuration
  * @returns A handle to control the server game loop
@@ -93,14 +143,24 @@ export interface NetcodeServerHandle<TWorld> {
  *   addPlayer: (world, id) => { ... },
  *   removePlayer: (world, id) => { ... },
  *   createIdleInput: () => ({ moveX: 0, moveY: 0, jump: false, timestamp: 0 }),
+ *   // Optional: Enable lag compensation for actions
+ *   validateAction: (world, clientId, action) => {
+ *     // Validate attack against historical world state
+ *     return { success: true, result: { damage: 10 } };
+ *   },
  * });
  *
  * server.start();
  * io.listen(3000);
  * ```
  */
-export function createNetcodeServer<TWorld, TInput extends { timestamp: number }>(
-  config: CreateServerConfig<TWorld, TInput>,
+export function createNetcodeServer<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+>(
+  config: CreateServerConfig<TWorld, TInput, TAction, TActionResult>,
 ): NetcodeServerHandle<TWorld> {
   const tickRate = config.tickRate ?? DEFAULT_TICK_RATE;
   if (!Number.isFinite(tickRate) || tickRate <= 0) {
@@ -130,6 +190,17 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
 
   const strategy = new ServerAuthoritativeServer<TWorld, TInput>(worldManager, serverConfig);
 
+  // Lag compensation (only if validateAction is provided)
+  const lagCompensator = config.validateAction
+    ? new LagCompensator<TWorld>(strategy.getSnapshotBuffer(), {
+        maxRewindMs: config.maxRewindMs ?? 200,
+        interpolationDelayMs: config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS,
+      })
+    : null;
+
+  // Action queue (only if validateAction is provided)
+  const actionQueue = config.validateAction ? new ActionQueue<TAction>() : null;
+
   // Game loop state
   let intervalId: NodeJS.Timeout | null = null;
 
@@ -155,10 +226,35 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
       strategy.onClientInput(clientId, input as TInput, seq as number);
     });
 
+    // Handle action messages (only if lag compensation is enabled)
+    if (actionQueue && config.validateAction) {
+      socket.on("netcode:action", (message: unknown) => {
+        if (typeof message !== "object" || message === null) return;
+        const { seq, action, clientTimestamp } = message as {
+          seq?: unknown;
+          action?: unknown;
+          clientTimestamp?: unknown;
+        };
+        if (!Number.isInteger(seq) || (seq as number) < 0) return;
+        if (typeof clientTimestamp !== "number") return;
+        // action can be any type, we trust the validator to handle it
+
+        const actionMessage: ActionMessage<TAction> = {
+          seq: seq as number,
+          action: action as TAction,
+          clientTimestamp: clientTimestamp as number,
+        };
+
+        actionQueue.enqueue(clientId, actionMessage);
+      });
+    }
+
     // Handle disconnect
     socket.on("disconnect", () => {
       console.log(`[NetcodeServer] Client disconnected: ${clientId}`);
       strategy.removeClient(clientId);
+      lagCompensator?.removeClient(clientId);
+      actionQueue?.removeClient(clientId);
       config.onPlayerLeave?.(clientId);
       config.io.emit("netcode:leave", { playerId: clientId });
     });
@@ -167,11 +263,48 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
   // Set up Socket.IO handlers
   config.io.on("connection", connectionHandler);
 
+  // Process pending actions with lag compensation
+  const processActions = () => {
+    if (!actionQueue || !lagCompensator || !config.validateAction) return;
+
+    const pendingActions = actionQueue.dequeueAll();
+
+    for (const { clientId, message } of pendingActions) {
+      // Validate action with lag compensation
+      const compensationResult = lagCompensator.validateAction(
+        clientId,
+        message.action,
+        message.clientTimestamp,
+        config.validateAction,
+      );
+
+      // Create action result
+      const result: ActionResult<TActionResult> = {
+        seq: message.seq,
+        success: compensationResult.success,
+        result: compensationResult.result,
+        serverTimestamp: Date.now(),
+      };
+
+      // Send result back to client
+      const socket = config.io.sockets.sockets.get(clientId);
+      if (socket) {
+        socket.emit("netcode:action_result", result);
+      }
+
+      // Notify callback
+      config.onActionValidated?.(clientId, message.action, result);
+    }
+  };
+
   // Game loop tick function
   const tick = () => {
     const snapshot = strategy.tick();
     // With superjsonParser, Map/Set/Date are automatically serialized
     config.io.emit("netcode:snapshot", snapshot);
+
+    // Process actions after tick (so they use the latest snapshot buffer)
+    processActions();
   };
 
   return {
@@ -204,6 +337,14 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
 
     getClientCount() {
       return strategy.getConnectedClients().length;
+    },
+
+    updateClientClock(clientId: string, clockOffset: number, rtt: number) {
+      lagCompensator?.updateClientClock(clientId, { clockOffset, rtt });
+    },
+
+    getLagCompensator() {
+      return lagCompensator;
     },
   };
 }
