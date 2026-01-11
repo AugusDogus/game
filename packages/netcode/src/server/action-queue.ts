@@ -10,6 +10,17 @@
 import type { ActionMessage } from "../core/types.js";
 
 /**
+ * Internal storage for queued actions with receive timestamp.
+ */
+interface StoredAction<TAction> {
+  /** The action message */
+  message: ActionMessage<TAction>;
+
+  /** Server timestamp when action was received (captured at enqueue time) */
+  serverReceiveTime: number;
+}
+
+/**
  * Queued action with client metadata.
  */
 export interface QueuedAction<TAction> {
@@ -50,7 +61,7 @@ export interface QueuedAction<TAction> {
  */
 export class ActionQueue<TAction> {
   /** Actions waiting to be processed, keyed by clientId */
-  private queues: Map<string, ActionMessage<TAction>[]> = new Map();
+  private queues: Map<string, StoredAction<TAction>[]> = new Map();
 
   /** Set of processed (clientId, seq) pairs for deduplication */
   private processedActions: Map<string, Set<number>> = new Map();
@@ -66,6 +77,7 @@ export class ActionQueue<TAction> {
    * Add an action to the queue.
    *
    * Duplicate actions (same clientId + seq) are silently ignored.
+   * The server receive time is captured at enqueue time.
    *
    * @param clientId - The client who sent the action
    * @param message - The action message
@@ -86,12 +98,16 @@ export class ActionQueue<TAction> {
     }
 
     // Check if already in queue (not yet processed)
-    const alreadyQueued = queue.some((m) => m.seq === message.seq);
+    const alreadyQueued = queue.some((stored) => stored.message.seq === message.seq);
     if (alreadyQueued) {
       return false; // Already queued
     }
 
-    queue.push(message);
+    // Store with receive timestamp captured now
+    queue.push({
+      message,
+      serverReceiveTime: Date.now(),
+    });
     return true;
   }
 
@@ -102,31 +118,31 @@ export class ActionQueue<TAction> {
    * @returns Array of pending action messages
    */
   getPending(clientId: string): ActionMessage<TAction>[] {
-    return this.queues.get(clientId) ?? [];
+    const queue = this.queues.get(clientId);
+    return queue?.map((stored) => stored.message) ?? [];
   }
 
   /**
    * Dequeue all pending actions from all clients.
    *
    * Returns actions in order of receipt and marks them as processed
-   * for deduplication.
+   * for deduplication. Uses the serverReceiveTime captured at enqueue.
    *
    * @returns Array of queued actions with client metadata
    */
   dequeueAll(): QueuedAction<TAction>[] {
-    const now = Date.now();
     const result: QueuedAction<TAction>[] = [];
 
     for (const [clientId, queue] of this.queues) {
-      for (const message of queue) {
+      for (const stored of queue) {
         result.push({
           clientId,
-          message,
-          serverReceiveTime: now,
+          message: stored.message,
+          serverReceiveTime: stored.serverReceiveTime,
         });
 
         // Mark as processed for deduplication
-        this.markProcessed(clientId, message.seq);
+        this.markProcessed(clientId, stored.message.seq);
       }
     }
 
@@ -149,13 +165,13 @@ export class ActionQueue<TAction> {
     }
 
     // Mark all as processed
-    for (const message of queue) {
-      this.markProcessed(clientId, message.seq);
+    for (const stored of queue) {
+      this.markProcessed(clientId, stored.message.seq);
     }
 
-    // Clear and return
+    // Clear and return messages only
     this.queues.set(clientId, []);
-    return queue;
+    return queue.map((stored) => stored.message);
   }
 
   /**
