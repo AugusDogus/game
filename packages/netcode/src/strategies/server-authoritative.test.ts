@@ -107,7 +107,6 @@ describe("ServerAuthoritativeServer", () => {
   beforeEach(() => {
     worldManager = new DefaultWorldManager(createPlatformerWorld());
     server = new ServerAuthoritativeServer<PlatformerWorld, PlatformerInput>(worldManager, {
-      initialWorld: createPlatformerWorld(),
       simulate: simulatePlatformer,
       addPlayerToWorld: addPlayerToWorld,
       removePlayerFromWorld: removePlayerFromWorld,
@@ -520,7 +519,6 @@ describe("ServerAuthoritativeServer", () => {
       const fastServer = new ServerAuthoritativeServer<PlatformerWorld, PlatformerInput>(
         fastWorldManager,
         {
-          initialWorld: createPlatformerWorld(),
           simulate: simulatePlatformer,
           addPlayerToWorld: addPlayerToWorld,
           removePlayerFromWorld: removePlayerFromWorld,

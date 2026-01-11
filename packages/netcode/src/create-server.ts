@@ -119,7 +119,6 @@ export function createNetcodeServer<TWorld, TInput extends { timestamp: number }
 
   // Create server strategy
   const serverConfig: ServerAuthoritativeServerConfig<TWorld, TInput> = {
-    initialWorld: config.initialWorld,
     simulate: config.simulate,
     addPlayerToWorld: config.addPlayer,
     removePlayerFromWorld: config.removePlayer,
