@@ -4,16 +4,16 @@ overview: Add minimal, maintainable documentation focused on JSDoc comments for 
 todos:
   - id: expand-readme
     content: Expand README with overview, features, and quick start code snippet
-    status: pending
+    status: completed
   - id: jsdoc-highlevel
     content: Add JSDoc to createNetcodeServer and createNetcodeClient
-    status: pending
+    status: completed
   - id: jsdoc-types
     content: Add JSDoc to core types (SimulateFunction, InterpolateFunction, etc)
-    status: pending
+    status: completed
   - id: jsdoc-prediction
     content: Add JSDoc to PredictionScope interface and related client APIs
-    status: pending
+    status: completed
 ---
 
 # Lightweight Documentation
