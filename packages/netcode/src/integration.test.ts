@@ -613,7 +613,7 @@ describe("Client-Server Integration", () => {
     const serverPosition = newServerWorld.players.get(PLAYER_ID)?.position.x;
 
     // Client and server should match
-    expect(predictedAfter).toBeCloseTo(serverPosition!, 5);
+    expect(predictedAfter).toBeCloseTo(serverPosition ?? 0, 5);
 
     // The delta between before and after should be minimal (no snap-back)
     const delta = Math.abs((predictedAfter ?? 0) - (predictedBefore ?? 0));
@@ -983,7 +983,7 @@ describe("Scale Tests", () => {
     // Verify gravity was only applied once per player
     const player0Y = currentWorld.players.get("player-0")?.position.y;
     const player9Y = currentWorld.players.get("player-9")?.position.y;
-    expect(player0Y).toBeCloseTo(player9Y!, 3); // All fell the same amount
+    expect(player0Y).toBeCloseTo(player9Y ?? 0, 3); // All fell the same amount
   });
 
   test("50 players: physics should not multiply", () => {
@@ -1081,7 +1081,7 @@ describe("Scale Tests", () => {
     // All should have fallen the same amount
     const firstY = currentWorld.players.get("player-0")?.position.y;
     const lastY = currentWorld.players.get("player-99")?.position.y;
-    expect(firstY).toBeCloseTo(lastY!, 3);
+    expect(firstY).toBeCloseTo(lastY ?? 0, 3);
   });
 });
 
@@ -1714,7 +1714,7 @@ describe("Chaos/Fuzz Tests", () => {
     const gaps = [500, 100, 800, 50, 1000, 200];
     let timestamp = 1000;
     for (let i = 0; i < gaps.length; i++) {
-      timestamp += gaps[i]!;
+      timestamp += gaps[i] ?? 0;
       const input: PlatformerInput = {
         moveX: 1,
         moveY: 0,

@@ -74,8 +74,8 @@ describe("ActionQueue", () => {
 
       const pending = queue.getPending("client1");
       expect(pending).toHaveLength(2);
-      expect(pending[0].seq).toBe(1);
-      expect(pending[1].seq).toBe(2);
+      expect(pending[0]?.seq).toBe(1);
+      expect(pending[1]?.seq).toBe(2);
     });
 
     it("should return empty array for unknown client", () => {
@@ -99,8 +99,8 @@ describe("ActionQueue", () => {
       const actions = queue.dequeueAll();
 
       expect(actions).toHaveLength(2);
-      expect(actions[0].clientId).toBe("client1");
-      expect(actions[1].clientId).toBe("client2");
+      expect(actions[0]?.clientId).toBe("client1");
+      expect(actions[1]?.clientId).toBe("client2");
     });
 
     it("should clear queues after dequeue", () => {
@@ -147,7 +147,7 @@ describe("ActionQueue", () => {
       const actions = queue.dequeueClient("client1");
 
       expect(actions).toHaveLength(1);
-      expect(actions[0].action.value).toBe(10);
+      expect(actions[0]?.action.value).toBe(10);
       expect(queue.size()).toBe(1); // client2's action remains
     });
   });

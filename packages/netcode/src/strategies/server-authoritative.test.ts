@@ -276,8 +276,8 @@ describe("ServerAuthoritativeServer", () => {
       }
 
       // Get snapshot at a past timestamp
-      const pastTimestamp = timestamps[2]!;
-      const snapshot = server.getSnapshotAtTimestamp(pastTimestamp);
+      const pastTimestamp = timestamps[2];
+      const snapshot = pastTimestamp ? server.getSnapshotAtTimestamp(pastTimestamp) : undefined;
 
       expect(snapshot).toBeDefined();
       // Should return the snapshot closest to the requested timestamp
