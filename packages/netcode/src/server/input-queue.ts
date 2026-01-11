@@ -1,4 +1,5 @@
 import type { InputMessage } from "../core/types.js";
+import { getFirst, getLast } from "../core/utils.js";
 
 /**
  * Queues and manages input messages from clients.
@@ -66,7 +67,7 @@ export class InputQueue<TInput> {
     }
 
     // Return the sequence number before the first pending input
-    return queue[0]!.seq - 1;
+    return getFirst(queue, "input queue").seq - 1;
   }
 
   /**
@@ -93,7 +94,7 @@ export class InputQueue<TInput> {
     for (const [clientId, queue] of this.queues.entries()) {
       if (queue.length > 0) {
         // Use the last input from each client (most recent)
-        const lastInput = queue[queue.length - 1]!;
+        const lastInput = getLast(queue, "input queue");
         result.set(clientId, lastInput.input);
       }
     }

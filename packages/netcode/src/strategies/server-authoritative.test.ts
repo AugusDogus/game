@@ -11,6 +11,7 @@ import {
 import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
 import { platformerPredictionScope } from "../examples/platformer/prediction.js";
 import { ServerAuthoritativeClient, ServerAuthoritativeServer } from "./server-authoritative.js";
+import { getPlayer } from "../test-utils.js";
 
 describe("ServerAuthoritativeClient", () => {
   let client: ServerAuthoritativeClient<PlatformerWorld, PlatformerInput>;
@@ -296,16 +297,16 @@ describe("ServerAuthoritativeServer", () => {
 
       const snapshot = server.tick();
 
-      const player1 = snapshot.state.players.get("player-1");
-      const player2 = snapshot.state.players.get("player-2");
+      const player1 = getPlayer(snapshot.state, "player-1");
+      const player2 = getPlayer(snapshot.state, "player-2");
 
       // Both players should have fallen the same amount
-      expect(player1?.position.y).toBeCloseTo(player2!.position.y, 5);
+      expect(player1.position.y).toBeCloseTo(player2.position.y, 5);
       
       // Position should be reasonable for one tick of gravity
       // At 980 gravity, 50ms tick: y = 0.5 * 980 * 0.05^2 ≈ 1.225 units
       // Should NOT be ~2.45 (which would indicate double gravity)
-      expect(player1?.position.y).toBeLessThan(3);
+      expect(player1.position.y).toBeLessThan(3);
     });
 
     test("two clients with different input counts: physics isolation", () => {
@@ -395,20 +396,20 @@ describe("ServerAuthoritativeServer", () => {
 
       const snapshot = server.tick();
 
-      const p1 = snapshot.state.players.get("player-1");
-      const p2 = snapshot.state.players.get("player-2");
-      const p3 = snapshot.state.players.get("player-3");
+      const p1 = getPlayer(snapshot.state, "player-1");
+      const p2 = getPlayer(snapshot.state, "player-2");
+      const p3 = getPlayer(snapshot.state, "player-3");
 
       // Player 1 moved right
-      expect(p1?.position.x).toBeGreaterThan(0);
+      expect(p1.position.x).toBeGreaterThan(0);
       // Player 2 moved left
-      expect(p2?.position.x).toBeLessThan(0);
+      expect(p2.position.x).toBeLessThan(0);
       // Player 3 stayed put horizontally
-      expect(p3?.position.x).toBe(0);
+      expect(p3.position.x).toBe(0);
 
       // All three should have fallen the same amount (same physics applied once each)
-      expect(p1?.position.y).toBeCloseTo(p2!.position.y, 3);
-      expect(p2?.position.y).toBeCloseTo(p3!.position.y, 3);
+      expect(p1.position.y).toBeCloseTo(p2.position.y, 3);
+      expect(p2.position.y).toBeCloseTo(p3.position.y, 3);
     });
 
     test("getSnapshotAtTimestamp: future timestamp should return latest", () => {

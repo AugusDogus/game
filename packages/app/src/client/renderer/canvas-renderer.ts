@@ -1,6 +1,18 @@
 import type { PlatformerPlayer, PlatformerWorld } from "@game/netcode";
 import { DEFAULT_FLOOR_Y } from "@game/netcode";
 
+/** Safely get an element from an array, throwing if out of bounds */
+function getAt<T>(array: T[], index: number): T {
+  if (index < 0 || index >= array.length) {
+    throw new Error(`Index ${index} out of bounds for array with length ${array.length}`);
+  }
+  const value = array[index];
+  if (value === undefined) {
+    throw new Error(`Unexpected undefined at index ${index}`);
+  }
+  return value;
+}
+
 /** Position history entry for debug visualization */
 export interface PositionHistoryEntry {
   x: number;
@@ -192,16 +204,18 @@ export class CanvasRenderer {
     this.ctx.lineJoin = "round";
 
     // Draw line connecting all points
+    const first = getAt(history, 0);
     this.ctx.beginPath();
-    this.ctx.moveTo(history[0]!.x, history[0]!.y);
+    this.ctx.moveTo(first.x, first.y);
     for (let i = 1; i < history.length; i++) {
-      this.ctx.lineTo(history[i]!.x, history[i]!.y);
+      const point = getAt(history, i);
+      this.ctx.lineTo(point.x, point.y);
     }
     this.ctx.stroke();
 
     // Draw dots at each position with fading opacity
     for (let i = 0; i < history.length; i++) {
-      const point = history[i]!;
+      const point = getAt(history, i);
       const pointAlpha = (i / history.length) * alpha; // Fade from old to new
       this.ctx.globalAlpha = pointAlpha;
       this.ctx.fillStyle = color;

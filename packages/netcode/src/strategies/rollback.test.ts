@@ -3,6 +3,7 @@ import type { PlatformerWorld, PlatformerInput } from "../examples/platformer/ty
 import { createPlatformerWorld, createIdleInput } from "../examples/platformer/types.js";
 import { simulatePlatformer, addPlayerToWorld } from "../examples/platformer/simulation.js";
 import { RollbackClient } from "./rollback.js";
+import { assertDefined, getPlayer } from "../test-utils.js";
 
 describe("RollbackClient", () => {
   let client: RollbackClient<PlatformerWorld, PlatformerInput>;
@@ -28,9 +29,8 @@ describe("RollbackClient", () => {
 
   describe("initialization", () => {
     test("should start with initial world state", () => {
-      const state = client.getStateForRendering();
-      expect(state).not.toBeNull();
-      expect(state!.players.size).toBe(2);
+      const state = assertDefined(client.getStateForRendering(), "render state");
+      expect(state.players.size).toBe(2);
     });
 
     test("should start at frame 0", () => {
@@ -69,16 +69,16 @@ describe("RollbackClient", () => {
 
     test("should apply physics to players", () => {
       // Get initial position
-      const initialState = client.getStateForRendering()!;
-      const initialY = initialState.players.get("local-player")!.position.y;
+      const initialState = assertDefined(client.getStateForRendering(), "initial render state");
+      const initialY = getPlayer(initialState, "local-player").position.y;
 
       // Advance several frames
       for (let i = 0; i < 5; i++) {
         client.advanceFrame();
       }
 
-      const newState = client.getStateForRendering()!;
-      const newY = newState.players.get("local-player")!.position.y;
+      const newState = assertDefined(client.getStateForRendering(), "new render state");
+      const newY = getPlayer(newState, "local-player").position.y;
 
       // Player should have fallen due to gravity
       expect(newY).toBeGreaterThan(initialY);
@@ -184,8 +184,8 @@ describe("RollbackClient", () => {
 
       // Advance one frame (input not yet applied due to delay)
       client.advanceFrame();
-      let state = client.getStateForRendering()!;
-      let playerX = state.players.get("local-player")!.position.x;
+      let state = assertDefined(client.getStateForRendering(), "render state");
+      let playerX = getPlayer(state, "local-player").position.x;
 
       // Player hasn't moved horizontally yet (only gravity applied)
       expect(playerX).toBe(0);
@@ -194,8 +194,8 @@ describe("RollbackClient", () => {
       client.advanceFrame();
       client.advanceFrame();
 
-      state = client.getStateForRendering()!;
-      playerX = state.players.get("local-player")!.position.x;
+      state = assertDefined(client.getStateForRendering(), "render state after delay");
+      playerX = getPlayer(state, "local-player").position.x;
 
       // Now player should have moved
       expect(playerX).toBeGreaterThan(0);

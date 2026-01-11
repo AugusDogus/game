@@ -18,6 +18,7 @@ import {
 import type { PlatformerInput, PlatformerWorld } from "./examples/platformer/types.js";
 import { createIdleInput, createPlatformerWorld } from "./examples/platformer/types.js";
 import { InputQueue } from "./server/input-queue.js";
+import { getPlayer, getAt, getLast, getFromMap } from "./test-utils.js";
 
 describe("Client-Server Integration", () => {
   const PLAYER_ID = "test-player";
@@ -38,7 +39,7 @@ describe("Client-Server Integration", () => {
     for (const clientId of inputQueue.getClientsWithInputs()) {
       const inputs = inputQueue.getPendingInputs(clientId);
       if (inputs.length > 0) {
-        const lastInput = inputs[inputs.length - 1]!;
+        const lastInput = getLast(inputs, "inputs");
         acks.set(clientId, lastInput.seq);
         inputQueue.acknowledge(clientId, lastInput.seq);
       }
@@ -124,11 +125,11 @@ describe("Client-Server Integration", () => {
 
     // Get positions
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // They should match exactly
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
   });
 
   test("multiple inputs same tick: client prediction should match server", () => {
@@ -168,11 +169,11 @@ describe("Client-Server Integration", () => {
 
     // Get positions
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // They should match exactly
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
   });
 
   test("reconciliation: after server ack, client should match server", () => {
@@ -232,11 +233,11 @@ describe("Client-Server Integration", () => {
 
     // Get positions after reconciliation
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = serverWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(serverWorld, PLAYER_ID);
 
     // They should match exactly
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
   });
 
   test("reconciliation with unacked inputs: client replays correctly", () => {
@@ -309,10 +310,10 @@ describe("Client-Server Integration", () => {
     reconciler.reconcile(snapshot);
 
     // Now simulate server processing inputs 3 and 4
-    const remainingInputs = [inputs[3]!, inputs[4]!];
+    const remainingInputs = [getAt(inputs, 3), getAt(inputs, 4)];
     const tempQueue2 = new InputQueue<PlatformerInput>();
-    tempQueue2.enqueue(PLAYER_ID, { seq: 3, input: remainingInputs[0]!, timestamp: remainingInputs[0]!.timestamp });
-    tempQueue2.enqueue(PLAYER_ID, { seq: 4, input: remainingInputs[1]!, timestamp: remainingInputs[1]!.timestamp });
+    tempQueue2.enqueue(PLAYER_ID, { seq: 3, input: getAt(remainingInputs, 0), timestamp: getAt(remainingInputs, 0).timestamp });
+    tempQueue2.enqueue(PLAYER_ID, { seq: 4, input: getAt(remainingInputs, 1), timestamp: getAt(remainingInputs, 1).timestamp });
 
     const { world: finalServerWorld } = serverTick(
       serverWorld,
@@ -323,11 +324,11 @@ describe("Client-Server Integration", () => {
 
     // Get positions
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = finalServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(finalServerWorld, PLAYER_ID);
 
     // They should match
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
   });
 
   test("jump physics: client prediction should match server", () => {
@@ -368,12 +369,12 @@ describe("Client-Server Integration", () => {
 
     // Get positions
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // They should match exactly
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
-    expect(clientPlayer?.velocity.y).toBeCloseTo(serverPlayer!.velocity.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
+    expect(clientPlayer?.velocity.y).toBeCloseTo(serverPlayer.velocity.y, 5);
   });
 
   test("quick tap: single input then stop should match", () => {
@@ -412,11 +413,11 @@ describe("Client-Server Integration", () => {
 
     // Get positions
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // They should match exactly
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
   });
 
   test("two clients: both should have correct physics", () => {
@@ -469,20 +470,20 @@ describe("Client-Server Integration", () => {
     // Get positions
     const clientPlayerA = predictorA.getState()?.players?.get("player-a");
     const clientPlayerB = predictorB.getState()?.players?.get("player-b");
-    const serverPlayerA = newServerWorld.players.get("player-a");
-    const serverPlayerB = newServerWorld.players.get("player-b");
+    const serverPlayerA = getPlayer(newServerWorld, "player-a");
+    const serverPlayerB = getPlayer(newServerWorld, "player-b");
 
     // Client A should match server (moving right)
-    expect(clientPlayerA?.position.x).toBeCloseTo(serverPlayerA!.position.x, 1);
-    expect(clientPlayerA?.position.y).toBeCloseTo(serverPlayerA!.position.y, 1);
+    expect(clientPlayerA?.position.x).toBeCloseTo(serverPlayerA.position.x, 1);
+    expect(clientPlayerA?.position.y).toBeCloseTo(serverPlayerA.position.y, 1);
 
     // Client B should match server (moving left)
-    expect(clientPlayerB?.position.x).toBeCloseTo(serverPlayerB!.position.x, 1);
-    expect(clientPlayerB?.position.y).toBeCloseTo(serverPlayerB!.position.y, 1);
+    expect(clientPlayerB?.position.x).toBeCloseTo(serverPlayerB.position.x, 1);
+    expect(clientPlayerB?.position.y).toBeCloseTo(serverPlayerB.position.y, 1);
 
     // Verify they moved in opposite directions
-    expect(serverPlayerA!.position.x).toBeGreaterThan(0); // Moved right
-    expect(serverPlayerB!.position.x).toBeLessThan(100); // Moved left
+    expect(serverPlayerA.position.x).toBeGreaterThan(0); // Moved right
+    expect(serverPlayerB.position.x).toBeLessThan(100); // Moved left
   });
 
   test("multiple ticks: continuous movement across ticks should match", () => {
@@ -545,10 +546,10 @@ describe("Client-Server Integration", () => {
 
       // After each reconciliation, client and server should match
       const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-      const serverPlayer = serverWorld.players.get(PLAYER_ID);
+      const serverPlayer = getPlayer(serverWorld, PLAYER_ID);
 
-      expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-      expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+      expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+      expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
     }
   });
 
@@ -647,18 +648,18 @@ describe("Client-Server Integration", () => {
       50,
     );
 
-    const playerA = newServerWorld.players.get("player-a");
-    const playerB = newServerWorld.players.get("player-b");
+    const playerA = getPlayer(newServerWorld, "player-a");
+    const playerB = getPlayer(newServerWorld, "player-b");
 
     // Both players should have fallen the same amount due to gravity
     // At 980 gravity, 50ms = 0.98 units/tick velocity change
     // With initial velocity 0, after 50ms: v = 980 * 0.05 = 49 units/sec
     // Position change = 0.5 * 980 * 0.05^2 = 1.225 units (approximately)
-    expect(playerA?.position.y).toBeCloseTo(playerB!.position.y, 5);
+    expect(playerA.position.y).toBeCloseTo(playerB.position.y, 5);
     
     // Critical: gravity should be applied only once, not twice
     // If gravity was applied twice, position.y would be ~2.45 instead of ~1.225
-    expect(playerA?.position.y).toBeLessThan(3); // Should be around 1.225
+    expect(playerA.position.y).toBeLessThan(3); // Should be around 1.225
   });
 
   test("two clients: one moving, one idle - physics isolation", () => {
@@ -743,11 +744,11 @@ describe("Client-Server Integration", () => {
     );
 
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // Despite irregular timing, client and server should match
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
   });
 
   test("rapid direction changes: quick tap left-right should work", () => {
@@ -783,10 +784,10 @@ describe("Client-Server Integration", () => {
     );
 
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // Should match exactly despite rapid changes
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
   });
 
   test("jump during movement: mid-air physics should match", () => {
@@ -796,7 +797,7 @@ describe("Client-Server Integration", () => {
     let serverWorld = createPlatformerWorld();
     serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
     // Ensure player is grounded
-    const player = serverWorld.players.get(PLAYER_ID)!;
+    const player = getPlayer(serverWorld, PLAYER_ID);
     serverWorld = {
       ...serverWorld,
       players: new Map(serverWorld.players).set(PLAYER_ID, { ...player, isGrounded: true }),
@@ -828,12 +829,12 @@ describe("Client-Server Integration", () => {
     );
 
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = newServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(newServerWorld, PLAYER_ID);
 
     // Both X and Y should match
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 5);
-    expect(clientPlayer?.velocity.y).toBeCloseTo(serverPlayer!.velocity.y, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 5);
+    expect(clientPlayer?.velocity.y).toBeCloseTo(serverPlayer.velocity.y, 5);
   });
 
   test("network latency simulation: delayed acks with pending inputs", () => {
@@ -875,8 +876,8 @@ describe("Client-Server Integration", () => {
     for (let i = 0; i < 3; i++) {
       tempQueue.enqueue(PLAYER_ID, { 
         seq: i, 
-        input: allInputs[i]!, 
-        timestamp: allInputs[i]!.timestamp 
+        input: getAt(allInputs, i), 
+        timestamp: getAt(allInputs, i).timestamp 
       });
     }
 
@@ -903,8 +904,8 @@ describe("Client-Server Integration", () => {
     for (let i = 3; i < 6; i++) {
       tempQueue2.enqueue(PLAYER_ID, { 
         seq: i, 
-        input: allInputs[i]!, 
-        timestamp: allInputs[i]!.timestamp 
+        input: getAt(allInputs, i), 
+        timestamp: getAt(allInputs, i).timestamp 
       });
     }
 
@@ -916,10 +917,10 @@ describe("Client-Server Integration", () => {
     );
 
     const clientPlayer = predictor.getState()?.players?.get(PLAYER_ID);
-    const serverPlayer = finalServerWorld.players.get(PLAYER_ID);
+    const serverPlayer = getPlayer(finalServerWorld, PLAYER_ID);
 
     // After catching up, they should match
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 5);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 5);
   });
 });
 
@@ -1019,14 +1020,14 @@ describe("Scale Tests", () => {
     }
 
     // All players should have fallen the same amount
-    const player0 = currentWorld.players.get("player-0");
-    const player49 = currentWorld.players.get("player-49");
+    const player0 = getPlayer(currentWorld, "player-0");
+    const player49 = getPlayer(currentWorld, "player-49");
 
-    expect(player0?.position.y).toBeCloseTo(player49!.position.y, 3);
+    expect(player0.position.y).toBeCloseTo(player49.position.y, 3);
     
     // Critical: gravity should be applied only once, not 50x
     // At 980 gravity, 16.67ms: y = 0.5 * 980 * 0.01667^2 ≈ 0.136 units
-    expect(player0?.position.y).toBeLessThan(1); // Should be ~0.136, not ~6.8
+    expect(player0.position.y).toBeLessThan(1); // Should be ~0.136, not ~6.8
   });
 
   test("100 players stress test: physics remains consistent", () => {
@@ -1152,8 +1153,8 @@ describe("Player Disconnect Tests", () => {
     serverWorld = addPlayerToWorld(serverWorld, "jumping", { x: 100, y: 190 });
     
     // Set both as grounded
-    const groundedPlayer = serverWorld.players.get("grounded")!;
-    const jumpingPlayer = serverWorld.players.get("jumping")!;
+    const groundedPlayer = getPlayer(serverWorld, "grounded");
+    const jumpingPlayer = getPlayer(serverWorld, "jumping");
     serverWorld = {
       ...serverWorld,
       players: new Map([
@@ -1314,16 +1315,16 @@ describe("Network Condition Tests", () => {
 
     // Client predicts immediately (no jitter on client side)
     for (let i = 0; i < inputs.length; i++) {
-      inputBuffer.add(inputs[i]!.input);
-      predictor.applyInput(inputs[i]!.input);
+      inputBuffer.add(getAt(inputs, i).input);
+      predictor.applyInput(getAt(inputs, i).input);
     }
 
     // Server receives inputs (potentially out of order due to jitter, but we process in order)
     for (let i = 0; i < inputs.length; i++) {
       inputQueue.enqueue("player", {
         seq: i,
-        input: inputs[i]!.input,
-        timestamp: inputs[i]!.input.timestamp,
+        input: getAt(inputs, i).input,
+        timestamp: getAt(inputs, i).input.timestamp,
       });
     }
 
@@ -1347,10 +1348,10 @@ describe("Network Condition Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
     // Despite jitter, client and server should match (using timestamps, not arrival order)
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 3);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 3);
   });
 
   test("out-of-order packets: inputs arriving 3,1,2 should process correctly", () => {
@@ -1367,9 +1368,9 @@ describe("Network Condition Tests", () => {
     ];
 
     // But arrive at server out of order: 2, 0, 1
-    inputQueue.enqueue("player", { seq: 2, input: inputs[2]!, timestamp: inputs[2]!.timestamp });
-    inputQueue.enqueue("player", { seq: 0, input: inputs[0]!, timestamp: inputs[0]!.timestamp });
-    inputQueue.enqueue("player", { seq: 1, input: inputs[1]!, timestamp: inputs[1]!.timestamp });
+    inputQueue.enqueue("player", { seq: 2, input: getAt(inputs, 2), timestamp: getAt(inputs, 2).timestamp });
+    inputQueue.enqueue("player", { seq: 0, input: getAt(inputs, 0), timestamp: getAt(inputs, 0).timestamp });
+    inputQueue.enqueue("player", { seq: 1, input: getAt(inputs, 1), timestamp: getAt(inputs, 1).timestamp });
 
     // Get pending inputs - they should be sorted by sequence
     const pending = inputQueue.getPendingInputs("player");
@@ -1454,9 +1455,9 @@ describe("Network Condition Tests", () => {
     ];
 
     // Server receives 0, 2, 3 (not 1)
-    inputQueue.enqueue("player", { seq: 0, input: inputs[0]!, timestamp: inputs[0]!.timestamp });
-    inputQueue.enqueue("player", { seq: 2, input: inputs[2]!, timestamp: inputs[2]!.timestamp });
-    inputQueue.enqueue("player", { seq: 3, input: inputs[3]!, timestamp: inputs[3]!.timestamp });
+    inputQueue.enqueue("player", { seq: 0, input: getAt(inputs, 0), timestamp: getAt(inputs, 0).timestamp });
+    inputQueue.enqueue("player", { seq: 2, input: getAt(inputs, 2), timestamp: getAt(inputs, 2).timestamp });
+    inputQueue.enqueue("player", { seq: 3, input: getAt(inputs, 3), timestamp: getAt(inputs, 3).timestamp });
 
     const pending = inputQueue.getPendingInputs("player");
 
@@ -1497,7 +1498,7 @@ describe("Network Condition Tests", () => {
     ];
 
     for (let i = 0; i < inputs.length; i++) {
-      inputQueue.enqueue("player", { seq: i, input: inputs[i]!, timestamp: inputs[i]!.timestamp });
+      inputQueue.enqueue("player", { seq: i, input: getAt(inputs, i), timestamp: getAt(inputs, i).timestamp });
     }
 
     // Process and acknowledge
@@ -1555,7 +1556,7 @@ describe("Network Condition Tests", () => {
 
     // Network recovers, all inputs arrive at once
     for (let i = 0; i < inputs.length; i++) {
-      inputQueue.enqueue("player", { seq: i, input: inputs[i]!, timestamp: inputs[i]!.timestamp });
+      inputQueue.enqueue("player", { seq: i, input: getAt(inputs, i), timestamp: getAt(inputs, i).timestamp });
     }
 
     // Server processes burst
@@ -1578,10 +1579,10 @@ describe("Network Condition Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
     // After burst processing, client and server should still match
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 3);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 3);
   });
 });
 
@@ -1644,11 +1645,11 @@ describe("Chaos/Fuzz Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
     // Despite chaos, should match (within clamping range)
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 1);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 1);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 1);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 1);
   });
 
   test("extreme micro-deltas: 1ms between inputs", () => {
@@ -1694,9 +1695,9 @@ describe("Chaos/Fuzz Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 2);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 2);
   });
 
   test("extreme macro-deltas: 500ms gaps - graceful clamping", () => {
@@ -1741,7 +1742,7 @@ describe("Chaos/Fuzz Tests", () => {
       }
     }
 
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
     // Player should have moved right (direction preserved)
     expect(serverPlayer?.position.x).toBeGreaterThan(0);
@@ -1800,9 +1801,9 @@ describe("Chaos/Fuzz Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 2);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 2);
   });
 
   test("random player count with random inputs", () => {
@@ -1880,7 +1881,8 @@ describe("Chaos/Fuzz Tests", () => {
 
     // Apply idle physics to players without inputs
     for (const playerId of currentWorld.players.keys()) {
-      if (!batchedInputs.has(playerId) || batchedInputs.get(playerId)!.length === 0) {
+      const playerInputs = batchedInputs.get(playerId);
+      if (!playerInputs || playerInputs.length === 0) {
         const idleInput = new Map<string, PlatformerInput>();
         idleInput.set(playerId, createIdleInput());
         currentWorld = simulatePlatformer(currentWorld, idleInput, 50);
@@ -1890,12 +1892,11 @@ describe("Chaos/Fuzz Tests", () => {
     // Verify correct behavior for each player
     expect(currentWorld.players.size).toBe(playerCount);
     for (let i = 0; i < playerCount; i++) {
-      const player = currentWorld.players.get(`player-${i}`);
-      expect(player).toBeDefined();
+      const player = getPlayer(currentWorld, `player-${i}`);
       
-      const initialX = initialPositions.get(`player-${i}`)!;
-      const weightedDir = timeWeightedMovement.get(`player-${i}`)!;
-      const currentX = player!.position.x;
+      const initialX = getFromMap(initialPositions, `player-${i}`, "initialPositions");
+      const weightedDir = getFromMap(timeWeightedMovement, `player-${i}`, "timeWeightedMovement");
+      const currentX = player.position.x;
       
       // Movement direction should match time-weighted direction
       // Use threshold to account for deceleration and physics effects
@@ -1907,11 +1908,11 @@ describe("Chaos/Fuzz Tests", () => {
       // Small or mixed movement - don't assert direction
       
       // Y should be within valid range (above floor if jumping, at floor if not)
-      expect(player!.position.y).toBeLessThanOrEqual(200);
-      expect(player!.position.y).toBeGreaterThan(0);
+      expect(player.position.y).toBeLessThanOrEqual(200);
+      expect(player.position.y).toBeGreaterThan(0);
       
       // Positions should be reasonable (not exploded to infinity)
-      expect(Math.abs(player!.position.x)).toBeLessThan(1000);
+      expect(Math.abs(player.position.x)).toBeLessThan(1000);
     }
   });
 
@@ -1958,13 +1959,13 @@ describe("Chaos/Fuzz Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
     // Should still match despite chaos
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 2);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 2);
     
     // Player should still be near start (alternating directions cancel out)
-    expect(Math.abs(serverPlayer!.position.x - 100)).toBeLessThan(20);
+    expect(Math.abs(serverPlayer.position.x - 100)).toBeLessThan(20);
   });
 
   test("jump spam during movement", () => {
@@ -1974,7 +1975,7 @@ describe("Chaos/Fuzz Tests", () => {
     let serverWorld = createPlatformerWorld();
     serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
     // Start grounded
-    const player = serverWorld.players.get("player")!;
+    const player = getPlayer(serverWorld, "player");
     serverWorld = {
       ...serverWorld,
       players: new Map([["player", { ...player, isGrounded: true }]]),
@@ -2017,10 +2018,10 @@ describe("Chaos/Fuzz Tests", () => {
     }
 
     const clientPlayer = predictor.getState()?.players?.get("player");
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
-    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer!.position.x, 2);
-    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer!.position.y, 2);
+    expect(clientPlayer?.position.x).toBeCloseTo(serverPlayer.position.x, 2);
+    expect(clientPlayer?.position.y).toBeCloseTo(serverPlayer.position.y, 2);
   });
 
   test("zero-delta timestamps (same timestamp) - uses minimum delta", () => {
@@ -2063,7 +2064,7 @@ describe("Chaos/Fuzz Tests", () => {
       }
     }
 
-    const serverPlayer = currentWorld.players.get("player");
+    const serverPlayer = getPlayer(currentWorld, "player");
 
     // Player moved right (direction correct)
     expect(serverPlayer?.position.x).toBeGreaterThan(0);
@@ -2141,29 +2142,28 @@ describe("Chaos/Fuzz Tests", () => {
 
       // Verify correct behavior
       for (let p = 0; p < playerCount; p++) {
-        const player = currentWorld.players.get(`p${p}`);
-        expect(player).toBeDefined();
+        const player = getPlayer(currentWorld, `p${p}`);
         
-        const initialX = initialPositions.get(`p${p}`)!;
-        const net = netMovement.get(`p${p}`)!;
+        const initialX = getFromMap(initialPositions, `p${p}`, "initialPositions");
+        const net = getFromMap(netMovement, `p${p}`, "netMovement");
         
         // Movement direction should be consistent with net input
         if (net > 2) {
-          expect(player!.position.x).toBeGreaterThan(initialX);
+          expect(player.position.x).toBeGreaterThan(initialX);
         } else if (net < -2) {
-          expect(player!.position.x).toBeLessThan(initialX);
+          expect(player.position.x).toBeLessThan(initialX);
         }
         
         // Y should be in valid range (can be mid-jump or on floor)
-        expect(player!.position.y).toBeGreaterThan(0); // Not flown off top
-        expect(player!.position.y).toBeLessThanOrEqual(200); // Not fallen through floor
+        expect(player.position.y).toBeGreaterThan(0); // Not flown off top
+        expect(player.position.y).toBeLessThanOrEqual(200); // Not fallen through floor
         
         // Positions bounded (no explosions)
-        expect(Math.abs(player!.position.x)).toBeLessThan(500);
+        expect(Math.abs(player.position.x)).toBeLessThan(500);
         
         // Velocities bounded
-        expect(Math.abs(player!.velocity.x)).toBeLessThan(300);
-        expect(Math.abs(player!.velocity.y)).toBeLessThan(500);
+        expect(Math.abs(player.velocity.x)).toBeLessThan(300);
+        expect(Math.abs(player.velocity.y)).toBeLessThan(500);
       }
     }
   });

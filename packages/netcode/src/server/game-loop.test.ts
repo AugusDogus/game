@@ -11,6 +11,7 @@ import type { PlatformerInput, PlatformerWorld } from "../examples/platformer/ty
 import { createPlatformerWorld } from "../examples/platformer/types.js";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
+import { getPlayer } from "../test-utils.js";
 
 describe("GameLoop", () => {
   let worldManager: DefaultWorldManager<PlatformerWorld>;
@@ -268,17 +269,17 @@ describe("GameLoop", () => {
       gameLoop.stop();
 
       const world = worldManager.getState();
-      const p1 = world.players.get("player-1");
-      const p2 = world.players.get("player-2");
-      const p3 = world.players.get("player-3");
+      const p1 = getPlayer(world, "player-1");
+      const p2 = getPlayer(world, "player-2");
+      const p3 = getPlayer(world, "player-3");
 
       // All players should have fallen the same amount
-      expect(p1?.position.y).toBeCloseTo(p2!.position.y, 2);
-      expect(p2?.position.y).toBeCloseTo(p3!.position.y, 2);
+      expect(p1.position.y).toBeCloseTo(p2.position.y, 2);
+      expect(p2.position.y).toBeCloseTo(p3.position.y, 2);
 
       // Position should be reasonable (not 3x gravity)
       // After 100ms at 980 gravity: y ≈ 0.5 * 980 * 0.1^2 = 4.9 units
-      expect(p1?.position.y).toBeLessThan(15);
+      expect(p1.position.y).toBeLessThan(15);
     });
 
     test("mixed input rates: different clients can send different amounts", async () => {

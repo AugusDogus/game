@@ -19,3 +19,13 @@ export type { WorldManager } from "./world.js";
 
 // Snapshot buffer
 export { SnapshotBuffer } from "./snapshot-buffer.js";
+
+// Utilities
+export {
+  getAt,
+  getFirst,
+  getLast,
+  getFromMap,
+  getOrSet,
+  assertDefined,
+} from "./utils.js";

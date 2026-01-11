@@ -1,5 +1,6 @@
 import { DEFAULT_INTERPOLATION_DELAY_MS } from "../constants.js";
 import type { Snapshot, InterpolateFunction } from "../core/types.js";
+import { getFirst, getLast, getAt } from "../core/utils.js";
 
 /**
  * Snapshot with client-side receive timestamp for interpolation
@@ -67,7 +68,7 @@ export class Interpolator<TWorld> {
 
     // If we only have one snapshot, just return it
     if (this.snapshots.length === 1) {
-      return this.snapshots[0]!.snapshot.state;
+      return getFirst(this.snapshots, "snapshots").snapshot.state;
     }
 
     // Find two snapshots to interpolate between based on CLIENT receive time
@@ -75,8 +76,8 @@ export class Interpolator<TWorld> {
     let newer: TimestampedSnapshot<TWorld> | undefined;
 
     for (let i = 0; i < this.snapshots.length - 1; i++) {
-      const s1 = this.snapshots[i]!;
-      const s2 = this.snapshots[i + 1]!;
+      const s1 = getAt(this.snapshots, i, "snapshots");
+      const s2 = getAt(this.snapshots, i + 1, "snapshots");
 
       if (s1.receivedAt <= renderTime && renderTime <= s2.receivedAt) {
         older = s1;
@@ -86,9 +87,10 @@ export class Interpolator<TWorld> {
     }
 
     // If renderTime is before all snapshots (shouldn't happen normally)
-    if (!older && !newer && renderTime < this.snapshots[0]!.receivedAt) {
+    const firstSnapshot = getFirst(this.snapshots, "snapshots");
+    if (!older && !newer && renderTime < firstSnapshot.receivedAt) {
       // We're trying to render before we have data - use oldest available
-      return this.snapshots[0]!.snapshot.state;
+      return firstSnapshot.snapshot.state;
     }
 
     // If renderTime is after all snapshots (normal case when interpolation delay
@@ -100,7 +102,7 @@ export class Interpolator<TWorld> {
 
     if (!older || !newer) {
       // Fallback: return latest snapshot
-      return this.snapshots[this.snapshots.length - 1]?.snapshot.state ?? null;
+      return getLast(this.snapshots, "snapshots").snapshot.state;
     }
 
     // Calculate interpolation factor based on client receive times
@@ -124,7 +126,7 @@ export class Interpolator<TWorld> {
     if (this.snapshots.length === 0) {
       return null;
     }
-    return this.snapshots[this.snapshots.length - 1]!.snapshot;
+    return getLast(this.snapshots, "snapshots").snapshot;
   }
 
   /**

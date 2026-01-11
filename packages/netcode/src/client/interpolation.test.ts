@@ -3,6 +3,7 @@ import type { Snapshot } from "../core/types.js";
 import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
 import type { PlatformerPlayer, PlatformerWorld } from "../examples/platformer/types.js";
 import { Interpolator } from "./interpolation.js";
+import { assertDefined } from "../test-utils.js";
 
 describe("Interpolator", () => {
   let interpolator: Interpolator<PlatformerWorld>;
@@ -62,10 +63,9 @@ describe("Interpolator", () => {
       };
       interpolator.addSnapshot(createSnapshot(0, Date.now(), [player]));
 
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
-      expect(state!.players.size).toBe(1);
-      expect(state!.players.get("player-1")?.position.x).toBe(100);
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
+      expect(state.players.size).toBe(1);
+      expect(state.players.get("player-1")?.position.x).toBe(100);
     });
 
     test("should interpolate between two snapshots", () => {
@@ -107,13 +107,12 @@ describe("Interpolator", () => {
         ]),
       );
 
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
-      expect(state!.players.size).toBe(1);
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
+      expect(state.players.size).toBe(1);
 
       // With 100ms interpolation delay, we should be rendering
       // somewhere between the first two snapshots
-      const x = state!.players.get("player-1")?.position.x ?? 0;
+      const x = state.players.get("player-1")?.position.x ?? 0;
       expect(x).toBeGreaterThanOrEqual(0);
       expect(x).toBeLessThanOrEqual(200);
     });
@@ -151,11 +150,10 @@ describe("Interpolator", () => {
         ]),
       );
 
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
 
       // Both players should be present
-      const ids = Array.from(state!.players.keys()).sort();
+      const ids = Array.from(state.players.keys()).sort();
       expect(ids).toContain("player-1");
     });
   });
@@ -230,11 +228,10 @@ describe("Interpolator", () => {
         { id: "staying", position: { x: 100, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
       ]));
 
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
       
       // Staying player should be interpolated
-      expect(state!.players.has("staying")).toBe(true);
+      expect(state.players.has("staying")).toBe(true);
     });
 
     test("should include disappearing player briefly during transition", () => {
@@ -251,9 +248,8 @@ describe("Interpolator", () => {
         // "leaving" is gone
       ]));
 
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
-      expect(state!.players.has("player")).toBe(true);
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
+      expect(state.players.has("player")).toBe(true);
       // The interpolation function includes leaving players temporarily
       // (depends on implementation - check the behavior)
     });
@@ -284,19 +280,17 @@ describe("Interpolator", () => {
       ]));
 
       // Interpolator tries to render at now - 100ms (before our snapshot)
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
       // Should return earliest available snapshot
-      expect(state!.players.get("p1")?.position.x).toBe(0);
+      expect(state.players.get("p1")?.position.x).toBe(0);
     });
 
     test("should handle empty player list", () => {
       interpolator.addSnapshot(createSnapshot(0, Date.now() - 100, []));
       interpolator.addSnapshot(createSnapshot(1, Date.now(), []));
 
-      const state = interpolator.getInterpolatedState();
-      expect(state).not.toBeNull();
-      expect(state!.players.size).toBe(0);
+      const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
+      expect(state.players.size).toBe(0);
     });
   });
 });

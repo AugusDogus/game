@@ -1,8 +1,33 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { superjsonParser } from "./parser.js";
 
+const encoder = new superjsonParser.Encoder();
+
+/**
+ * Helper to encode and decode a packet in one step, with proper runtime checks.
+ * Returns the round-tripped result.
+ */
+function roundTrip<T>(packet: T): T {
+  const encoded = encoder.encode(packet);
+  const first = encoded[0];
+  if (first === undefined) {
+    throw new Error("Encoder returned empty array");
+  }
+
+  const decoder = new superjsonParser.Decoder();
+  let result: T | undefined;
+  decoder.on("decoded", (p) => {
+    result = p as T;
+  });
+  decoder.add(first);
+
+  if (result === undefined) {
+    throw new Error("Decoder did not emit 'decoded' event");
+  }
+  return result;
+}
+
 describe("superjsonParser", () => {
-  const encoder = new superjsonParser.Encoder();
 
   describe("Encoder", () => {
     test("should encode simple object to string array", () => {
@@ -50,16 +75,8 @@ describe("superjsonParser", () => {
 
   describe("Decoder", () => {
     test("should decode string back to object", () => {
-      const decoder = new superjsonParser.Decoder();
       const packet = { type: 2, data: { foo: "bar" } };
-      const encoded = encoder.encode(packet);
-      
-      let decoded: unknown;
-      decoder.on("decoded", (p) => {
-        decoded = p;
-      });
-      
-      decoder.add(encoded[0]!);
+      const decoded = roundTrip(packet);
       
       expect(decoded).toEqual(packet);
     });
@@ -85,97 +102,61 @@ describe("superjsonParser", () => {
 
   describe("Round-trip serialization", () => {
     test("Map should survive round-trip", () => {
-      const decoder = new superjsonParser.Decoder();
       const originalMap = new Map([["player1", { x: 10, y: 20 }], ["player2", { x: 30, y: 40 }]]);
       const packet = { type: 2, data: { players: originalMap } };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.data.players).toBeInstanceOf(Map);
-      expect(decoded?.data.players.get("player1")).toEqual({ x: 10, y: 20 });
-      expect(decoded?.data.players.get("player2")).toEqual({ x: 30, y: 40 });
+      expect(decoded.data.players).toBeInstanceOf(Map);
+      expect(decoded.data.players.get("player1")).toEqual({ x: 10, y: 20 });
+      expect(decoded.data.players.get("player2")).toEqual({ x: 30, y: 40 });
     });
 
     test("Set should survive round-trip", () => {
-      const decoder = new superjsonParser.Decoder();
       const originalSet = new Set(["a", "b", "c"]);
       const packet = { type: 2, data: { tags: originalSet } };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.data.tags).toBeInstanceOf(Set);
-      expect(decoded?.data.tags.has("a")).toBe(true);
-      expect(decoded?.data.tags.has("b")).toBe(true);
-      expect(decoded?.data.tags.has("c")).toBe(true);
+      expect(decoded.data.tags).toBeInstanceOf(Set);
+      expect(decoded.data.tags.has("a")).toBe(true);
+      expect(decoded.data.tags.has("b")).toBe(true);
+      expect(decoded.data.tags.has("c")).toBe(true);
     });
 
     test("Date should survive round-trip", () => {
-      const decoder = new superjsonParser.Decoder();
       const originalDate = new Date("2024-06-15T12:30:00Z");
       const packet = { type: 2, data: { created: originalDate } };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.data.created).toBeInstanceOf(Date);
-      expect(decoded?.data.created.getTime()).toBe(originalDate.getTime());
+      expect(decoded.data.created).toBeInstanceOf(Date);
+      expect(decoded.data.created.getTime()).toBe(originalDate.getTime());
     });
 
     test("BigInt should survive round-trip", () => {
-      const decoder = new superjsonParser.Decoder();
       const originalBigInt = BigInt("12345678901234567890");
       const packet = { type: 2, data: { id: originalBigInt } };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(typeof decoded?.data.id).toBe("bigint");
-      expect(decoded?.data.id).toBe(originalBigInt);
+      expect(typeof decoded.data.id).toBe("bigint");
+      expect(decoded.data.id).toBe(originalBigInt);
     });
 
     test("nested Map inside Map should survive round-trip", () => {
-      const decoder = new superjsonParser.Decoder();
       const innerMap = new Map([["score", 100]]);
       const outerMap = new Map([["player1", innerMap]]);
       const packet = { type: 2, data: { nested: outerMap } };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.data.nested).toBeInstanceOf(Map);
-      expect(decoded?.data.nested.get("player1")).toBeInstanceOf(Map);
-      expect(decoded?.data.nested.get("player1")?.get("score")).toBe(100);
+      expect(decoded.data.nested).toBeInstanceOf(Map);
+      expect(decoded.data.nested.get("player1")).toBeInstanceOf(Map);
+      expect(decoded.data.nested.get("player1")?.get("score")).toBe(100);
     });
 
     test("complex game state should survive round-trip", () => {
-      const decoder = new superjsonParser.Decoder();
       const gameState = {
         tick: 42,
         timestamp: Date.now(),
@@ -192,64 +173,37 @@ describe("superjsonParser", () => {
         ]),
       };
       
-      const encoded = encoder.encode(gameState);
+      const decoded = roundTrip(gameState);
       
-      let decoded: typeof gameState | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof gameState;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.tick).toBe(42);
-      expect(decoded?.state.players).toBeInstanceOf(Map);
-      expect(decoded?.state.players.size).toBe(2);
-      expect(decoded?.state.players.get("p1")?.position.x).toBe(100);
-      expect(decoded?.inputAcks).toBeInstanceOf(Map);
-      expect(decoded?.inputAcks.get("p1")).toBe(15);
+      expect(decoded.tick).toBe(42);
+      expect(decoded.state.players).toBeInstanceOf(Map);
+      expect(decoded.state.players.size).toBe(2);
+      expect(decoded.state.players.get("p1")?.position.x).toBe(100);
+      expect(decoded.inputAcks).toBeInstanceOf(Map);
+      expect(decoded.inputAcks.get("p1")).toBe(15);
     });
   });
 
   describe("Error handling", () => {
     test("should handle empty object", () => {
-      const decoder = new superjsonParser.Decoder();
-      const encoded = encoder.encode({});
-      
-      let decoded: unknown;
-      decoder.on("decoded", (p) => {
-        decoded = p;
-      });
-      decoder.add(encoded[0]!);
+      const decoded = roundTrip({});
       
       expect(decoded).toEqual({});
     });
 
     test("should handle null values", () => {
-      const decoder = new superjsonParser.Decoder();
       const packet = { data: null };
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.data).toBeNull();
+      expect(decoded.data).toBeNull();
     });
 
     test("should handle undefined values in objects", () => {
-      const decoder = new superjsonParser.Decoder();
       // Note: undefined is not JSON-serializable, so superjson may omit it
       const packet = { a: 1, b: undefined };
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: Partial<typeof packet> | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.a).toBe(1);
+      expect(decoded.a).toBe(1);
       // undefined may be omitted or preserved depending on superjson version
     });
 
@@ -262,36 +216,21 @@ describe("superjsonParser", () => {
     });
 
     test("should handle empty array", () => {
-      const decoder = new superjsonParser.Decoder();
-      const encoded = encoder.encode([]);
-      
-      let decoded: unknown;
-      decoder.on("decoded", (p) => {
-        decoded = p;
-      });
-      decoder.add(encoded[0]!);
+      const decoded = roundTrip<unknown[]>([]);
       
       expect(decoded).toEqual([]);
     });
 
     test("should handle deeply nested structures", () => {
-      const decoder = new superjsonParser.Decoder();
       const deep = { l1: { l2: { l3: { l4: { l5: { value: "deep" } } } } } };
-      const encoded = encoder.encode(deep);
+      const decoded = roundTrip(deep);
       
-      let decoded: typeof deep | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof deep;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.l1.l2.l3.l4.l5.value).toBe("deep");
+      expect(decoded.l1.l2.l3.l4.l5.value).toBe("deep");
     });
   });
 
   describe("Socket.IO packet format compatibility", () => {
     test("should handle Socket.IO event packet structure", () => {
-      const decoder = new superjsonParser.Decoder();
       // Socket.IO packet format: type 2 = EVENT
       const packet = {
         type: 2,
@@ -299,22 +238,15 @@ describe("superjsonParser", () => {
         data: ["netcode:snapshot", { tick: 1, state: new Map() }],
       };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.type).toBe(2);
-      expect(decoded?.nsp).toBe("/");
-      expect(Array.isArray(decoded?.data)).toBe(true);
-      expect(decoded?.data[0]).toBe("netcode:snapshot");
+      expect(decoded.type).toBe(2);
+      expect(decoded.nsp).toBe("/");
+      expect(Array.isArray(decoded.data)).toBe(true);
+      expect(decoded.data[0]).toBe("netcode:snapshot");
     });
 
     test("should handle Socket.IO ack packet structure", () => {
-      const decoder = new superjsonParser.Decoder();
       // Socket.IO packet format: type 3 = ACK
       const packet = {
         type: 3,
@@ -323,16 +255,10 @@ describe("superjsonParser", () => {
         data: [{ success: true, ackSeq: 10 }],
       };
       
-      const encoded = encoder.encode(packet);
+      const decoded = roundTrip(packet);
       
-      let decoded: typeof packet | null = null;
-      decoder.on("decoded", (p) => {
-        decoded = p as typeof packet;
-      });
-      decoder.add(encoded[0]!);
-      
-      expect(decoded?.type).toBe(3);
-      expect(decoded?.id).toBe(42);
+      expect(decoded.type).toBe(3);
+      expect(decoded.id).toBe(42);
     });
   });
 });

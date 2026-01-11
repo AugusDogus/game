@@ -6,6 +6,7 @@ import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED, DEFAULT_JUMP_VELOCITY, DEFAULT_G
 
 function createPlayer(overrides: Partial<PlatformerPlayer> = {}): PlatformerPlayer {
   return {
+    id: "test-player",
     position: { x: 0, y: DEFAULT_FLOOR_Y - 10 }, // On ground (player height ~20)
     velocity: { x: 0, y: 0 },
     isGrounded: true,

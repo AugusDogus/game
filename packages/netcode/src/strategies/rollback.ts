@@ -10,6 +10,7 @@
 
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
 import type { SimulateFunction, Snapshot } from "../core/types.js";
+import { getOrSet } from "../core/utils.js";
 import type { ClientStrategy } from "./types.js";
 
 /**
@@ -66,10 +67,8 @@ export class RollbackClient<TWorld, TInput extends { timestamp: number }> implem
    * If it's for a past frame, trigger rollback.
    */
   onRemoteInput(playerId: string, input: TInput, frame: number): void {
-    if (!this.remoteInputHistory.has(playerId)) {
-      this.remoteInputHistory.set(playerId, new Map());
-    }
-    this.remoteInputHistory.get(playerId)!.set(frame, input);
+    const playerHistory = getOrSet(this.remoteInputHistory, playerId, () => new Map());
+    playerHistory.set(frame, input);
 
     // If this input is for a frame we've already simulated, rollback
     if (frame < this.currentFrame) {
