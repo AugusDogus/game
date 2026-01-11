@@ -237,6 +237,9 @@ export function createNetcodeClient<
     },
 
     sendAction(action: TAction): number {
+      // Guard: don't send if not connected (consistent with sendInput behavior)
+      if (!config.socket.connected) return -1;
+
       const seq = ++actionSeq;
       const clientTimestamp = Date.now();
 

@@ -149,17 +149,14 @@ export class LagCompensator<TWorld> {
 
     let rewoundServerTime: number;
 
-    if (clockInfo && clockInfo.clockOffset !== 0) {
-      // Primary method: use clock offset
+    if (clockInfo !== undefined) {
+      // We have clock info for this client
+      // Primary method: use clock offset (even if it's 0, that's a valid synchronized offset)
       // serverTime = clientTime + clockOffset
       // Then subtract interpolation delay (client sees past state)
       rewoundServerTime = clientTimestamp + clockInfo.clockOffset - this.interpolationDelayMs;
-    } else if (clockInfo && clockInfo.rtt > 0) {
-      // Fallback: estimate using RTT/2
-      const oneWayDelay = clockInfo.rtt / 2;
-      rewoundServerTime = now - oneWayDelay - this.interpolationDelayMs;
     } else {
-      // No clock info: use current time minus interpolation delay
+      // No clock info at all: use current time minus interpolation delay
       // This is the least accurate but still provides some compensation
       rewoundServerTime = now - this.interpolationDelayMs;
     }
