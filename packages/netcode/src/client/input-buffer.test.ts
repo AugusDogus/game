@@ -2,6 +2,22 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { InputBuffer } from "./input-buffer.js";
 import type { PlatformerInput } from "../examples/platformer/types.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("InputBuffer", () => {
   let buffer: InputBuffer<PlatformerInput>;
 
@@ -11,15 +27,15 @@ describe("InputBuffer", () => {
 
   describe("add", () => {
     test("should add input and return sequence number", () => {
-      const seq = buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      const seq = buffer.add(createInput(1, 0, false, 1000));
       expect(seq).toBe(0);
 
-      const seq2 = buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 });
+      const seq2 = buffer.add(createInput(0, 1, false, 1001));
       expect(seq2).toBe(1);
     });
 
     test("should store input retrievable by sequence", () => {
-      const seq = buffer.add({ moveX: 1, moveY: -1, jump: true, timestamp: 1000 });
+      const seq = buffer.add(createInput(1, -1, true, 1000));
 
       const input = buffer.get(seq);
       expect(input?.input.moveX).toBe(1);
@@ -36,9 +52,9 @@ describe("InputBuffer", () => {
 
   describe("getUnacknowledged", () => {
     test("should return inputs after given sequence", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 }); // seq 1
-      buffer.add({ moveX: -1, moveY: 0, jump: false, timestamp: 1002 }); // seq 2
+      buffer.add(createInput(1, 0, false, 1000)); // seq 0
+      buffer.add(createInput(0, 1, false, 1001)); // seq 1
+      buffer.add(createInput(-1, 0, false, 1002)); // seq 2
 
       const unacked = buffer.getUnacknowledged(0);
       expect(unacked).toHaveLength(2);
@@ -46,16 +62,16 @@ describe("InputBuffer", () => {
     });
 
     test("should return all inputs when afterSeq is -1", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
-      buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 });
+      buffer.add(createInput(1, 0, false, 1000));
+      buffer.add(createInput(0, 1, false, 1001));
 
       const unacked = buffer.getUnacknowledged(-1);
       expect(unacked).toHaveLength(2);
     });
 
     test("should return empty array when all acknowledged", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 }); // seq 1
+      buffer.add(createInput(1, 0, false, 1000)); // seq 0
+      buffer.add(createInput(0, 1, false, 1001)); // seq 1
 
       const unacked = buffer.getUnacknowledged(1);
       expect(unacked).toHaveLength(0);
@@ -64,9 +80,9 @@ describe("InputBuffer", () => {
 
   describe("acknowledge", () => {
     test("should remove acknowledged inputs", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 }); // seq 1
-      buffer.add({ moveX: -1, moveY: 0, jump: false, timestamp: 1002 }); // seq 2
+      buffer.add(createInput(1, 0, false, 1000)); // seq 0
+      buffer.add(createInput(0, 1, false, 1001)); // seq 1
+      buffer.add(createInput(-1, 0, false, 1002)); // seq 2
 
       buffer.acknowledge(1);
 
@@ -79,8 +95,8 @@ describe("InputBuffer", () => {
 
   describe("clear", () => {
     test("should remove all inputs and reset sequence", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
-      buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 });
+      buffer.add(createInput(1, 0, false, 1000));
+      buffer.add(createInput(0, 1, false, 1001));
 
       buffer.clear();
 
@@ -93,10 +109,10 @@ describe("InputBuffer", () => {
     test("should return number of pending inputs", () => {
       expect(buffer.size()).toBe(0);
 
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      buffer.add(createInput(1, 0, false, 1000));
       expect(buffer.size()).toBe(1);
 
-      buffer.add({ moveX: 0, moveY: 1, jump: false, timestamp: 1001 });
+      buffer.add(createInput(0, 1, false, 1001));
       expect(buffer.size()).toBe(2);
     });
   });
@@ -107,16 +123,16 @@ describe("InputBuffer", () => {
     });
 
     test("should increment after adding inputs", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      buffer.add(createInput(1, 0, false, 1000));
       expect(buffer.getNextSeq()).toBe(1);
 
-      buffer.add({ moveX: 0, moveY: 0, jump: false, timestamp: 1001 });
+      buffer.add(createInput(0, 0, false, 1001));
       expect(buffer.getNextSeq()).toBe(2);
     });
 
     test("should NOT reset after acknowledge", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      buffer.add({ moveX: 0, moveY: 0, jump: false, timestamp: 1001 }); // seq 1
+      buffer.add(createInput(1, 0, false, 1000)); // seq 0
+      buffer.add(createInput(0, 0, false, 1001)); // seq 1
       
       buffer.acknowledge(0); // Remove seq 0
       
@@ -124,7 +140,7 @@ describe("InputBuffer", () => {
       expect(buffer.getNextSeq()).toBe(2);
       
       // Adding new input should use seq 2
-      const seq = buffer.add({ moveX: -1, moveY: 0, jump: false, timestamp: 1002 });
+      const seq = buffer.add(createInput(-1, 0, false, 1002));
       expect(seq).toBe(2);
     });
   });
@@ -133,7 +149,7 @@ describe("InputBuffer", () => {
     test("should remove oldest input when buffer exceeds max size", () => {
       // MAX_INPUT_BUFFER_SIZE is 1024, add more than that
       for (let i = 0; i < 1100; i++) {
-        buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 + i });
+        buffer.add(createInput(1, 0, false, 1000 + i));
       }
 
       // Buffer should be capped at 1024
@@ -150,7 +166,7 @@ describe("InputBuffer", () => {
 
     test("should preserve newest inputs when overflow occurs", () => {
       for (let i = 0; i < 1100; i++) {
-        buffer.add({ moveX: i % 3 - 1, moveY: 0, jump: i % 10 === 0, timestamp: 1000 + i });
+        buffer.add(createInput(i % 3 - 1, 0, i % 10 === 0, 1000 + i));
       }
 
       // The most recent input should be retrievable
@@ -161,13 +177,13 @@ describe("InputBuffer", () => {
 
     test("sequence numbers should continue incrementing after overflow", () => {
       for (let i = 0; i < 1100; i++) {
-        buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 + i });
+        buffer.add(createInput(1, 0, false, 1000 + i));
       }
 
       // Next sequence should be 1100, not wrapped or reset
       expect(buffer.getNextSeq()).toBe(1100);
 
-      const newSeq = buffer.add({ moveX: 0, moveY: 0, jump: false, timestamp: 2100 });
+      const newSeq = buffer.add(createInput(0, 0, false, 2100));
       expect(newSeq).toBe(1100);
     });
   });
@@ -176,7 +192,7 @@ describe("InputBuffer", () => {
     test("should handle very large sequence numbers", () => {
       // Simulate many inputs over time
       for (let i = 0; i < 1000; i++) {
-        buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 + i });
+        buffer.add(createInput(1, 0, false, 1000 + i));
         if (i > 10) {
           buffer.acknowledge(i - 10); // Keep only last 10
         }
@@ -188,7 +204,7 @@ describe("InputBuffer", () => {
     });
 
     test("should handle acknowledge with no matching inputs", () => {
-      buffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
+      buffer.add(createInput(1, 0, false, 1000)); // seq 0
       
       // Acknowledge a future sequence (shouldn't crash)
       buffer.acknowledge(100);

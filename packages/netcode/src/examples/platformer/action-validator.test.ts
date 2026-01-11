@@ -35,8 +35,12 @@ describe("validatePlatformerAction", () => {
 
       expect(result.success).toBe(true);
       expect(result.result).toBeDefined();
-      expect(result.result?.targetId).toBe("target");
-      expect(result.result?.damage).toBe(10);
+      if (result.result && result.result.type === "attack") {
+        expect(result.result.targetId).toBe("target");
+        expect(result.result.damage).toBe(10);
+      } else {
+        throw new Error("Expected attack result");
+      }
     });
 
     it("should miss when no player is in range", () => {
@@ -89,7 +93,11 @@ describe("validatePlatformerAction", () => {
 
       expect(result.success).toBe(true);
       // Should hit target1 (exact position match)
-      expect(result.result?.targetId).toBe("target1");
+      if (result.result && result.result.type === "attack") {
+        expect(result.result.targetId).toBe("target1");
+      } else {
+        throw new Error("Expected attack result");
+      }
     });
 
     it("should hit player exactly at attack radius boundary", () => {

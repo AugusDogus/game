@@ -9,6 +9,22 @@ import type {
 import { platformerPredictionScope } from "../examples/platformer/prediction.js";
 import { createTestPlayer, createPlayingWorld } from "../test-utils.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("Predictor", () => {
   let predictor: Predictor<PlatformerWorld, PlatformerInput>;
   const playerId = "player-1";
@@ -62,7 +78,7 @@ describe("Predictor", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+      predictor.applyInput(createInput(1, 0, false, Date.now()));
 
       const state = predictor.getState();
       const playerState = state?.players?.get(playerId);
@@ -71,17 +87,17 @@ describe("Predictor", () => {
 
     test("should not throw when no state set", () => {
       // Should not throw
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+      predictor.applyInput(createInput(1, 0, false, Date.now()));
     });
 
     test("should accumulate multiple inputs", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+      predictor.applyInput(createInput(1, 0, false, Date.now()));
       const pos1 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
 
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() + 16 });
+      predictor.applyInput(createInput(1, 0, false, Date.now() + 16));
       const pos2 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
 
       expect(pos2).toBeGreaterThan(pos1);
@@ -91,7 +107,7 @@ describe("Predictor", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
-      predictor.applyInput({ moveX: 0, moveY: 0, jump: true, timestamp: Date.now() });
+      predictor.applyInput(createInput(0, 0, true, Date.now()));
 
       const state = predictor.getState();
       const playerState = state?.players?.get(playerId);
@@ -134,7 +150,7 @@ describe("Predictor", () => {
       const world = createPlayingWorld([localPlayer, otherPlayer]);
 
       predictor.setBaseState(world, playerId);
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+      predictor.applyInput(createInput(1, 0, false, Date.now()));
 
       const state = predictor.getState();
       // Local player should have moved
@@ -158,7 +174,7 @@ describe("Predictor", () => {
 
       // Setup prediction with local player moved further
       predictor.setBaseState(serverWorld, playerId);
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
+      predictor.applyInput(createInput(1, 0, false, Date.now()));
 
       const merged = predictor.mergeWithServer(serverWorld);
 
@@ -189,7 +205,7 @@ describe("Predictor", () => {
 
       // Apply with specific delta (50ms)
       predictor.applyInputWithDelta(
-        { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
+        createInput(1, 0, false, 1000),
         50,
       );
 
@@ -203,16 +219,16 @@ describe("Predictor", () => {
       predictor.setBaseState(world, playerId);
 
       // First, apply a normal input
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      predictor.applyInput(createInput(1, 0, false, 1000));
       
       // Apply with delta (doesn't affect timestamp tracking)
       predictor.applyInputWithDelta(
-        { moveX: 1, moveY: 0, jump: false, timestamp: 9999 },
+        createInput(1, 0, false, 9999),
         16,
       );
 
       // Apply another normal input - should calculate delta from 1000, not 9999
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 });
+      predictor.applyInput(createInput(1, 0, false, 1016));
 
       // Should work without issues
       const state = predictor.getState();
@@ -226,13 +242,13 @@ describe("Predictor", () => {
       predictor.setBaseState(world, playerId);
 
       // Apply input to set timestamp
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 });
+      predictor.applyInput(createInput(1, 0, false, 1000));
       const pos1 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
 
       predictor.resetTimestamp();
 
       // Next input should use default delta (16.67ms) instead of calculating from 1000
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 5000 });
+      predictor.applyInput(createInput(1, 0, false, 5000));
       
       // If timestamp wasn't reset, delta would be 4000ms (clamped to 100ms)
       // With reset, delta is 16.67ms - so movement should be similar to first input
@@ -250,7 +266,7 @@ describe("Predictor", () => {
       predictor.setLastInputTimestamp(1000);
       
       // Apply input 50ms later
-      predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: 1050 });
+      predictor.applyInput(createInput(1, 0, false, 1050));
 
       const state = predictor.getState();
       // Should have moved for 50ms (10 units at 200 units/sec)
@@ -269,12 +285,7 @@ describe("Predictor", () => {
 
       const startTime = 1000;
       for (let i = 0; i < 6; i++) {
-        predictor60fps.applyInput({
-          moveX: 1,
-          moveY: 0,
-          jump: false,
-          timestamp: startTime + i * 16.67,
-        });
+        predictor60fps.applyInput(createInput(1, 0, false, startTime + i * 16.67));
       }
       const pos60fps = predictor60fps.getState()?.players?.get("player-60fps")?.position.x ?? 0;
 
@@ -286,12 +297,7 @@ describe("Predictor", () => {
       predictor30fps.setBaseState(world30, "player-30fps");
 
       for (let i = 0; i < 3; i++) {
-        predictor30fps.applyInput({
-          moveX: 1,
-          moveY: 0,
-          jump: false,
-          timestamp: startTime + i * 33.33,
-        });
+        predictor30fps.applyInput(createInput(1, 0, false, startTime + i * 33.33));
       }
       const pos30fps = predictor30fps.getState()?.players?.get("player-30fps")?.position.x ?? 0;
 
@@ -312,11 +318,11 @@ describe("Predictor", () => {
       predictor.setBaseState(world, playerId);
 
       // First input
-      predictor.applyInput({ moveX: 0, moveY: 0, jump: false, timestamp: 1000 });
+      predictor.applyInput(createInput(0, 0, false, 1000));
       const posAfterFirst = predictor.getState()?.players?.get(playerId)?.position.y ?? 0;
 
       // Simulate tab switch: 500ms gap (player was away)
-      predictor.applyInput({ moveX: 0, moveY: 0, jump: false, timestamp: 1500 });
+      predictor.applyInput(createInput(0, 0, false, 1500));
       const posAfterGap = predictor.getState()?.players?.get(playerId)?.position.y ?? 0;
 
       // Should have fallen significantly more during the 500ms gap
@@ -332,12 +338,7 @@ describe("Predictor", () => {
       // Simulate a burst of 10 inputs in 10ms (unrealistic but could happen with input buffering bugs)
       const startTime = 1000;
       for (let i = 0; i < 10; i++) {
-        predictor.applyInput({
-          moveX: 1,
-          moveY: 0,
-          jump: false,
-          timestamp: startTime + i * 1, // 1ms apart
-        });
+        predictor.applyInput(createInput(1, 0, false, startTime + i * 1)); // 1ms apart
       }
       const burstPos = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
 
@@ -348,12 +349,7 @@ describe("Predictor", () => {
       const normalWorld = createWorld(createGroundedPlayer("player-2"));
       normalPredictor.setBaseState(normalWorld, "player-2");
       for (let i = 0; i < 10; i++) {
-        normalPredictor.applyInput({
-          moveX: 1,
-          moveY: 0,
-          jump: false,
-          timestamp: startTime + i * 16.67,
-        });
+        normalPredictor.applyInput(createInput(1, 0, false, startTime + i * 16.67));
       }
       const normalPos = normalPredictor.getState()?.players?.get("player-2")?.position.x ?? 0;
 

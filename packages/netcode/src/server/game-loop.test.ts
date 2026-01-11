@@ -14,6 +14,22 @@ import { getPlayer } from "../test-utils.js";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("GameLoop", () => {
   let worldManager: DefaultWorldManager<PlatformerWorld>;
   let inputQueue: InputQueue<PlatformerInput>;
@@ -90,7 +106,7 @@ describe("GameLoop", () => {
 
       inputQueue.enqueue("player-1", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        input: createInput(1, 0, false, Date.now()),
         timestamp: Date.now(),
       });
 
@@ -112,7 +128,7 @@ describe("GameLoop", () => {
 
       inputQueue.enqueue("player-1", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        input: createInput(1, 0, false, Date.now()),
         timestamp: Date.now(),
       });
 
@@ -165,7 +181,7 @@ describe("GameLoop", () => {
       // Only active player sends inputs (moving right)
       inputQueue.enqueue("active-player", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        input: createInput(1, 0, false, Date.now()),
         timestamp: Date.now(),
       });
 
@@ -194,17 +210,17 @@ describe("GameLoop", () => {
       const now = Date.now();
       inputQueue.enqueue("player-1", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now },
+        input: createInput(1, 0, false, now),
         timestamp: now,
       });
       inputQueue.enqueue("player-1", {
         seq: 1,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 },
+        input: createInput(1, 0, false, now + 16),
         timestamp: now + 16,
       });
       inputQueue.enqueue("player-1", {
         seq: 2,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now + 32 },
+        input: createInput(1, 0, false, now + 32),
         timestamp: now + 32,
       });
 
@@ -240,12 +256,12 @@ describe("GameLoop", () => {
       const now = Date.now();
       inputQueue.enqueue("player-1", {
         seq: 0,
-        input: { moveX: 0, moveY: 0, jump: true, timestamp: now }, // Jump pressed
+        input: createInput(0, 0, true, now), // Jump pressed
         timestamp: now,
       });
       inputQueue.enqueue("player-1", {
         seq: 1,
-        input: { moveX: 0, moveY: 0, jump: false, timestamp: now + 16 }, // Jump released
+        input: createInput(0, 0, false, now + 16), // Jump released
         timestamp: now + 16,
       });
 
@@ -293,24 +309,24 @@ describe("GameLoop", () => {
       const now = Date.now();
       inputQueue.enqueue("fast-client", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now },
+        input: createInput(1, 0, false, now),
         timestamp: now,
       });
       inputQueue.enqueue("fast-client", {
         seq: 1,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 },
+        input: createInput(1, 0, false, now + 16),
         timestamp: now + 16,
       });
       inputQueue.enqueue("fast-client", {
         seq: 2,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now + 32 },
+        input: createInput(1, 0, false, now + 32),
         timestamp: now + 32,
       });
 
       // Slow client sends only 1 input
       inputQueue.enqueue("slow-client", {
         seq: 0,
-        input: { moveX: -1, moveY: 0, jump: false, timestamp: now },
+        input: createInput(-1, 0, false, now),
         timestamp: now,
       });
 
@@ -336,12 +352,12 @@ describe("GameLoop", () => {
       const now = Date.now();
       inputQueue.enqueue("staying", {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: now },
+        input: createInput(1, 0, false, now),
         timestamp: now,
       });
       inputQueue.enqueue("leaving", {
         seq: 0,
-        input: { moveX: -1, moveY: 0, jump: false, timestamp: now },
+        input: createInput(-1, 0, false, now),
         timestamp: now,
       });
 

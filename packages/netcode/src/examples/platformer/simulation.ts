@@ -17,6 +17,7 @@ import type {
   Platform,
   Hazard,
   SpawnPoint,
+  Projectile,
 } from "./types.js";
 import {
   createPlatformerPlayer,
@@ -30,6 +31,10 @@ import {
   getPlayerWithMostKills,
   hasPlayerReachedKillTarget,
   DEFAULT_MAX_HEALTH,
+  PROJECTILE_RADIUS,
+  PROJECTILE_SPEED,
+  PROJECTILE_DAMAGE,
+  PROJECTILE_LIFETIME_TICKS,
 } from "./types.js";
 
 // =============================================================================
@@ -220,13 +225,43 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
   // Step 3: Handle hazard damage
   newPlayers = processHazardDamage(newPlayers, worldAfterStateUpdate.hazards);
 
-  // Step 4: Process respawn timers and deaths
+  // Step 4: Process shooting inputs and spawn projectiles
+  let newProjectiles = [...worldAfterStateUpdate.projectiles];
+  for (const [playerId, input] of inputs) {
+    if (input.shoot) {
+      const player = newPlayers.get(playerId);
+      if (player && isPlayerAlive(player)) {
+        const projectile = createProjectileFromInput(
+          playerId,
+          player.position,
+          input.shootTargetX,
+          input.shootTargetY,
+          worldAfterStateUpdate.tick,
+        );
+        if (projectile) {
+          newProjectiles.push(projectile);
+        }
+      }
+    }
+  }
+
+  // Step 5: Simulate projectiles and handle projectile-player collisions
+  const projectileResult = simulateProjectiles(
+    newProjectiles,
+    newPlayers,
+    deltaSeconds,
+  );
+  newPlayers = projectileResult.players;
+  newProjectiles = projectileResult.projectiles;
+
+  // Step 6: Process respawn timers and deaths
   newPlayers = processRespawns(newPlayers, worldAfterStateUpdate.spawnPoints);
 
-  // Step 5: Check win conditions
+  // Step 7: Check win conditions
   const worldWithPlayers: PlatformerWorld = {
     ...worldAfterStateUpdate,
     players: newPlayers,
+    projectiles: newProjectiles,
     tick: worldAfterStateUpdate.tick + 1,
   };
 
@@ -417,6 +452,172 @@ function processHazardDamage(
   }
 
   return newPlayers;
+}
+
+// =============================================================================
+// Projectile Simulation
+// =============================================================================
+
+/**
+ * Check if a projectile collides with a player
+ */
+const projectileHitsPlayer = (
+  projectile: Projectile,
+  player: PlatformerPlayer,
+): boolean => {
+  // Simple circle-rectangle collision
+  const playerAABB = getPlayerAABB(player);
+  
+  // Find closest point on rectangle to circle center
+  const closestX = Math.max(playerAABB.x, Math.min(projectile.position.x, playerAABB.x + playerAABB.width));
+  const closestY = Math.max(playerAABB.y, Math.min(projectile.position.y, playerAABB.y + playerAABB.height));
+  
+  // Calculate distance from closest point to circle center
+  const dx = projectile.position.x - closestX;
+  const dy = projectile.position.y - closestY;
+  const distanceSquared = dx * dx + dy * dy;
+  
+  return distanceSquared <= PROJECTILE_RADIUS * PROJECTILE_RADIUS;
+};
+
+/**
+ * Simulate all projectiles: move them, check collisions, remove expired ones
+ */
+function simulateProjectiles(
+  projectiles: Projectile[],
+  players: Map<string, PlatformerPlayer>,
+  deltaSeconds: number,
+): { projectiles: Projectile[]; players: Map<string, PlatformerPlayer> } {
+  const newProjectiles: Projectile[] = [];
+  let newPlayers = new Map(players);
+
+  for (const projectile of projectiles) {
+    // Move projectile
+    const newPosition: Vector2 = {
+      x: projectile.position.x + projectile.velocity.x * deltaSeconds,
+      y: projectile.position.y + projectile.velocity.y * deltaSeconds,
+    };
+
+    // Decrement lifetime
+    const newLifetime = projectile.lifetime - 1;
+
+    // Check if projectile is expired
+    if (newLifetime <= 0) {
+      continue; // Remove projectile
+    }
+
+    // Check if projectile is out of bounds (simple bounds check)
+    if (Math.abs(newPosition.x) > 1000 || Math.abs(newPosition.y) > 1000) {
+      continue; // Remove projectile
+    }
+
+    // Check collision with floor
+    if (newPosition.y >= DEFAULT_FLOOR_Y) {
+      continue; // Remove projectile
+    }
+
+    // Check collision with players
+    let hitPlayer = false;
+    for (const [playerId, player] of newPlayers) {
+      // Don't hit the owner
+      if (playerId === projectile.ownerId) continue;
+      
+      // Don't hit players who can't take damage
+      if (!canPlayerTakeDamage(player)) continue;
+
+      // Check collision
+      const projectileAtNewPos: Projectile = { ...projectile, position: newPosition };
+      if (projectileHitsPlayer(projectileAtNewPos, player)) {
+        // Apply damage
+        const newHealth = clampHealth(player.health - projectile.damage, player.maxHealth);
+        newPlayers.set(playerId, {
+          ...player,
+          health: newHealth,
+          lastHitBy: projectile.ownerId,
+        });
+        hitPlayer = true;
+        break; // Projectile is consumed
+      }
+    }
+
+    if (!hitPlayer) {
+      // Keep projectile alive
+      newProjectiles.push({
+        ...projectile,
+        position: newPosition,
+        lifetime: newLifetime,
+      });
+    }
+  }
+
+  return { projectiles: newProjectiles, players: newPlayers };
+}
+
+/**
+ * Create a projectile from player input
+ */
+function createProjectileFromInput(
+  ownerId: string,
+  ownerPosition: Vector2,
+  targetX: number,
+  targetY: number,
+  tick: number,
+): Projectile | null {
+  // Calculate direction to target
+  const dx = targetX - ownerPosition.x;
+  const dy = targetY - ownerPosition.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  // Prevent division by zero - need some minimum distance
+  if (distance < 10) {
+    return null;
+  }
+
+  // Normalize and apply speed
+  const velocity: Vector2 = {
+    x: (dx / distance) * PROJECTILE_SPEED,
+    y: (dy / distance) * PROJECTILE_SPEED,
+  };
+
+  // Generate unique projectile ID
+  const projectileId = `proj-${ownerId}-${tick}-${Math.random().toString(36).substring(2, 7)}`;
+
+  return {
+    id: projectileId,
+    ownerId,
+    position: { ...ownerPosition },
+    velocity,
+    damage: PROJECTILE_DAMAGE,
+    lifetime: PROJECTILE_LIFETIME_TICKS,
+  };
+}
+
+/**
+ * Spawn a new projectile from a player toward a target
+ */
+export function spawnProjectile(
+  world: PlatformerWorld,
+  ownerId: string,
+  targetX: number,
+  targetY: number,
+): { world: PlatformerWorld; projectileId: string } | null {
+  const owner = world.players.get(ownerId);
+  if (!owner || !isPlayerAlive(owner)) {
+    return null;
+  }
+
+  const projectile = createProjectileFromInput(ownerId, owner.position, targetX, targetY, world.tick);
+  if (!projectile) {
+    return null;
+  }
+
+  return {
+    world: {
+      ...world,
+      projectiles: [...world.projectiles, projectile],
+    },
+    projectileId: projectile.id,
+  };
 }
 
 // =============================================================================

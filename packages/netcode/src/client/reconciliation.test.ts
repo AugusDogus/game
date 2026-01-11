@@ -11,6 +11,22 @@ import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
 import { createTestPlayer, createTestWorld } from "../test-utils.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("Reconciler", () => {
   let inputBuffer: InputBuffer<PlatformerInput>;
   let predictor: Predictor<PlatformerWorld, PlatformerInput>;
@@ -55,9 +71,9 @@ describe("Reconciler", () => {
 
     test("should replay unacknowledged inputs", () => {
       // Add inputs to buffer
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 }); // seq 1
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1032 }); // seq 2
+      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
+      inputBuffer.add(createInput(1, 0, false, 1016)); // seq 1
+      inputBuffer.add(createInput(1, 0, false, 1032)); // seq 2
 
       // Server acknowledges seq 0, position reflects that
       const serverPlayer = createTestPlayer(playerId, {
@@ -75,8 +91,8 @@ describe("Reconciler", () => {
     });
 
     test("should acknowledge processed inputs", () => {
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 }); // seq 1
+      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
+      inputBuffer.add(createInput(1, 0, false, 1016)); // seq 1
 
       const serverPlayer = createTestPlayer(playerId, {
         position: { x: 10, y: 0 },
@@ -134,12 +150,7 @@ describe("Reconciler", () => {
       const inputCount = 12; // ~200ms of inputs at 60fps
 
       for (let i = 0; i < inputCount; i++) {
-        inputBuffer.add({
-          moveX: 1,
-          moveY: 0,
-          jump: false,
-          timestamp: startTime + i * 16.67,
-        });
+        inputBuffer.add(createInput(1, 0, false, startTime + i * 16.67));
       }
 
       // Server snapshot arrives with position before any of these inputs
@@ -164,12 +175,7 @@ describe("Reconciler", () => {
       // Player sends 5 inputs
       const startTime = 1000;
       for (let i = 0; i < 5; i++) {
-        inputBuffer.add({
-          moveX: 1,
-          moveY: 0,
-          jump: false,
-          timestamp: startTime + i * 50, // 50ms apart (matching server tick)
-        });
+        inputBuffer.add(createInput(1, 0, false, startTime + i * 50)); // 50ms apart (matching server tick)
       }
 
       // Server acknowledges first 3 (seq 0, 1, 2)
@@ -202,9 +208,9 @@ describe("Reconciler", () => {
       // (simulated by server returning different position)
 
       // Client sent inputs to move right
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1050 }); // seq 1
-      inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1100 }); // seq 2
+      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
+      inputBuffer.add(createInput(1, 0, false, 1050)); // seq 1
+      inputBuffer.add(createInput(1, 0, false, 1100)); // seq 2
 
       // Server only processed seq 0, but says player hit a wall and is at x=0
       const serverPlayer = createTestPlayer(playerId, {
@@ -225,8 +231,8 @@ describe("Reconciler", () => {
 
     test("jump input timing: jump pressed while falling should not double-jump", () => {
       // Player is in the air (jumped earlier)
-      inputBuffer.add({ moveX: 0, moveY: 0, jump: true, timestamp: 1000 }); // Jump while airborne
-      inputBuffer.add({ moveX: 0, moveY: 0, jump: true, timestamp: 1050 }); // Still holding jump
+      inputBuffer.add(createInput(0, 0, true, 1000)); // Jump while airborne
+      inputBuffer.add(createInput(0, 0, true, 1050)); // Still holding jump
 
       // Server confirms player is in the air
       const serverPlayer = createTestPlayer(playerId, {
@@ -264,7 +270,7 @@ describe("Reconciler", () => {
       // Add inputs with large sequence numbers (simulate buffer state after many inputs)
       for (let i = 0; i < 10; i++) {
         // Manually create inputs as if buffer has been used extensively
-        freshBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 + i * 16 });
+        freshBuffer.add(createInput(1, 0, false, 1000 + i * 16));
       }
 
       const serverPlayer = createTestPlayer(playerId, {

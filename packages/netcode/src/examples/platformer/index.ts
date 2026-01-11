@@ -15,9 +15,12 @@ export type {
   MatchConfig,
   WinConditionType,
   GameState,
+  Projectile,
   PlatformerAttackAction,
+  PlatformerShootAction,
   PlatformerAction,
   PlatformerAttackResult,
+  PlatformerShootResult,
   PlatformerActionResult,
 } from "./types.js";
 
@@ -34,6 +37,10 @@ export {
   ATTACK_RADIUS,
   ATTACK_DAMAGE,
   DEFAULT_MATCH_CONFIG,
+  PROJECTILE_SPEED,
+  PROJECTILE_DAMAGE,
+  PROJECTILE_RADIUS,
+  PROJECTILE_LIFETIME_TICKS,
   // Helper functions
   clampHealth,
   isPlayerAlive,

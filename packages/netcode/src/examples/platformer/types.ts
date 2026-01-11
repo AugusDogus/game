@@ -24,6 +24,12 @@ export interface PlatformerInput {
   moveY: number;
   /** Whether jump was pressed */
   jump: boolean;
+  /** Whether shoot was pressed this frame */
+  shoot: boolean;
+  /** Target X position for shooting (in world coordinates) */
+  shootTargetX: number;
+  /** Target Y position for shooting (in world coordinates) */
+  shootTargetY: number;
   /** Timestamp when input was captured */
   timestamp: number;
 }
@@ -165,6 +171,8 @@ export interface PlatformerPlayer {
 export interface PlatformerWorld {
   /** All players in the world */
   players: Map<string, PlatformerPlayer>;
+  /** Active projectiles in the world */
+  projectiles: Projectile[];
   /** Current tick number */
   tick: number;
   /** Current game state */
@@ -200,6 +208,7 @@ export function createPlatformerWorld(
 ): PlatformerWorld {
   return {
     players: new Map(),
+    projectiles: [],
     tick: 0,
     gameState: "lobby",
     platforms: [],
@@ -234,7 +243,7 @@ export function createPlatformerPlayer(
 }
 
 /**
- * Create an idle input (no movement, no jump)
+ * Create an idle input (no movement, no jump, no shoot)
  * @param timestamp - Optional timestamp (defaults to current time)
  */
 export function createIdleInput(timestamp?: number): PlatformerInput {
@@ -242,6 +251,9 @@ export function createIdleInput(timestamp?: number): PlatformerInput {
     moveX: 0,
     moveY: 0,
     jump: false,
+    shoot: false,
+    shootTargetX: 0,
+    shootTargetY: 0,
     timestamp: timestamp ?? Date.now(),
   };
 }
@@ -264,14 +276,28 @@ export interface PlatformerAttackAction {
 }
 
 /**
+ * Shoot action in the platformer game.
+ * Spawns a projectile traveling toward the target position.
+ */
+export interface PlatformerShootAction {
+  /** Type discriminator for action handling */
+  type: "shoot";
+  /** Target X position to shoot toward */
+  targetX: number;
+  /** Target Y position to shoot toward */
+  targetY: number;
+}
+
+/**
  * Union type for all platformer actions
  */
-export type PlatformerAction = PlatformerAttackAction;
+export type PlatformerAction = PlatformerAttackAction | PlatformerShootAction;
 
 /**
  * Result of a successful attack action
  */
 export interface PlatformerAttackResult {
+  type: "attack";
   /** ID of the player that was hit */
   targetId: string;
   /** Damage dealt */
@@ -279,15 +305,58 @@ export interface PlatformerAttackResult {
 }
 
 /**
+ * Result of a shoot action (projectile spawned)
+ */
+export interface PlatformerShootResult {
+  type: "shoot";
+  /** ID of the spawned projectile */
+  projectileId: string;
+}
+
+/**
  * Union type for all platformer action results
  */
-export type PlatformerActionResult = PlatformerAttackResult;
+export type PlatformerActionResult = PlatformerAttackResult | PlatformerShootResult;
 
 /**
  * Attack configuration constants
  */
 export const ATTACK_RADIUS = 50; // pixels
 export const ATTACK_DAMAGE = 10;
+
+// =============================================================================
+// Projectile Types
+// =============================================================================
+
+/** Projectile speed in pixels per second */
+export const PROJECTILE_SPEED = 500;
+
+/** Projectile damage */
+export const PROJECTILE_DAMAGE = 25;
+
+/** Projectile radius for collision */
+export const PROJECTILE_RADIUS = 5;
+
+/** Maximum projectile lifetime in ticks (at 20Hz = 5 seconds) */
+export const PROJECTILE_LIFETIME_TICKS = 100;
+
+/**
+ * A projectile in the game world
+ */
+export interface Projectile {
+  /** Unique identifier for the projectile */
+  id: string;
+  /** ID of the player who fired this projectile */
+  ownerId: string;
+  /** Current position */
+  position: Vector2;
+  /** Velocity (direction * speed) */
+  velocity: Vector2;
+  /** Damage dealt on hit */
+  damage: number;
+  /** Remaining lifetime in ticks */
+  lifetime: number;
+}
 
 // =============================================================================
 // Helper Functions

@@ -27,6 +27,24 @@ import { getAt, getFromMap, getLast, getPlayer } from "./test-utils.js";
  */
 const createPlayingWorld = (): PlatformerWorld => forceStartGame(createPlatformerWorld());
 
+/**
+ * Helper to create test input with all required fields
+ */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("Client-Server Integration", () => {
   const PLAYER_ID = "test-player";
 
@@ -115,7 +133,7 @@ describe("Client-Server Integration", () => {
     predictor.setBaseState(serverWorld, PLAYER_ID);
 
     // Client sends input
-    const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
+    const input: PlatformerInput = createInput(1, 0, false, 1000);
     const seq = inputBuffer.add(input);
     predictor.applyInput(input);
 
@@ -155,9 +173,9 @@ describe("Client-Server Integration", () => {
 
     // Client sends 3 inputs at 60Hz
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
     ];
 
     for (const input of inputs) {
@@ -206,9 +224,9 @@ describe("Client-Server Integration", () => {
 
     // Client sends 3 inputs
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
     ];
 
     for (const input of inputs) {
@@ -270,11 +288,11 @@ describe("Client-Server Integration", () => {
 
     // Client sends 5 inputs
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1050 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1066 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
+      createInput(1, 0, false, 1050),
+      createInput(1, 0, false, 1066),
     ];
 
     for (const input of inputs) {
@@ -354,10 +372,10 @@ describe("Client-Server Integration", () => {
 
     // Client sends jump input followed by movement
     const inputs: PlatformerInput[] = [
-      { moveX: 0, moveY: 0, jump: true, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1050 },
+      createInput(0, 0, true, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
+      createInput(1, 0, false, 1050),
     ];
 
     for (const input of inputs) {
@@ -400,8 +418,8 @@ describe("Client-Server Integration", () => {
 
     // Quick tap: move right then stop
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1016 },
+      createInput(1, 0, false, 1000),
+      createInput(0, 0, false, 1016),
     ];
 
     for (const input of inputs) {
@@ -443,15 +461,15 @@ describe("Client-Server Integration", () => {
 
     // Client A sends 3 inputs (moving right)
     const inputsA: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
     ];
 
     // Client B sends 2 inputs (moving left)
     const inputsB: PlatformerInput[] = [
-      { moveX: -1, moveY: 0, jump: false, timestamp: 1005 },
-      { moveX: -1, moveY: 0, jump: false, timestamp: 1030 },
+      createInput(-1, 0, false, 1005),
+      createInput(-1, 0, false, 1030),
     ];
 
     // Client A predicts
@@ -519,9 +537,9 @@ describe("Client-Server Integration", () => {
       // Client sends 3 inputs per tick (60Hz client, 20Hz server)
       const baseTime = 1000 + tick * 50;
       const inputs: PlatformerInput[] = [
-        { moveX: 1, moveY: 0, jump: false, timestamp: baseTime },
-        { moveX: 1, moveY: 0, jump: false, timestamp: baseTime + 16 },
-        { moveX: 1, moveY: 0, jump: false, timestamp: baseTime + 33 },
+        createInput(1, 0, false, baseTime),
+        createInput(1, 0, false, baseTime + 16),
+        createInput(1, 0, false, baseTime + 33),
       ];
 
       for (const input of inputs) {
@@ -581,10 +599,10 @@ describe("Client-Server Integration", () => {
 
     // Move right for 2 inputs, then stop
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1033 }, // Stop
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1050 }, // Still stopped
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(0, 0, false, 1033), // Stop
+      createInput(0, 0, false, 1050), // Still stopped
     ];
 
     for (const input of inputs) {
@@ -638,12 +656,12 @@ describe("Client-Server Integration", () => {
     // Both players send idle inputs (no movement, just gravity should apply)
     inputQueue.enqueue("player-a", {
       seq: 0,
-      input: { moveX: 0, moveY: 0, jump: false, timestamp: 1000 },
+      input: createInput(0, 0, false, 1000),
       timestamp: 1000,
     });
     inputQueue.enqueue("player-b", {
       seq: 0,
-      input: { moveX: 0, moveY: 0, jump: false, timestamp: 1000 },
+      input: createInput(0, 0, false, 1000),
       timestamp: 1000,
     });
 
@@ -680,17 +698,17 @@ describe("Client-Server Integration", () => {
     // Active player sends multiple movement inputs
     inputQueue.enqueue("active", {
       seq: 0,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 },
       timestamp: 1000,
     });
     inputQueue.enqueue("active", {
       seq: 1,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1016 },
       timestamp: 1016,
     });
     inputQueue.enqueue("active", {
       seq: 2,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
+      input: createInput(1, 0, false, 1033),
       timestamp: 1033,
     });
 
@@ -731,10 +749,10 @@ describe("Client-Server Integration", () => {
 
     // Inputs with irregular timing (simulating network jitter)
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1010 }, // 10ms delta (faster)
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1040 }, // 30ms delta (slower)
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1055 }, // 15ms delta (normal)
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1010), // 10ms delta (faster)
+      createInput(1, 0, false, 1040), // 30ms delta (slower)
+      createInput(1, 0, false, 1055), // 15ms delta (normal)
     ];
 
     for (const input of inputs) {
@@ -771,10 +789,10 @@ describe("Client-Server Integration", () => {
 
     // Rapid direction changes
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: -1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
-      { moveX: -1, moveY: 0, jump: false, timestamp: 1050 },
+      createInput(1, 0, false, 1000),
+      createInput(-1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
+      createInput(-1, 0, false, 1050),
     ];
 
     for (const input of inputs) {
@@ -817,9 +835,9 @@ describe("Client-Server Integration", () => {
 
     // Jump while moving right
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: true, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
+      createInput(1, 0, true, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
     ];
 
     for (const input of inputs) {
@@ -866,12 +884,7 @@ describe("Client-Server Integration", () => {
     // Client sends 6 inputs (simulating ~100ms of movement at 60Hz)
     const allInputs: PlatformerInput[] = [];
     for (let i = 0; i < 6; i++) {
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: 1000 + i * 16,
-      };
+      const input: PlatformerInput = createInput(1, 0, false, 1000 + i * 16);
       allInputs.push(input);
       const seq = inputBuffer.add(input);
       predictor.applyInput(input);
@@ -949,7 +962,7 @@ describe("Scale Tests", () => {
       const moveX = i % 2 === 0 ? 1 : -1;
       inputQueue.enqueue(`player-${i}`, {
         seq: 0,
-        input: { moveX, moveY: 0, jump: false, timestamp: now },
+        input: createInput(moveX, 0, false, now),
         timestamp: now,
       });
     }
@@ -1007,7 +1020,7 @@ describe("Scale Tests", () => {
     for (let i = 0; i < playerCount; i++) {
       inputQueue.enqueue(`player-${i}`, {
         seq: 0,
-        input: { moveX: 0, moveY: 0, jump: false, timestamp: now },
+        input: createInput(0, 0, false, now),
         timestamp: now,
       });
     }
@@ -1056,7 +1069,7 @@ describe("Scale Tests", () => {
       const moveX = i < 50 ? 1 : -1;
       inputQueue.enqueue(`player-${i}`, {
         seq: 0,
-        input: { moveX, moveY: 0, jump: false, timestamp: now },
+        input: createInput(moveX, 0, false, now),
         timestamp: now,
       });
     }
@@ -1106,12 +1119,12 @@ describe("Player Disconnect Tests", () => {
     // Both players moving
     inputQueue.enqueue("staying", {
       seq: 0,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 },
       timestamp: 1000,
     });
     inputQueue.enqueue("leaving", {
       seq: 0,
-      input: { moveX: -1, moveY: 0, jump: false, timestamp: 1000 },
+      input: { moveX: -1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 },
       timestamp: 1000,
     });
 
@@ -1138,7 +1151,7 @@ describe("Player Disconnect Tests", () => {
     const inputQueue2 = new InputQueue<PlatformerInput>();
     inputQueue2.enqueue("staying", {
       seq: 1,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1016 },
       timestamp: 1016,
     });
 
@@ -1180,12 +1193,12 @@ describe("Player Disconnect Tests", () => {
     // Jumping player initiates jump
     inputQueue.enqueue("jumping", {
       seq: 0,
-      input: { moveX: 0, moveY: 0, jump: true, timestamp: 1000 },
+      input: { moveX: 0, moveY: 0, jump: true, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 },
       timestamp: 1000,
     });
     inputQueue.enqueue("grounded", {
       seq: 0,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 },
       timestamp: 1000,
     });
 
@@ -1213,7 +1226,7 @@ describe("Player Disconnect Tests", () => {
     const inputQueue2 = new InputQueue<PlatformerInput>();
     inputQueue2.enqueue("grounded", {
       seq: 1,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1016 },
       timestamp: 1016,
     });
 
@@ -1241,7 +1254,7 @@ describe("Player Disconnect Tests", () => {
     for (let i = 0; i < 5; i++) {
       inputQueue.enqueue(`player-${i}`, {
         seq: 0,
-        input: { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
+        input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 },
         timestamp: 1000,
       });
     }
@@ -1269,12 +1282,12 @@ describe("Player Disconnect Tests", () => {
     const inputQueue2 = new InputQueue<PlatformerInput>();
     inputQueue2.enqueue("player-0", {
       seq: 1,
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
+      input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1016 },
       timestamp: 1016,
     });
     inputQueue2.enqueue("player-4", {
       seq: 1,
-      input: { moveX: -1, moveY: 0, jump: false, timestamp: 1016 },
+      input: { moveX: -1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1016 },
       timestamp: 1016,
     });
 
@@ -1318,11 +1331,11 @@ describe("Network Condition Tests", () => {
     // Simulate jittery network: inputs arrive with variable delays
     // Client timestamps are regular, but server receives them with jitter
     const inputs: Array<{ input: PlatformerInput; arrivalDelay: number }> = [
-      { input: { moveX: 1, moveY: 0, jump: false, timestamp: 1000 }, arrivalDelay: 20 },
-      { input: { moveX: 1, moveY: 0, jump: false, timestamp: 1016 }, arrivalDelay: 50 }, // Delayed
-      { input: { moveX: 1, moveY: 0, jump: false, timestamp: 1033 }, arrivalDelay: 15 }, // Fast
-      { input: { moveX: 1, moveY: 0, jump: false, timestamp: 1050 }, arrivalDelay: 80 }, // Very delayed
-      { input: { moveX: 1, moveY: 0, jump: false, timestamp: 1066 }, arrivalDelay: 25 },
+      { input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1000 }, arrivalDelay: 20 },
+      { input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: 1016 }, arrivalDelay: 50 }, // Delayed
+      { input: createInput(1, 0, false, 1033), arrivalDelay: 15 }, // Fast
+      { input: createInput(1, 0, false, 1050), arrivalDelay: 80 }, // Very delayed
+      { input: createInput(1, 0, false, 1066), arrivalDelay: 25 },
     ];
 
     // Client predicts immediately (no jitter on client side)
@@ -1374,9 +1387,9 @@ describe("Network Condition Tests", () => {
 
     // Inputs sent in order: 0, 1, 2
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
+      createInput(1, 0, false, 1033),
     ];
 
     // But arrive at server out of order: 2, 0, 1
@@ -1422,7 +1435,7 @@ describe("Network Condition Tests", () => {
     serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
     const inputQueue = new InputQueue<PlatformerInput>();
 
-    const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
+    const input: PlatformerInput = createInput(1, 0, false, 1000);
 
     // Same input arrives twice (duplicate packet)
     inputQueue.enqueue("player", { seq: 0, input, timestamp: input.timestamp });
@@ -1460,10 +1473,10 @@ describe("Network Condition Tests", () => {
     // Client sends inputs 0, 1, 2, 3
     // But server only receives 0, 2, 3 (input 1 lost)
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 }, // This one is lost
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1033 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1050 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016), // This one is lost
+      createInput(1, 0, false, 1033),
+      createInput(1, 0, false, 1050),
     ];
 
     // Server receives 0, 2, 3 (not 1)
@@ -1505,8 +1518,8 @@ describe("Network Condition Tests", () => {
 
     // First batch of inputs
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
     ];
 
     for (let i = 0; i < inputs.length; i++) {
@@ -1532,7 +1545,7 @@ describe("Network Condition Tests", () => {
     // New input with seq 2 should work
     inputQueue.enqueue("player", { 
       seq: 2, 
-      input: { moveX: 1, moveY: 0, jump: false, timestamp: 1033 }, 
+      input: createInput(1, 0, false, 1033), 
       timestamp: 1033 
     });
     
@@ -1555,12 +1568,7 @@ describe("Network Condition Tests", () => {
     // Client accumulates 10 inputs during network outage
     const inputs: PlatformerInput[] = [];
     for (let i = 0; i < 10; i++) {
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: 1000 + i * 16,
-      };
+      const input: PlatformerInput = createInput(1, 0, false, 1000 + i * 16);
       inputs.push(input);
       inputBuffer.add(input);
       predictor.applyInput(input);
@@ -1625,12 +1633,12 @@ describe("Chaos/Fuzz Tests", () => {
     for (let i = 0; i < 20; i++) {
       const delta = Math.floor(random() * 99) + 1; // 1-100ms (within clamp range)
       timestamp += delta;
-      const input: PlatformerInput = {
-        moveX: random() > 0.5 ? 1 : -1,
-        moveY: 0,
-        jump: random() > 0.9, // 10% chance of jump
+      const input: PlatformerInput = createInput(
+        random() > 0.5 ? 1 : -1,
+        0,
+        random() > 0.9, // 10% chance of jump
         timestamp,
-      };
+      );
       inputs.push(input);
       inputBuffer.add(input);
       predictor.applyInput(input);
@@ -1677,12 +1685,7 @@ describe("Chaos/Fuzz Tests", () => {
 
     // 50 inputs at 1ms apart (simulating spam)
     for (let i = 0; i < 50; i++) {
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: 1000 + i, // 1ms apart
-      };
+      const input: PlatformerInput = createInput(1, 0, false, 1000 + i); // 1ms apart
       inputBuffer.add(input);
       predictor.applyInput(input);
       inputQueue.enqueue("player", { seq: i, input, timestamp: input.timestamp });
@@ -1726,12 +1729,7 @@ describe("Chaos/Fuzz Tests", () => {
     let timestamp = 1000;
     for (let i = 0; i < gaps.length; i++) {
       timestamp += gaps[i] ?? 0;
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp,
-      };
+      const input: PlatformerInput = createInput(1, 0, false, timestamp);
       inputQueue.enqueue("player", { seq: i, input, timestamp });
     }
 
@@ -1783,12 +1781,7 @@ describe("Chaos/Fuzz Tests", () => {
     let timestamp = 1000;
     for (let i = 0; i < 20; i++) {
       timestamp += i % 2 === 0 ? 1 : 100;
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp,
-      };
+      const input: PlatformerInput = createInput(1, 0, false, timestamp);
       inputBuffer.add(input);
       predictor.applyInput(input);
       inputQueue.enqueue("player", { seq: i, input, timestamp });
@@ -1860,12 +1853,7 @@ describe("Chaos/Fuzz Tests", () => {
         
         inputQueue.enqueue(`player-${p}`, {
           seq: i,
-          input: {
-            moveX,
-            moveY: 0,
-            jump: random() > 0.95,
-            timestamp,
-          },
+          input: createInput(moveX, 0, random() > 0.95, timestamp),
           timestamp,
         });
       }
@@ -1941,12 +1929,7 @@ describe("Chaos/Fuzz Tests", () => {
 
     // Rapidly alternate directions every frame
     for (let i = 0; i < 30; i++) {
-      const input: PlatformerInput = {
-        moveX: i % 2 === 0 ? 1 : -1,
-        moveY: 0,
-        jump: false,
-        timestamp: 1000 + i * 16,
-      };
+      const input: PlatformerInput = createInput(i % 2 === 0 ? 1 : -1, 0, false, 1000 + i * 16);
       inputBuffer.add(input);
       predictor.applyInput(input);
       inputQueue.enqueue("player", { seq: i, input, timestamp: input.timestamp });
@@ -2000,12 +1983,7 @@ describe("Chaos/Fuzz Tests", () => {
 
     // Spam jump while moving (like mashing jump key)
     for (let i = 0; i < 20; i++) {
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: i % 3 === 0, // Jump every 3rd frame
-        timestamp: 1000 + i * 16,
-      };
+      const input: PlatformerInput = createInput(1, 0, i % 3 === 0, 1000 + i * 16); // Jump every 3rd frame
       inputBuffer.add(input);
       predictor.applyInput(input);
       inputQueue.enqueue("player", { seq: i, input, timestamp: input.timestamp });
@@ -2047,12 +2025,7 @@ describe("Chaos/Fuzz Tests", () => {
     // 5 inputs with SAME timestamp
     const timestamp = 1000;
     for (let i = 0; i < 5; i++) {
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp, // All same timestamp!
-      };
+      const input: PlatformerInput = createInput(1, 0, false, timestamp); // All same timestamp!
       inputQueue.enqueue("player", { seq: i, input, timestamp });
     }
 
@@ -2123,12 +2096,7 @@ describe("Chaos/Fuzz Tests", () => {
           netMovement.set(`p${p}`, (netMovement.get(`p${p}`) ?? 0) + moveX);
           inputQueue.enqueue(`p${p}`, {
             seq: i,
-            input: {
-              moveX,
-              moveY: 0,
-              jump: random() > 0.9,
-              timestamp,
-            },
+            input: createInput(moveX, 0, random() > 0.9, timestamp),
             timestamp,
           });
         }

@@ -3,7 +3,7 @@
  */
 
 import type { InterpolateFunction } from "../../core/types.js";
-import type { PlatformerPlayer, PlatformerWorld } from "./types.js";
+import type { PlatformerPlayer, PlatformerWorld, Projectile } from "./types.js";
 
 /**
  * Linear interpolation helper
@@ -71,10 +71,50 @@ export const interpolatePlatformer: InterpolateFunction<PlatformerWorld> = (
     }
   }
 
+  // Interpolate projectiles
+  const interpolatedProjectiles = interpolateProjectiles(from.projectiles, to.projectiles, alpha);
+
   return {
     ...to,
     players: interpolatedPlayers,
+    projectiles: interpolatedProjectiles,
     // Use target tick (we're interpolating towards it)
     tick: to.tick,
   };
+};
+
+/**
+ * Interpolate projectiles between two states
+ */
+const interpolateProjectiles = (
+  fromProjectiles: Projectile[],
+  toProjectiles: Projectile[],
+  alpha: number,
+): Projectile[] => {
+  // Create a map of 'from' projectiles for quick lookup
+  const fromMap = new Map<string, Projectile>();
+  for (const proj of fromProjectiles) {
+    fromMap.set(proj.id, proj);
+  }
+
+  // Interpolate projectiles that exist in 'to'
+  const interpolated: Projectile[] = [];
+  for (const toProj of toProjectiles) {
+    const fromProj = fromMap.get(toProj.id);
+    if (fromProj) {
+      // Interpolate position
+      interpolated.push({
+        ...toProj,
+        position: {
+          x: lerp(fromProj.position.x, toProj.position.x, alpha),
+          y: lerp(fromProj.position.y, toProj.position.y, alpha),
+        },
+      });
+    } else {
+      // New projectile, use current state
+      interpolated.push(toProj);
+    }
+  }
+
+  return interpolated;
 };

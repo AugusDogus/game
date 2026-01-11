@@ -6,12 +6,30 @@
  * This file re-exports those plus adds test-specific helpers.
  */
 
-import type { PlatformerPlayer, PlatformerWorld } from "./examples/platformer/types.js";
+import type { PlatformerPlayer, PlatformerWorld, PlatformerInput } from "./examples/platformer/types.js";
 import {
   DEFAULT_MAX_HEALTH,
   DEFAULT_MATCH_CONFIG,
 } from "./examples/platformer/types.js";
 export { getAt, getLast, getFromMap, assertDefined } from "./core/utils.js";
+
+/**
+ * Create a test input with all required fields.
+ * Allows partial overrides for testing specific scenarios.
+ */
+export function createTestInput(
+  overrides: Partial<PlatformerInput> = {},
+): PlatformerInput {
+  return {
+    moveX: overrides.moveX ?? 0,
+    moveY: overrides.moveY ?? 0,
+    jump: overrides.jump ?? false,
+    shoot: overrides.shoot ?? false,
+    shootTargetX: overrides.shootTargetX ?? 0,
+    shootTargetY: overrides.shootTargetY ?? 0,
+    timestamp: overrides.timestamp ?? Date.now(),
+  };
+}
 
 /**
  * Get a player from a world, throwing if not found.
@@ -77,6 +95,7 @@ export function createTestWorld(
 
   return {
     players: playerMap,
+    projectiles: overrides.projectiles ?? [],
     tick: overrides.tick ?? 0,
     gameState: overrides.gameState ?? "playing",
     platforms: overrides.platforms ?? [],
