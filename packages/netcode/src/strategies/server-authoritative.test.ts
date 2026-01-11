@@ -14,6 +14,22 @@ import { platformerPredictionScope } from "../examples/platformer/prediction.js"
 import { ServerAuthoritativeClient, ServerAuthoritativeServer } from "./server-authoritative.js";
 import { getPlayer } from "../test-utils.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("ServerAuthoritativeClient", () => {
   let client: ServerAuthoritativeClient<PlatformerWorld, PlatformerInput>;
 
@@ -39,12 +55,7 @@ describe("ServerAuthoritativeClient", () => {
     test("should add input to buffer", () => {
       client.setLocalPlayerId("player-1");
 
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now(),
-      };
+      const input = createInput(1, 0, false, Date.now());
 
       client.onLocalInput(input);
 
@@ -54,13 +65,8 @@ describe("ServerAuthoritativeClient", () => {
     test("should increment sequence number", () => {
       client.setLocalPlayerId("player-1");
 
-      const input1: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() };
-      const input2: PlatformerInput = {
-        moveX: -1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now() + 16,
-      };
+      const input1 = createInput(1, 0, false, Date.now());
+      const input2 = createInput(-1, 0, false, Date.now() + 16);
 
       client.onLocalInput(input1);
       expect(client.getLastInputSeq()).toBe(0);
@@ -91,7 +97,7 @@ describe("ServerAuthoritativeClient", () => {
     test("should clear all state", () => {
       client.setLocalPlayerId("player-1");
 
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() };
+      const input: PlatformerInput = createInput(1, 0, false, Date.now());
       client.onLocalInput(input);
 
       client.reset();
@@ -157,7 +163,7 @@ describe("ServerAuthoritativeServer", () => {
     test("should queue input for processing", () => {
       server.addClient("player-1");
 
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() };
+      const input: PlatformerInput = createInput(1, 0, false, Date.now());
       server.onClientInput("player-1", input, 0);
 
       // Input should be processed on next tick
@@ -188,7 +194,7 @@ describe("ServerAuthoritativeServer", () => {
     test("should acknowledge processed inputs", () => {
       server.addClient("player-1");
 
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() };
+      const input: PlatformerInput = createInput(1, 0, false, Date.now());
       server.onClientInput("player-1", input, 5);
 
       const snapshot = server.tick();
@@ -221,14 +227,14 @@ describe("ServerAuthoritativeServer", () => {
       // Player 1 moves right
       server.onClientInput(
         "player-1",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         0,
       );
 
       // Player 2 moves left
       server.onClientInput(
         "player-2",
-        { moveX: -1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(-1, 0, false, Date.now()),
         0,
       );
 
@@ -256,8 +262,8 @@ describe("ServerAuthoritativeServer", () => {
 
       // Player presses jump, then releases before next tick
       const now = Date.now();
-      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: true, timestamp: now }, 0);
-      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now + 16 }, 1);
+      server.onClientInput("player-1", createInput(0, 0, true, now), 0);
+      server.onClientInput("player-1", createInput(0, 0, false, now + 16), 1);
 
       server.tick();
 
@@ -306,8 +312,8 @@ describe("ServerAuthoritativeServer", () => {
 
       // Both players send idle inputs (just standing)
       const now = Date.now();
-      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now }, 0);
-      server.onClientInput("player-2", { moveX: 0, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("player-1", createInput(0, 0, false, now), 0);
+      server.onClientInput("player-2", createInput(0, 0, false, now), 0);
 
       const snapshot = server.tick();
 
@@ -340,9 +346,9 @@ describe("ServerAuthoritativeServer", () => {
 
       // Active player sends 3 inputs
       const now = Date.now();
-      server.onClientInput("active", { moveX: 1, moveY: 0, jump: false, timestamp: now }, 0);
-      server.onClientInput("active", { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 }, 1);
-      server.onClientInput("active", { moveX: 1, moveY: 0, jump: false, timestamp: now + 32 }, 2);
+      server.onClientInput("active", createInput(1, 0, false, now), 0);
+      server.onClientInput("active", createInput(1, 0, false, now + 16), 1);
+      server.onClientInput("active", createInput(1, 0, false, now + 32), 2);
 
       // Idle player sends no inputs
 
@@ -371,10 +377,10 @@ describe("ServerAuthoritativeServer", () => {
 
       // Player moves right then stops
       const now = Date.now();
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: now }, 0);
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: now + 16 }, 1);
-      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now + 32 }, 2); // Stop
-      server.onClientInput("player-1", { moveX: 0, moveY: 0, jump: false, timestamp: now + 48 }, 3); // Still stopped
+      server.onClientInput("player-1", createInput(1, 0, false, now), 0);
+      server.onClientInput("player-1", createInput(1, 0, false, now + 16), 1);
+      server.onClientInput("player-1", createInput(0, 0, false, now + 32), 2); // Stop
+      server.onClientInput("player-1", createInput(0, 0, false, now + 48), 3); // Still stopped
 
       const snapshot = server.tick();
       const player = snapshot.state.players.get("player-1");
@@ -394,10 +400,10 @@ describe("ServerAuthoritativeServer", () => {
       }
 
       // Inputs with irregular timing
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1000 }, 0);
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1010 }, 1); // 10ms
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1040 }, 2); // 30ms
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: 1055 }, 3); // 15ms
+      server.onClientInput("player-1", createInput(1, 0, false, 1000), 0);
+      server.onClientInput("player-1", createInput(1, 0, false, 1010), 1); // 10ms
+      server.onClientInput("player-1", createInput(1, 0, false, 1040), 2); // 30ms
+      server.onClientInput("player-1", createInput(1, 0, false, 1055), 3); // 15ms
 
       const snapshot = server.tick();
       const player = snapshot.state.players.get("player-1");
@@ -428,9 +434,9 @@ describe("ServerAuthoritativeServer", () => {
 
       const now = Date.now();
       // All three send different inputs
-      server.onClientInput("player-1", { moveX: 1, moveY: 0, jump: false, timestamp: now }, 0);
-      server.onClientInput("player-2", { moveX: -1, moveY: 0, jump: false, timestamp: now }, 0);
-      server.onClientInput("player-3", { moveX: 0, moveY: 0, jump: false, timestamp: now }, 0);
+      server.onClientInput("player-1", createInput(1, 0, false, now), 0);
+      server.onClientInput("player-2", createInput(-1, 0, false, now), 0);
+      server.onClientInput("player-3", createInput(0, 0, false, now), 0);
 
       const snapshot = server.tick();
 
@@ -535,7 +541,7 @@ describe("ServerAuthoritativeServer", () => {
       // Send input for client that was never added
       server.onClientInput(
         "ghost-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         0,
       );
 

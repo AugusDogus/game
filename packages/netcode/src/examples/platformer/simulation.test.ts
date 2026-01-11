@@ -15,6 +15,22 @@ import { createPlatformerWorld } from "./types.js";
 import type { PlatformerWorld, PlatformerInput } from "./types.js";
 import { createTestPlayer, createPlayingWorld } from "../../test-utils.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("simulatePlatformer", () => {
   const createWorldWithPlayer = (
     playerId: string,
@@ -85,7 +101,7 @@ describe("simulatePlatformer", () => {
         true,
       );
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() }],
+        ["player-1", createInput(1, 0, false, Date.now())],
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -103,7 +119,7 @@ describe("simulatePlatformer", () => {
         true,
       );
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", { moveX: -1, moveY: 0, jump: false, timestamp: Date.now() }],
+        ["player-1", createInput(-1, 0, false, Date.now())],
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -139,7 +155,7 @@ describe("simulatePlatformer", () => {
         true,
       );
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", { moveX: 0, moveY: 0, jump: true, timestamp: Date.now() }],
+        ["player-1", createInput(0, 0, true, Date.now())],
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -153,7 +169,7 @@ describe("simulatePlatformer", () => {
     test("should not jump when not grounded", () => {
       const world = createWorldWithPlayer("player-1", { x: 0, y: 0 }, { x: 0, y: 50 }, false);
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", { moveX: 0, moveY: 0, jump: true, timestamp: Date.now() }],
+        ["player-1", createInput(0, 0, true, Date.now())],
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -177,8 +193,8 @@ describe("simulatePlatformer", () => {
       const world = createPlayingWorld([player1, player2]);
 
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() }],
-        ["player-2", { moveX: -1, moveY: 0, jump: true, timestamp: Date.now() }],
+        ["player-1", createInput(1, 0, false, Date.now())],
+        ["player-2", createInput(-1, 0, true, Date.now())],
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -259,8 +275,8 @@ describe("mergePlatformerInputs", () => {
 
   test("should use last input for movement", () => {
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: -1, moveY: 0, jump: false, timestamp: 1016 },
+      createInput(1, 0, false, 1000),
+      createInput(-1, 0, false, 1016),
     ];
 
     const merged = mergePlatformerInputs(inputs);
@@ -270,9 +286,9 @@ describe("mergePlatformerInputs", () => {
 
   test("should preserve jump if any input had it", () => {
     const inputs: PlatformerInput[] = [
-      { moveX: 0, moveY: 0, jump: true, timestamp: 1000 },
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1016 },
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1032 },
+      createInput(0, 0, true, 1000),
+      createInput(0, 0, false, 1016),
+      createInput(0, 0, false, 1032),
     ];
 
     const merged = mergePlatformerInputs(inputs);
@@ -282,8 +298,8 @@ describe("mergePlatformerInputs", () => {
 
   test("should not set jump if no input had it", () => {
     const inputs: PlatformerInput[] = [
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 1, moveY: 0, jump: false, timestamp: 1016 },
+      createInput(1, 0, false, 1000),
+      createInput(1, 0, false, 1016),
     ];
 
     const merged = mergePlatformerInputs(inputs);
@@ -294,9 +310,9 @@ describe("mergePlatformerInputs", () => {
   test("real-world: quick jump tap should register", () => {
     // Player taps jump briefly - might be released before next server tick
     const inputs: PlatformerInput[] = [
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1000 },
-      { moveX: 0, moveY: 0, jump: true, timestamp: 1016 }, // Jump pressed
-      { moveX: 0, moveY: 0, jump: false, timestamp: 1032 }, // Jump released
+      createInput(0, 0, false, 1000),
+      createInput(0, 0, true, 1016), // Jump pressed
+      createInput(0, 0, false, 1032), // Jump released
     ];
 
     const merged = mergePlatformerInputs(inputs);

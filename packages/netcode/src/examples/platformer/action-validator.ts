@@ -11,9 +11,11 @@ import type {
   PlatformerAction,
   PlatformerActionResult,
   PlatformerAttackResult,
+  PlatformerShootResult,
   PlatformerPlayer,
 } from "./types.js";
-import { ATTACK_RADIUS, ATTACK_DAMAGE, canPlayerTakeDamage } from "./types.js";
+import { ATTACK_RADIUS, ATTACK_DAMAGE, canPlayerTakeDamage, isPlayerAlive } from "./types.js";
+import { spawnProjectile } from "./simulation.js";
 
 /**
  * Calculate distance between two points
@@ -91,6 +93,8 @@ export const validatePlatformerAction: ActionValidator<
   switch (action.type) {
     case "attack":
       return validateAttack(world, clientId, action.targetX, action.targetY);
+    case "shoot":
+      return validateShoot(world, clientId, action.targetX, action.targetY);
     default:
       return { success: false };
   }
@@ -121,6 +125,7 @@ function validateAttack(
     return {
       success: true,
       result: {
+        type: "attack",
         targetId: hitTarget.id,
         damage: ATTACK_DAMAGE,
       },
@@ -128,6 +133,44 @@ function validateAttack(
   }
 
   return { success: false };
+}
+
+/**
+ * Validate a shoot action.
+ *
+ * Spawns a projectile from the shooter toward the target position.
+ * The shooter must be alive to shoot.
+ *
+ * @param world - The world state
+ * @param shooterId - The player performing the shot
+ * @param targetX - Target X position
+ * @param targetY - Target Y position
+ * @returns Shoot result with projectile ID
+ */
+function validateShoot(
+  world: PlatformerWorld,
+  shooterId: string,
+  targetX: number,
+  targetY: number,
+): { success: boolean; result?: PlatformerShootResult; worldUpdate?: PlatformerWorld } {
+  const shooter = world.players.get(shooterId);
+  if (!shooter || !isPlayerAlive(shooter)) {
+    return { success: false };
+  }
+
+  const spawnResult = spawnProjectile(world, shooterId, targetX, targetY);
+  if (!spawnResult) {
+    return { success: false };
+  }
+
+  return {
+    success: true,
+    result: {
+      type: "shoot",
+      projectileId: spawnResult.projectileId,
+    },
+    worldUpdate: spawnResult.world,
+  };
 }
 
 /**

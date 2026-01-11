@@ -27,12 +27,22 @@ const INPUT_RATE_MS = 1000 / 60;
 export class GameClient {
   private netcodeClient: NetcodeClientHandle<PlatformerWorld, PlatformerInput>;
   private renderer: CanvasRenderer;
+  private canvas: HTMLCanvasElement;
   private animationFrameId: number | null = null;
   private inputIntervalId: number | null = null;
   private keys: Set<string> = new Set();
   private keydownHandler: (e: KeyboardEvent) => void;
   private keyupHandler: (e: KeyboardEvent) => void;
+  private mousedownHandler: (e: MouseEvent) => void;
+  private mouseupHandler: (e: MouseEvent) => void;
+  private mousemoveHandler: (e: MouseEvent) => void;
   private debugOptions: DebugOptions = { showTrails: false, showServerPositions: false };
+
+  // Mouse state for shooting
+  private mouseX: number = 0;
+  private mouseY: number = 0;
+  private isMouseDown: boolean = false;
+  private shootThisFrame: boolean = false;
 
   // Position history for debug visualization
   private localPredictedHistory: PositionHistoryEntry[] = [];
@@ -61,6 +71,9 @@ export class GameClient {
       },
     });
 
+    // Store canvas reference for mouse coordinate conversion
+    this.canvas = canvas;
+
     // Bind handlers so we can remove them later
     this.keydownHandler = (e: KeyboardEvent) => {
       // Prevent default for arrow keys and space to avoid scrolling
@@ -71,6 +84,21 @@ export class GameClient {
     };
     this.keyupHandler = (e: KeyboardEvent) => {
       this.keys.delete(e.key.toLowerCase());
+    };
+    this.mousedownHandler = (e: MouseEvent) => {
+      if (e.button === 0) { // Left click
+        this.isMouseDown = true;
+        this.shootThisFrame = true;
+        this.updateMousePosition(e);
+      }
+    };
+    this.mouseupHandler = (e: MouseEvent) => {
+      if (e.button === 0) {
+        this.isMouseDown = false;
+      }
+    };
+    this.mousemoveHandler = (e: MouseEvent) => {
+      this.updateMousePosition(e);
     };
 
     // Set up input handling
@@ -84,11 +112,31 @@ export class GameClient {
   }
 
   /**
-   * Set up keyboard input handling
+   * Convert mouse event coordinates to world coordinates
+   */
+  private updateMousePosition(e: MouseEvent): void {
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    
+    // Get canvas-relative position
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+    
+    // Convert to world coordinates (canvas center is world origin)
+    this.mouseX = canvasX - this.canvas.width / 2;
+    this.mouseY = canvasY - this.canvas.height / 2;
+  }
+
+  /**
+   * Set up keyboard and mouse input handling
    */
   private setupInputHandling(): void {
     window.addEventListener("keydown", this.keydownHandler);
     window.addEventListener("keyup", this.keyupHandler);
+    this.canvas.addEventListener("mousedown", this.mousedownHandler);
+    this.canvas.addEventListener("mouseup", this.mouseupHandler);
+    this.canvas.addEventListener("mousemove", this.mousemoveHandler);
   }
 
   /**
@@ -117,8 +165,19 @@ export class GameClient {
     // Jump (Space, W, or Up arrow)
     const jump = this.keys.has(" ") || this.keys.has("w") || this.keys.has("arrowup");
 
+    // Shooting (mouse click)
+    const shoot = this.shootThisFrame;
+    this.shootThisFrame = false; // Reset after reading
+
     // Always send input so gravity/physics can be applied
-    this.netcodeClient.sendInput({ moveX, moveY: 0, jump });
+    this.netcodeClient.sendInput({
+      moveX,
+      moveY: 0,
+      jump,
+      shoot,
+      shootTargetX: this.mouseX,
+      shootTargetY: this.mouseY,
+    });
   }
 
   /**
@@ -275,6 +334,9 @@ export class GameClient {
     }
     window.removeEventListener("keydown", this.keydownHandler);
     window.removeEventListener("keyup", this.keyupHandler);
+    this.canvas.removeEventListener("mousedown", this.mousedownHandler);
+    this.canvas.removeEventListener("mouseup", this.mouseupHandler);
+    this.canvas.removeEventListener("mousemove", this.mousemoveHandler);
   }
 
   /**

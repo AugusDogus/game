@@ -5,6 +5,22 @@ import type { PlatformerWorld, PlatformerPlayer, PlatformerInput } from "./types
 import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED, DEFAULT_JUMP_VELOCITY } from "../../constants.js";
 import { createTestPlayer, createTestWorld } from "../../test-utils.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 const createPlayer = (
   id: string,
   overrides: Partial<Omit<PlatformerPlayer, "id">> = {},
@@ -132,7 +148,7 @@ describe("platformerPredictionScope", () => {
           ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
         ]),
       };
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(1, 0, false, 1000);
       const deltaTime = 100; // 100ms
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime);
@@ -148,7 +164,7 @@ describe("platformerPredictionScope", () => {
           ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
         ]),
       };
-      const input: PlatformerInput = { moveX: -1, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(-1, 0, false, 1000);
       const deltaTime = 100;
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime);
@@ -169,7 +185,7 @@ describe("platformerPredictionScope", () => {
           ],
         ]),
       };
-      const input: PlatformerInput = { moveX: 0, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(0, 0, false, 1000);
       const deltaTime = 100;
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime);
@@ -190,7 +206,7 @@ describe("platformerPredictionScope", () => {
           ],
         ]),
       };
-      const input: PlatformerInput = { moveX: 0, moveY: 0, jump: true, timestamp: 1000 };
+      const input: PlatformerInput = createInput(0, 0, true, 1000);
       const deltaTime = 16.67;
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime);
@@ -212,7 +228,7 @@ describe("platformerPredictionScope", () => {
           ],
         ]),
       };
-      const input: PlatformerInput = { moveX: 0, moveY: 0, jump: true, timestamp: 1000 };
+      const input: PlatformerInput = createInput(0, 0, true, 1000);
       const deltaTime = 16.67;
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime);
@@ -235,7 +251,7 @@ describe("platformerPredictionScope", () => {
           ],
         ]),
       };
-      const input: PlatformerInput = { moveX: 0, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(0, 0, false, 1000);
       const deltaTime = 100; // 100ms should push through floor
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime);
@@ -249,7 +265,7 @@ describe("platformerPredictionScope", () => {
 
     test("should return state unchanged for empty players", () => {
       const state: Partial<PlatformerWorld> = {};
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: true, timestamp: 1000 };
+      const input: PlatformerInput = createInput(1, 0, true, 1000);
 
       const result = platformerPredictionScope.simulatePredicted(state, input, 16.67);
 
@@ -258,7 +274,7 @@ describe("platformerPredictionScope", () => {
 
     test("should return state unchanged for empty players map", () => {
       const state: Partial<PlatformerWorld> = { players: new Map() };
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: true, timestamp: 1000 };
+      const input: PlatformerInput = createInput(1, 0, true, 1000);
 
       const result = platformerPredictionScope.simulatePredicted(state, input, 16.67);
 
@@ -269,7 +285,7 @@ describe("platformerPredictionScope", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([["player", createPlayer("player", { velocity: { x: 0, y: 0 } })]]),
       };
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(1, 0, false, 1000);
 
       const result = platformerPredictionScope.simulatePredicted(state, input, 16.67);
 
@@ -280,7 +296,7 @@ describe("platformerPredictionScope", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([["player", createPlayer("player", { velocity: { x: 100, y: 0 } })]]),
       };
-      const input: PlatformerInput = { moveX: 0, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(0, 0, false, 1000);
 
       const result = platformerPredictionScope.simulatePredicted(state, input, 16.67);
 
@@ -323,7 +339,7 @@ describe("platformerPredictionScope", () => {
       expect(predictable.players?.size).toBe(1);
 
       // Simulate movement input
-      const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
+      const input: PlatformerInput = createInput(1, 0, false, 1000);
       const predicted = platformerPredictionScope.simulatePredicted(predictable, input, 100);
 
       // Local player should have moved
@@ -350,7 +366,7 @@ describe("platformerPredictionScope", () => {
       // Apply 3 right movement inputs
       let state = initialState;
       for (let i = 0; i < 3; i++) {
-        const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 + i * 16 };
+        const input: PlatformerInput = createInput(1, 0, false, 1000 + i * 16);
         state = platformerPredictionScope.simulatePredicted(state, input, 16.67);
       }
 

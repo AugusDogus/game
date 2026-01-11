@@ -5,6 +5,22 @@ import { simulatePlatformer, addPlayerToWorld, forceStartGame } from "../example
 import { RollbackClient } from "./rollback.js";
 import { assertDefined, getPlayer } from "../test-utils.js";
 
+/** Helper to create test input with all required fields */
+const createInput = (
+  moveX: number,
+  moveY: number,
+  jump: boolean,
+  timestamp: number,
+): PlatformerInput => ({
+  moveX,
+  moveY,
+  jump,
+  shoot: false,
+  shootTargetX: 0,
+  shootTargetY: 0,
+  timestamp,
+});
+
 describe("RollbackClient", () => {
   let client: RollbackClient<PlatformerWorld, PlatformerInput>;
   let initialWorld: PlatformerWorld;
@@ -45,12 +61,7 @@ describe("RollbackClient", () => {
 
   describe("onLocalInput", () => {
     test("should queue local input for future frame", () => {
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now(),
-      };
+      const input = createInput(1, 0, false, Date.now());
 
       client.onLocalInput(input);
 
@@ -87,12 +98,7 @@ describe("RollbackClient", () => {
 
     test("should apply local input after delay", () => {
       // Queue movement input
-      const input: PlatformerInput = {
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now(),
-      };
+      const input = createInput(1, 0, false, Date.now());
       client.onLocalInput(input);
 
       // Advance past input delay
@@ -110,12 +116,7 @@ describe("RollbackClient", () => {
 
   describe("onRemoteInput", () => {
     test("should store remote input", () => {
-      const input: PlatformerInput = {
-        moveX: -1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now(),
-      };
+      const input = createInput(-1, 0, false, Date.now());
 
       // Remote input for frame 0
       client.onRemoteInput("remote-player", input, 0);
@@ -176,12 +177,7 @@ describe("RollbackClient", () => {
   describe("real-world scenarios", () => {
     test("local input responsiveness: input delay affects when input is applied", () => {
       // Queue movement input at frame 0
-      client.onLocalInput({
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now(),
-      });
+      client.onLocalInput(createInput(1, 0, false, Date.now()));
 
       // Advance one frame (input not yet applied due to delay)
       client.advanceFrame();
@@ -219,7 +215,7 @@ describe("RollbackClient", () => {
       // Receive late remote input for frame 1 (in the past)
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         1,
       );
 
@@ -239,7 +235,7 @@ describe("RollbackClient", () => {
       // Send remote input for frame 0
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         0,
       );
 
@@ -261,12 +257,12 @@ describe("RollbackClient", () => {
       // Add some inputs for remote player
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         0,
       );
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         1,
       );
 
@@ -304,12 +300,7 @@ describe("RollbackClient", () => {
 
     test("should clean up old input history", () => {
       // Add local input
-      client.onLocalInput({
-        moveX: 1,
-        moveY: 0,
-        jump: false,
-        timestamp: Date.now(),
-      });
+      client.onLocalInput(createInput(1, 0, false, Date.now()));
 
       // Advance many frames
       for (let i = 0; i < 100; i++) {
@@ -375,7 +366,7 @@ describe("RollbackClient", () => {
       // Receive late input for frame 0
       client.onRemoteInput(
         "remote-player",
-        { moveX: -1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(-1, 0, false, Date.now()),
         0,
       );
 
@@ -395,17 +386,17 @@ describe("RollbackClient", () => {
       // Receive multiple late inputs
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         2,
       );
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         5,
       );
       client.onRemoteInput(
         "remote-player",
-        { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() },
+        createInput(1, 0, false, Date.now()),
         8,
       );
 

@@ -86,6 +86,7 @@ export type {
   PlatformerInput,
   PlatformerPlayer,
   PlatformerWorld,
+  Projectile,
   // Level types
   Platform,
   SpawnPoint,
@@ -97,8 +98,10 @@ export type {
   GameState,
   // Action types
   PlatformerAttackAction,
+  PlatformerShootAction,
   PlatformerAction,
   PlatformerAttackResult,
+  PlatformerShootResult,
   PlatformerActionResult,
 } from "./examples/platformer/types.js";
 
@@ -115,6 +118,11 @@ export {
   PLAYER_WIDTH,
   PLAYER_HEIGHT,
   DEFAULT_MATCH_CONFIG,
+  // Projectile constants
+  PROJECTILE_SPEED,
+  PROJECTILE_DAMAGE,
+  PROJECTILE_RADIUS,
+  PROJECTILE_LIFETIME_TICKS,
   // Helper functions
   clampHealth,
   isPlayerAlive,

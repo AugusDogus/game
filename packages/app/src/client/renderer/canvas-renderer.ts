@@ -1,5 +1,5 @@
-import type { PlatformerPlayer, PlatformerWorld, Platform, GameState } from "@game/netcode";
-import { DEFAULT_FLOOR_Y, isPlayerAlive } from "@game/netcode";
+import type { PlatformerPlayer, PlatformerWorld, Platform, GameState, Projectile } from "@game/netcode";
+import { DEFAULT_FLOOR_Y, isPlayerAlive, PROJECTILE_RADIUS } from "@game/netcode";
 
 /** Safely get an element from an array, throwing if out of bounds */
 function getAt<T>(array: T[], index: number): T {
@@ -183,6 +183,50 @@ export class CanvasRenderer {
     for (const player of players) {
       const isLocal = player.id === localPlayerId;
       this.drawPlayer(player, isLocal);
+    }
+  }
+
+  /**
+   * Draw a single projectile
+   */
+  drawProjectile(projectile: Projectile, isOwn: boolean = false): void {
+    this.ctx.save();
+
+    const { x, y } = projectile.position;
+    const radius = PROJECTILE_RADIUS;
+
+    // Draw projectile glow
+    const gradient = this.ctx.createRadialGradient(x, y, 0, x, y, radius * 2);
+    if (isOwn) {
+      gradient.addColorStop(0, "#fbbf24"); // Yellow core for own projectiles
+      gradient.addColorStop(0.5, "#f59e0b");
+      gradient.addColorStop(1, "transparent");
+    } else {
+      gradient.addColorStop(0, "#ef4444"); // Red core for enemy projectiles
+      gradient.addColorStop(0.5, "#dc2626");
+      gradient.addColorStop(1, "transparent");
+    }
+    this.ctx.fillStyle = gradient;
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, radius * 2, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Draw projectile core
+    this.ctx.fillStyle = isOwn ? "#fef3c7" : "#fecaca";
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.restore();
+  }
+
+  /**
+   * Draw all projectiles
+   */
+  drawProjectiles(projectiles: Projectile[], localPlayerId: string | null): void {
+    for (const projectile of projectiles) {
+      const isOwn = projectile.ownerId === localPlayerId;
+      this.drawProjectile(projectile, isOwn);
     }
   }
 
@@ -681,6 +725,9 @@ export class CanvasRenderer {
     // Draw players
     const players = Array.from(world.players.values());
     this.drawPlayers(players, localPlayerId);
+
+    // Draw projectiles
+    this.drawProjectiles(world.projectiles, localPlayerId);
 
     // Draw UI elements
     this.drawScoreboard(players);
