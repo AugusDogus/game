@@ -63,7 +63,17 @@ stateDiagram-v2
 - Last player standing
 - Most kills in time limit
 - First to X kills
-- Configurable per match
+
+**Configuration**: Win condition is set via `MatchConfig` passed to server on game start:
+```typescript
+interface MatchConfig {
+  winCondition: 'last_standing' | 'most_kills' | 'first_to_x';
+  killTarget?: number;    // For 'first_to_x'
+  timeLimitMs?: number;   // For 'most_kills'
+}
+```
+
+**Detection**: Server checks win condition in `tick()` after processing combat. When triggered, sets `gameState: 'gameover'` and `winner` field, then broadcasts final snapshot.
 
 ### 5. Level Design
 
@@ -85,12 +95,12 @@ stateDiagram-v2
 ```typescript
 interface PlatformerPlayer {
   // existing fields...
-  health: number;
-  maxHealth: number;
+  health: number;          // Current health, clamped to [0, maxHealth]
+  maxHealth: number;       // Maximum health (no overheal)
   deaths: number;
-  kills: number;
+  kills: number;           // Incremented for final blow only (no assists)
   lastHitBy: string | null;
-  respawnTimer: number | null;
+  respawnTimer: number | null;  // When non-null, player is invulnerable and cannot act
 }
 
 interface PlatformerWorld {
@@ -98,5 +108,11 @@ interface PlatformerWorld {
   gameState: 'lobby' | 'countdown' | 'playing' | 'gameover';
   platforms: Platform[];
   winner: string | null;
+  matchConfig: MatchConfig;
 }
 ```
+
+**Guardrails**:
+- Health is clamped: `health = Math.max(0, Math.min(maxHealth, newHealth))`
+- Respawn invulnerability: While `respawnTimer !== null`, player cannot take damage
+- Kill attribution: Only the `lastHitBy` player gets the kill when `health <= 0`
