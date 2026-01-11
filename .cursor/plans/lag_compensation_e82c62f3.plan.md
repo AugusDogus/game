@@ -22,6 +22,17 @@ todos:
 
 When a client shoots, they see other players in the past (due to interpolation delay). Lag compensation lets the server rewind time to validate hits against where targets *actually were* from the shooter's perspective.
 
+### Clock Domain Rules
+
+Timestamps use **server time** as the authoritative clock:
+
+1. **Client sends `clientTimestamp`** - their local clock when action occurred
+2. **Server maintains `clockOffset`** per client - estimated via periodic ping/pong sync
+3. **Rewind calculation**: `rewoundServerTime = clientTimestamp + clockOffset - interpolationDelay`
+4. **Fallback** (if clock sync unavailable): `serverReceiveTime - measuredOneWayDelay` where `measuredOneWayDelay = RTT / 2`
+
+This ensures abuse resistance (server controls the authoritative time) while still compensating for legitimate network delay.
+
 ## Architecture
 
 ```mermaid
