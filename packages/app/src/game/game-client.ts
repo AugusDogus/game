@@ -158,11 +158,14 @@ export class GameClient {
         if (!this.otherPlayersHistory.has(playerId)) {
           this.otherPlayersHistory.set(playerId, []);
         }
-        this.addToHistory(this.otherPlayersHistory.get(playerId)!, {
-          x: player.position.x,
-          y: player.position.y,
-          timestamp: now,
-        });
+        const history = this.otherPlayersHistory.get(playerId);
+        if (history) {
+          this.addToHistory(history, {
+            x: player.position.x,
+            y: player.position.y,
+            timestamp: now,
+          });
+        }
       }
     }
 
@@ -189,11 +192,14 @@ export class GameClient {
           if (!this.otherPlayersServerHistory.has(playerId)) {
             this.otherPlayersServerHistory.set(playerId, []);
           }
-          this.addToHistory(this.otherPlayersServerHistory.get(playerId)!, {
-            x: player.position.x,
-            y: player.position.y,
-            timestamp: now,
-          });
+          const history = this.otherPlayersServerHistory.get(playerId);
+          if (history) {
+            this.addToHistory(history, {
+              x: player.position.x,
+              y: player.position.y,
+              timestamp: now,
+            });
+          }
         }
       }
     }

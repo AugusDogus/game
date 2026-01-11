@@ -24,7 +24,8 @@ export const mergePlatformerInputs: InputMerger<PlatformerInput> = (
     return createIdleInput();
   }
 
-  const lastInput = inputs[inputs.length - 1]!;
+  // Safe to use at() here since we checked length > 0 above
+  const lastInput = inputs.at(-1) as PlatformerInput;
   const anyJump = inputs.some((input) => input.jump);
 
   return {
@@ -62,14 +63,17 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
       const input = createIdleInput();
       const newPlayer = simulatePlayer(player, input, deltaSeconds);
       newPlayers.set(playerId, newPlayer);
-    } else if (inputs.has(playerId)) {
-      // This player has input - simulate them
-      const input = inputs.get(playerId)!;
-      const newPlayer = simulatePlayer(player, input, deltaSeconds);
-      newPlayers.set(playerId, newPlayer);
     } else {
-      // Player not in inputs map - keep unchanged (they'll get their own simulation)
-      newPlayers.set(playerId, player);
+      // Check if this player has input
+      const input = inputs.get(playerId);
+      if (input) {
+        // This player has input - simulate them
+        const newPlayer = simulatePlayer(player, input, deltaSeconds);
+        newPlayers.set(playerId, newPlayer);
+      } else {
+        // Player not in inputs map - keep unchanged (they'll get their own simulation)
+        newPlayers.set(playerId, player);
+      }
     }
   }
 

@@ -42,8 +42,8 @@ describe("LagCompensator", () => {
 
       const info = compensator.getClientClockInfo("client1");
       expect(info).toBeDefined();
-      expect(info!.clockOffset).toBe(50);
-      expect(info!.rtt).toBe(100);
+      expect(info?.clockOffset).toBe(50);
+      expect(info?.rtt).toBe(100);
     });
 
     it("should update existing clock info", () => {
@@ -51,8 +51,8 @@ describe("LagCompensator", () => {
       compensator.updateClientClock("client1", { clockOffset: 60 });
 
       const info = compensator.getClientClockInfo("client1");
-      expect(info!.clockOffset).toBe(60);
-      expect(info!.rtt).toBe(100); // Preserved from previous
+      expect(info?.clockOffset).toBe(60);
+      expect(info?.rtt).toBe(100); // Preserved from previous
     });
   });
 
@@ -200,7 +200,7 @@ describe("LagCompensator", () => {
       };
       snapshotBuffer.add(snapshot);
 
-      let receivedClientId: string | null = null;
+      let receivedClientId = "";
       const validator = (_world: TestWorld, clientId: string) => {
         receivedClientId = clientId;
         return { success: true };

@@ -176,11 +176,11 @@ describe("InputQueue", () => {
       inputQueue.enqueue("client-1", createInput(1));
 
       const batched = inputQueue.getAllPendingInputsBatched();
-      const inputs = batched.get("client-1")!;
+      const inputs = batched.get("client-1");
       
-      expect(inputs[0]?.seq).toBe(0);
-      expect(inputs[1]?.seq).toBe(1);
-      expect(inputs[2]?.seq).toBe(2);
+      expect(inputs?.[0]?.seq).toBe(0);
+      expect(inputs?.[1]?.seq).toBe(1);
+      expect(inputs?.[2]?.seq).toBe(2);
     });
   });
 

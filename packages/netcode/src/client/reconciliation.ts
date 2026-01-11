@@ -68,8 +68,8 @@ export class Reconciler<TWorld, TInput extends { timestamp: number }> {
 
     // Set the predictor's timestamp to the last replayed input's timestamp
     // so the next predicted input uses the correct delta (matching server behavior)
-    if (unacknowledged.length > 0) {
-      const lastReplayedInput = unacknowledged[unacknowledged.length - 1]!;
+    const lastReplayedInput = unacknowledged.at(-1);
+    if (lastReplayedInput) {
       this.predictor.setLastInputTimestamp(lastReplayedInput.input.timestamp);
     }
     // If no inputs were replayed, don't reset - keep the existing timestamp

@@ -9,7 +9,7 @@ import type { PredictionScope } from "../client/prediction-scope.js";
 import { Predictor } from "../client/prediction.js";
 import { Reconciler } from "../client/reconciliation.js";
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
-import type { InterpolateFunction, Snapshot, InputMerger } from "../core/types.js";
+import type { InputMerger, InterpolateFunction, Snapshot } from "../core/types.js";
 import type { WorldManager } from "../core/world.js";
 import { InputQueue } from "../server/input-queue.js";
 import {
@@ -190,7 +190,8 @@ export class ServerAuthoritativeServer<
             "mergeInputs called with empty array - provide a custom merger that handles idle inputs",
           );
         }
-        return inputs[inputs.length - 1]!;
+        // Safe: we just checked length > 0
+        return inputs.at(-1) as TInput;
       });
     this.createIdleInput = config.createIdleInput;
   }
@@ -233,8 +234,8 @@ export class ServerAuthoritativeServer<
     const inputAcks = new Map<string, number>();
     for (const clientId of this.inputQueue.getClientsWithInputs()) {
       const inputs = this.inputQueue.getPendingInputs(clientId);
-      if (inputs.length > 0) {
-        const lastInput = inputs[inputs.length - 1]!;
+      const lastInput = inputs.at(-1);
+      if (lastInput) {
         inputAcks.set(clientId, lastInput.seq);
         this.inputQueue.acknowledge(clientId, lastInput.seq);
       }

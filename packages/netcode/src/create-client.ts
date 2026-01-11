@@ -5,23 +5,21 @@
  */
 
 import type { Socket } from "socket.io-client";
-import type { Snapshot, InterpolateFunction, ActionResult } from "./core/types.js";
 import type { PredictionScope } from "./client/prediction-scope.js";
-import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js";
 import { DEFAULT_INTERPOLATION_DELAY_MS } from "./constants.js";
+import type { ActionResult, InterpolateFunction, Snapshot } from "./core/types.js";
+import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js";
 
 /**
  * Configuration for creating a netcode client.
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
- * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
  * @typeParam TActionResult - The type of action results (optional)
  */
 export interface CreateClientConfig<
   TWorld,
   TInput extends { timestamp: number },
-  TAction = unknown,
   TActionResult = unknown,
 > {
   /** Socket.IO client socket instance */
@@ -132,7 +130,7 @@ export function createNetcodeClient<
   TAction = unknown,
   TActionResult = unknown,
 >(
-  config: CreateClientConfig<TWorld, TInput, TAction, TActionResult>,
+  config: CreateClientConfig<TWorld, TInput, TActionResult>,
 ): NetcodeClientHandle<TWorld, TInput, TAction> {
   const interpolationDelayMs = config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
   let simulatedLatency = config.simulatedLatency ?? 0;

@@ -99,11 +99,11 @@ describe("RollbackClient", () => {
         client.advanceFrame();
       }
 
-      const state = client.getStateForRendering()!;
-      const player = state.players.get("local-player")!;
+      const state = client.getStateForRendering();
+      const player = state?.players.get("local-player");
 
       // Player should have moved right (input was applied at frame 2)
-      expect(player.position.x).toBeGreaterThan(0);
+      expect(player?.position.x).toBeGreaterThan(0);
     });
   });
 
@@ -122,11 +122,11 @@ describe("RollbackClient", () => {
       // Advance frame to apply it
       client.advanceFrame();
 
-      const state = client.getStateForRendering()!;
-      const player = state.players.get("remote-player")!;
+      const state = client.getStateForRendering();
+      const player = state?.players.get("remote-player");
 
       // Remote player should have moved left
-      expect(player.position.x).toBeLessThan(0);
+      expect(player?.position.x).toBeLessThan(0);
     });
   });
 
@@ -208,8 +208,8 @@ describe("RollbackClient", () => {
       }
 
       // Get state before rollback
-      const stateBeforeRollback = client.getStateForRendering()!;
-      const remotePlayerBefore = stateBeforeRollback.players.get("remote-player")!;
+      const stateBeforeRollback = client.getStateForRendering();
+      const remotePlayerBefore = stateBeforeRollback?.players.get("remote-player");
 
       // Receive late remote input for frame 1 (in the past)
       client.onRemoteInput(
@@ -219,11 +219,11 @@ describe("RollbackClient", () => {
       );
 
       // State should have been resimulated
-      const stateAfterRollback = client.getStateForRendering()!;
-      const remotePlayerAfter = stateAfterRollback.players.get("remote-player")!;
+      const stateAfterRollback = client.getStateForRendering();
+      const remotePlayerAfter = stateAfterRollback?.players.get("remote-player");
 
       // Remote player's position should have changed due to the late input
-      expect(remotePlayerAfter.position.x).toBeGreaterThan(remotePlayerBefore.position.x);
+      expect(remotePlayerAfter?.position.x).toBeGreaterThan(remotePlayerBefore?.position.x ?? 0);
     });
 
     test("input prediction: uses last known input for missing frames", () => {
@@ -239,11 +239,11 @@ describe("RollbackClient", () => {
         client.advanceFrame();
       }
 
-      const state = client.getStateForRendering()!;
-      const remotePlayer = state.players.get("remote-player")!;
+      const state = client.getStateForRendering();
+      const remotePlayer = state?.players.get("remote-player");
 
       // Remote player should have continued moving right (input prediction)
-      expect(remotePlayer.position.x).toBeGreaterThan(0);
+      expect(remotePlayer?.position.x).toBeGreaterThan(0);
     });
   });
 
@@ -268,7 +268,7 @@ describe("RollbackClient", () => {
         client.advanceFrame();
       }
 
-      const state = client.getStateForRendering()!;
+      const state = client.getStateForRendering();
       expect(state).not.toBeNull();
     });
 
@@ -372,8 +372,8 @@ describe("RollbackClient", () => {
       // Should handle rollback to beginning
       expect(client.getCurrentFrame()).toBe(5);
       
-      const state = client.getStateForRendering()!;
-      expect(state.players.get("remote-player")?.position.x).toBeLessThan(0);
+      const state = client.getStateForRendering();
+      expect(state?.players.get("remote-player")?.position.x).toBeLessThan(0);
     });
 
     test("should handle multiple late inputs in sequence", () => {
@@ -399,9 +399,9 @@ describe("RollbackClient", () => {
         8,
       );
 
-      const state = client.getStateForRendering()!;
+      const state = client.getStateForRendering();
       expect(state).not.toBeNull();
-      expect(state.players.get("remote-player")?.position.x).toBeGreaterThan(0);
+      expect(state?.players.get("remote-player")?.position.x).toBeGreaterThan(0);
     });
   });
 });

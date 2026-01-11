@@ -58,7 +58,8 @@ export class GameLoop<TWorld, TInput> {
             "mergeInputs called with empty array - provide a custom merger that handles idle inputs",
           );
         }
-        return inputs[inputs.length - 1]!;
+        // Safe: we just checked length > 0
+        return inputs.at(-1) as TInput;
       });
     this.getConnectedClients = getConnectedClients;
     this.createIdleInput = createIdleInput;
@@ -84,8 +85,8 @@ export class GameLoop<TWorld, TInput> {
     const inputAcks = new Map<string, number>();
     for (const clientId of this.inputQueue.getClientsWithInputs()) {
       const inputs = this.inputQueue.getPendingInputs(clientId);
-      if (inputs.length > 0) {
-        const lastInput = inputs[inputs.length - 1]!;
+      const lastInput = inputs.at(-1);
+      if (lastInput) {
         inputAcks.set(clientId, lastInput.seq);
         // Acknowledge all processed inputs
         this.inputQueue.acknowledge(clientId, lastInput.seq);

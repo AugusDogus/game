@@ -48,8 +48,9 @@ export class SnapshotBuffer<TWorld> {
     }
 
     // Find the snapshot closest to the requested timestamp
-    let closest = this.snapshots[0]!;
-    let minDiff = Math.abs(closest.timestamp - timestamp);
+    // We know snapshots[0] exists since we checked length > 0
+    let closest: Snapshot<TWorld> | undefined = this.snapshots[0];
+    let minDiff = closest ? Math.abs(closest.timestamp - timestamp) : Infinity;
 
     for (const snapshot of this.snapshots) {
       const diff = Math.abs(snapshot.timestamp - timestamp);

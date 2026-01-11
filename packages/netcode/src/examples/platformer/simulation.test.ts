@@ -38,12 +38,12 @@ describe("simulatePlatformer", () => {
       const inputs = new Map<string, PlatformerInput>();
 
       const newWorld = simulatePlatformer(world, inputs, 50);
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
       // Velocity should increase (positive = downward)
-      expect(player.velocity.y).toBeGreaterThan(0);
+      expect(player?.velocity.y).toBeGreaterThan(0);
       // Position should move down
-      expect(player.position.y).toBeGreaterThan(0);
+      expect(player?.position.y).toBeGreaterThan(0);
     });
 
     test("should accumulate gravity over time", () => {
@@ -55,9 +55,9 @@ describe("simulatePlatformer", () => {
       world = simulatePlatformer(world, inputs, 50);
       world = simulatePlatformer(world, inputs, 50);
 
-      const player = world.players.get("player-1")!;
+      const player = world.players.get("player-1");
       // After 3 ticks, should have fallen significantly
-      expect(player.velocity.y).toBeGreaterThan(DEFAULT_GRAVITY * 0.05 * 2);
+      expect(player?.velocity.y).toBeGreaterThan(DEFAULT_GRAVITY * 0.05 * 2);
     });
   });
 
@@ -73,12 +73,12 @@ describe("simulatePlatformer", () => {
         newWorld = simulatePlatformer(newWorld, inputs, 50);
       }
 
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
       // Player should be on floor (center at floor - half height)
-      expect(player.position.y).toBe(DEFAULT_FLOOR_Y - 10);
-      expect(player.velocity.y).toBe(0);
-      expect(player.isGrounded).toBe(true);
+      expect(player?.position.y).toBe(DEFAULT_FLOOR_Y - 10);
+      expect(player?.velocity.y).toBe(0);
+      expect(player?.isGrounded).toBe(true);
     });
   });
 
@@ -95,10 +95,10 @@ describe("simulatePlatformer", () => {
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
-      expect(player.position.x).toBeGreaterThan(0);
-      expect(player.velocity.x).toBe(DEFAULT_PLAYER_SPEED);
+      expect(player?.position.x).toBeGreaterThan(0);
+      expect(player?.velocity.x).toBe(DEFAULT_PLAYER_SPEED);
     });
 
     test("should move left when moveX is negative", () => {
@@ -113,10 +113,10 @@ describe("simulatePlatformer", () => {
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
-      expect(player.position.x).toBeLessThan(0);
-      expect(player.velocity.x).toBe(-DEFAULT_PLAYER_SPEED);
+      expect(player?.position.x).toBeLessThan(0);
+      expect(player?.velocity.x).toBe(-DEFAULT_PLAYER_SPEED);
     });
 
     test("should stop when no input", () => {
@@ -129,10 +129,10 @@ describe("simulatePlatformer", () => {
       const inputs = new Map<string, PlatformerInput>();
 
       const newWorld = simulatePlatformer(world, inputs, 50);
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
       // Velocity should be 0 with no input (no momentum in this simple physics)
-      expect(player.velocity.x).toBe(0);
+      expect(player?.velocity.x).toBe(0);
     });
   });
 
@@ -149,11 +149,11 @@ describe("simulatePlatformer", () => {
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
       // Should have upward velocity (negative Y)
-      expect(player.velocity.y).toBe(DEFAULT_JUMP_VELOCITY);
-      expect(player.isGrounded).toBe(false);
+      expect(player?.velocity.y).toBe(DEFAULT_JUMP_VELOCITY);
+      expect(player?.isGrounded).toBe(false);
     });
 
     test("should not jump when not grounded", () => {
@@ -163,10 +163,10 @@ describe("simulatePlatformer", () => {
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
-      const player = newWorld.players.get("player-1")!;
+      const player = newWorld.players.get("player-1");
 
       // Should not have jump velocity, just gravity
-      expect(player.velocity.y).not.toBe(DEFAULT_JUMP_VELOCITY);
+      expect(player?.velocity.y).not.toBe(DEFAULT_JUMP_VELOCITY);
     });
   });
 
@@ -183,10 +183,10 @@ describe("simulatePlatformer", () => {
       );
 
       // Set both players as grounded
-      const p1 = world.players.get("player-1")!;
-      const p2 = world.players.get("player-2")!;
-      world.players.set("player-1", { ...p1, isGrounded: true });
-      world.players.set("player-2", { ...p2, isGrounded: true });
+      const p1 = world.players.get("player-1");
+      const p2 = world.players.get("player-2");
+      if (p1) world.players.set("player-1", { ...p1, isGrounded: true });
+      if (p2) world.players.set("player-2", { ...p2, isGrounded: true });
 
       const inputs = new Map<string, PlatformerInput>([
         ["player-1", { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() }],
@@ -195,16 +195,16 @@ describe("simulatePlatformer", () => {
 
       const newWorld = simulatePlatformer(world, inputs, 50);
 
-      const newP1 = newWorld.players.get("player-1")!;
-      const newP2 = newWorld.players.get("player-2")!;
+      const newP1 = newWorld.players.get("player-1");
+      const newP2 = newWorld.players.get("player-2");
 
       // Player 1 moved right and stays on ground (grounded players have y velocity = 0)
-      expect(newP1.position.x).toBeGreaterThan(0);
-      expect(newP1.isGrounded).toBe(true);
+      expect(newP1?.position.x).toBeGreaterThan(0);
+      expect(newP1?.isGrounded).toBe(true);
 
       // Player 2 moved left and jumped
-      expect(newP2.position.x).toBeLessThan(100);
-      expect(newP2.velocity.y).toBe(DEFAULT_JUMP_VELOCITY);
+      expect(newP2?.position.x).toBeLessThan(100);
+      expect(newP2?.velocity.y).toBe(DEFAULT_JUMP_VELOCITY);
     });
   });
 
@@ -231,9 +231,9 @@ describe("addPlayerToWorld", () => {
     const world = createPlatformerWorld();
     const newWorld = addPlayerToWorld(world, "player-1", { x: 100, y: 50 });
 
-    const player = newWorld.players.get("player-1")!;
-    expect(player.position.x).toBe(100);
-    expect(player.position.y).toBe(50);
+    const player = newWorld.players.get("player-1");
+    expect(player?.position.x).toBe(100);
+    expect(player?.position.y).toBe(50);
   });
 
   test("should not modify original world", () => {
