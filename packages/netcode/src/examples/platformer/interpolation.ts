@@ -3,7 +3,41 @@
  */
 
 import type { InterpolateFunction } from "../../core/types.js";
-import type { PlatformerWorld, PlatformerPlayer } from "./types.js";
+import type { PlatformerPlayer, PlatformerWorld } from "./types.js";
+
+/**
+ * Linear interpolation helper
+ */
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+/**
+ * Interpolate a single player between two states
+ */
+const interpolatePlayer = (
+  fromPlayer: PlatformerPlayer,
+  toPlayer: PlatformerPlayer,
+  alpha: number,
+): PlatformerPlayer => ({
+  ...toPlayer,
+  // Interpolate position smoothly
+  position: {
+    x: lerp(fromPlayer.position.x, toPlayer.position.x, alpha),
+    y: lerp(fromPlayer.position.y, toPlayer.position.y, alpha),
+  },
+  // Interpolate velocity smoothly
+  velocity: {
+    x: lerp(fromPlayer.velocity.x, toPlayer.velocity.x, alpha),
+    y: lerp(fromPlayer.velocity.y, toPlayer.velocity.y, alpha),
+  },
+  // Don't interpolate discrete values - use target state
+  isGrounded: toPlayer.isGrounded,
+  health: toPlayer.health,
+  maxHealth: toPlayer.maxHealth,
+  deaths: toPlayer.deaths,
+  kills: toPlayer.kills,
+  lastHitBy: toPlayer.lastHitBy,
+  respawnTimer: toPlayer.respawnTimer,
+});
 
 /**
  * Interpolate between two platformer world states.
@@ -26,20 +60,7 @@ export const interpolatePlatformer: InterpolateFunction<PlatformerWorld> = (
       continue;
     }
 
-    // Linear interpolation of position and velocity
-    interpolatedPlayers.set(playerId, {
-      ...toPlayer,
-      position: {
-        x: lerp(fromPlayer.position.x, toPlayer.position.x, alpha),
-        y: lerp(fromPlayer.position.y, toPlayer.position.y, alpha),
-      },
-      velocity: {
-        x: lerp(fromPlayer.velocity.x, toPlayer.velocity.x, alpha),
-        y: lerp(fromPlayer.velocity.y, toPlayer.velocity.y, alpha),
-      },
-      // Don't interpolate boolean - use target state
-      isGrounded: toPlayer.isGrounded,
-    });
+    interpolatedPlayers.set(playerId, interpolatePlayer(fromPlayer, toPlayer, alpha));
   }
 
   // Include players that were in 'from' but not in 'to' (recently left)
@@ -51,15 +72,9 @@ export const interpolatePlatformer: InterpolateFunction<PlatformerWorld> = (
   }
 
   return {
+    ...to,
     players: interpolatedPlayers,
     // Use target tick (we're interpolating towards it)
     tick: to.tick,
   };
 };
-
-/**
- * Linear interpolation helper
- */
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}

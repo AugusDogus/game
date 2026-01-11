@@ -3,29 +3,30 @@ import { platformerPredictionScope } from "./prediction.js";
 import { createIdleInput } from "./types.js";
 import type { PlatformerWorld, PlatformerPlayer, PlatformerInput } from "./types.js";
 import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED, DEFAULT_JUMP_VELOCITY } from "../../constants.js";
+import { createTestPlayer, createTestWorld } from "../../test-utils.js";
 
-function createPlayer(overrides: Partial<PlatformerPlayer> = {}): PlatformerPlayer {
-  return {
-    id: "test-player",
-    position: { x: 0, y: DEFAULT_FLOOR_Y - 10 }, // On ground (player height ~20)
-    velocity: { x: 0, y: 0 },
-    isGrounded: true,
+const createPlayer = (
+  id: string,
+  overrides: Partial<Omit<PlatformerPlayer, "id">> = {},
+): PlatformerPlayer =>
+  createTestPlayer(id, {
+    position: overrides.position ?? { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+    velocity: overrides.velocity ?? { x: 0, y: 0 },
+    isGrounded: overrides.isGrounded ?? true,
     ...overrides,
-  };
-}
+  });
 
-function createWorld(players: Map<string, PlatformerPlayer>, tick: number = 0): PlatformerWorld {
-  return { players, tick };
-}
+const createWorld = (players: PlatformerPlayer[], tick: number = 0): PlatformerWorld =>
+  createTestWorld(players, { tick, gameState: "playing" });
 
 describe("platformerPredictionScope", () => {
   describe("extractPredictable", () => {
     test("should extract only the local player", () => {
-      const world = createWorld(new Map([
-        ["local", createPlayer({ position: { x: 100, y: 100 } })],
-        ["remote1", createPlayer({ position: { x: 200, y: 200 } })],
-        ["remote2", createPlayer({ position: { x: 300, y: 300 } })],
-      ]));
+      const world = createWorld([
+        createPlayer("local", { position: { x: 100, y: 100 } }),
+        createPlayer("remote1", { position: { x: 200, y: 200 } }),
+        createPlayer("remote2", { position: { x: 300, y: 300 } }),
+      ]);
 
       const result = platformerPredictionScope.extractPredictable(world, "local");
 
@@ -36,23 +37,21 @@ describe("platformerPredictionScope", () => {
     });
 
     test("should copy player data, not reference", () => {
-      const originalPlayer = createPlayer({ position: { x: 100, y: 100 } });
-      const world = createWorld(new Map([["local", originalPlayer]]));
+      const originalPlayer = createPlayer("local", { position: { x: 100, y: 100 } });
+      const world = createWorld([originalPlayer]);
 
       const result = platformerPredictionScope.extractPredictable(world, "local");
       const extractedPlayer = result.players?.get("local");
 
       // Should have same values
       expect(extractedPlayer?.position.x).toBe(100);
-      
+
       // But not the same object reference
       expect(extractedPlayer).not.toBe(originalPlayer);
     });
 
     test("should return empty Map when player not found", () => {
-      const world = createWorld(new Map([
-        ["other", createPlayer()],
-      ]));
+      const world = createWorld([createPlayer("other")]);
 
       const result = platformerPredictionScope.extractPredictable(world, "nonexistent");
 
@@ -60,7 +59,7 @@ describe("platformerPredictionScope", () => {
     });
 
     test("should return empty Map for empty world", () => {
-      const world = createWorld(new Map());
+      const world = createWorld([]);
 
       const result = platformerPredictionScope.extractPredictable(world, "anyPlayer");
 
@@ -70,14 +69,12 @@ describe("platformerPredictionScope", () => {
 
   describe("mergePrediction", () => {
     test("should override local player with predicted state", () => {
-      const serverWorld = createWorld(new Map([
-        ["local", createPlayer({ position: { x: 100, y: 100 } })],
-        ["remote", createPlayer({ position: { x: 200, y: 200 } })],
-      ]));
+      const serverWorld = createWorld([
+        createPlayer("local", { position: { x: 100, y: 100 } }),
+        createPlayer("remote", { position: { x: 200, y: 200 } }),
+      ]);
       const predicted: Partial<PlatformerWorld> = {
-        players: new Map([
-          ["local", createPlayer({ position: { x: 150, y: 150 } })],
-        ]),
+        players: new Map([["local", createPlayer("local", { position: { x: 150, y: 150 } })]]),
       };
 
       const result = platformerPredictionScope.mergePrediction(serverWorld, predicted);
@@ -89,15 +86,13 @@ describe("platformerPredictionScope", () => {
     });
 
     test("should keep all server players", () => {
-      const serverWorld = createWorld(new Map([
-        ["p1", createPlayer()],
-        ["p2", createPlayer()],
-        ["p3", createPlayer()],
-      ]));
+      const serverWorld = createWorld([
+        createPlayer("p1"),
+        createPlayer("p2"),
+        createPlayer("p3"),
+      ]);
       const predicted: Partial<PlatformerWorld> = {
-        players: new Map([
-          ["p1", createPlayer({ position: { x: 999, y: 999 } })],
-        ]),
+        players: new Map([["p1", createPlayer("p1", { position: { x: 999, y: 999 } })]]),
       };
 
       const result = platformerPredictionScope.mergePrediction(serverWorld, predicted);
@@ -109,9 +104,7 @@ describe("platformerPredictionScope", () => {
     });
 
     test("should return server world if prediction is empty", () => {
-      const serverWorld = createWorld(new Map([
-        ["player", createPlayer({ position: { x: 100, y: 100 } })],
-      ]));
+      const serverWorld = createWorld([createPlayer("player", { position: { x: 100, y: 100 } })]);
 
       const result1 = platformerPredictionScope.mergePrediction(serverWorld, {});
       expect(result1).toBe(serverWorld);
@@ -121,13 +114,9 @@ describe("platformerPredictionScope", () => {
     });
 
     test("should preserve other server world properties", () => {
-      const serverWorld = createWorld(new Map([
-        ["local", createPlayer()],
-      ]), 42);
+      const serverWorld = createWorld([createPlayer("local")], 42);
       const predicted: Partial<PlatformerWorld> = {
-        players: new Map([
-          ["local", createPlayer({ position: { x: 500, y: 500 } })],
-        ]),
+        players: new Map([["local", createPlayer("local", { position: { x: 500, y: 500 } })]]),
       };
 
       const result = platformerPredictionScope.mergePrediction(serverWorld, predicted);
@@ -140,7 +129,7 @@ describe("platformerPredictionScope", () => {
     test("should move player right on positive moveX", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
+          ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
         ]),
       };
       const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
@@ -156,7 +145,7 @@ describe("platformerPredictionScope", () => {
     test("should move player left on negative moveX", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
+          ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
         ]),
       };
       const input: PlatformerInput = { moveX: -1, moveY: 0, jump: false, timestamp: 1000 };
@@ -170,11 +159,14 @@ describe("platformerPredictionScope", () => {
     test("should apply gravity when in air", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ 
-            position: { x: 0, y: 100 }, // Above floor
-            velocity: { x: 0, y: 0 },
-            isGrounded: false 
-          })],
+          [
+            "player",
+            createPlayer("player", {
+              position: { x: 0, y: 100 }, // Above floor
+              velocity: { x: 0, y: 0 },
+              isGrounded: false,
+            }),
+          ],
         ]),
       };
       const input: PlatformerInput = { moveX: 0, moveY: 0, jump: false, timestamp: 1000 };
@@ -189,10 +181,13 @@ describe("platformerPredictionScope", () => {
     test("should jump when grounded and jump=true", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ 
-            position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
-            isGrounded: true 
-          })],
+          [
+            "player",
+            createPlayer("player", {
+              position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+              isGrounded: true,
+            }),
+          ],
         ]),
       };
       const input: PlatformerInput = { moveX: 0, moveY: 0, jump: true, timestamp: 1000 };
@@ -207,11 +202,14 @@ describe("platformerPredictionScope", () => {
     test("should not jump when not grounded", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ 
-            position: { x: 0, y: 100 },
-            velocity: { x: 0, y: 50 },
-            isGrounded: false 
-          })],
+          [
+            "player",
+            createPlayer("player", {
+              position: { x: 0, y: 100 },
+              velocity: { x: 0, y: 50 },
+              isGrounded: false,
+            }),
+          ],
         ]),
       };
       const input: PlatformerInput = { moveX: 0, moveY: 0, jump: true, timestamp: 1000 };
@@ -227,11 +225,14 @@ describe("platformerPredictionScope", () => {
     test("should land on floor", () => {
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ 
-            position: { x: 0, y: DEFAULT_FLOOR_Y - 5 }, // Just above floor
-            velocity: { x: 0, y: 100 }, // Falling fast
-            isGrounded: false 
-          })],
+          [
+            "player",
+            createPlayer("player", {
+              position: { x: 0, y: DEFAULT_FLOOR_Y - 5 }, // Just above floor
+              velocity: { x: 0, y: 100 }, // Falling fast
+              isGrounded: false,
+            }),
+          ],
         ]),
       };
       const input: PlatformerInput = { moveX: 0, moveY: 0, jump: false, timestamp: 1000 };
@@ -266,9 +267,7 @@ describe("platformerPredictionScope", () => {
 
     test("should set velocity.x based on input", () => {
       const state: Partial<PlatformerWorld> = {
-        players: new Map([
-          ["player", createPlayer({ velocity: { x: 0, y: 0 } })],
-        ]),
+        players: new Map([["player", createPlayer("player", { velocity: { x: 0, y: 0 } })]]),
       };
       const input: PlatformerInput = { moveX: 1, moveY: 0, jump: false, timestamp: 1000 };
 
@@ -279,9 +278,7 @@ describe("platformerPredictionScope", () => {
 
     test("should set velocity.x to 0 when no horizontal input", () => {
       const state: Partial<PlatformerWorld> = {
-        players: new Map([
-          ["player", createPlayer({ velocity: { x: 100, y: 0 } })],
-        ]),
+        players: new Map([["player", createPlayer("player", { velocity: { x: 100, y: 0 } })]]),
       };
       const input: PlatformerInput = { moveX: 0, moveY: 0, jump: false, timestamp: 1000 };
 
@@ -313,10 +310,13 @@ describe("platformerPredictionScope", () => {
   describe("integration scenarios", () => {
     test("full prediction flow: extract, simulate, merge", () => {
       // Server world with two players
-      const serverWorld = createWorld(new Map([
-        ["local", createPlayer({ position: { x: 0, y: DEFAULT_FLOOR_Y - 10 } })],
-        ["remote", createPlayer({ position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
-      ]), 10);
+      const serverWorld = createWorld(
+        [
+          createPlayer("local", { position: { x: 0, y: DEFAULT_FLOOR_Y - 10 } }),
+          createPlayer("remote", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } }),
+        ],
+        10,
+      );
 
       // Extract local player for prediction
       const predictable = platformerPredictionScope.extractPredictable(serverWorld, "local");
@@ -343,7 +343,7 @@ describe("platformerPredictionScope", () => {
     test("multiple inputs accumulate correctly", () => {
       const initialState: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer({ position: { x: 0, y: DEFAULT_FLOOR_Y - 10 } })],
+          ["player", createPlayer("player", { position: { x: 0, y: DEFAULT_FLOOR_Y - 10 } })],
         ]),
       };
 
@@ -355,7 +355,7 @@ describe("platformerPredictionScope", () => {
       }
 
       const finalPos = state.players?.get("player")?.position.x ?? 0;
-      
+
       // Should have moved significantly right (3 frames at ~16.67ms each)
       // Speed = 200, time = ~50ms = 0.05s, distance ≈ 10 units
       expect(finalPos).toBeGreaterThan(9);

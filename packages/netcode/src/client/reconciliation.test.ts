@@ -9,6 +9,7 @@ import type {
 import { InputBuffer } from "./input-buffer.js";
 import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
+import { createTestPlayer, createTestWorld } from "../test-utils.js";
 
 describe("Reconciler", () => {
   let inputBuffer: InputBuffer<PlatformerInput>;
@@ -33,21 +34,16 @@ describe("Reconciler", () => {
   ): Snapshot<PlatformerWorld> => ({
     tick: 1,
     timestamp: Date.now(),
-    state: {
-      players: new Map([[player.id, player]]),
-      tick: 1,
-    },
+    state: createTestWorld([player], { tick: 1, gameState: "playing" }),
     inputAcks: new Map([[playerId, lastAck]]),
   });
 
   describe("reconcile", () => {
     test("should update state from server snapshot", () => {
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 100, y: 200 },
-        velocity: { x: 0, y: 0 },
         isGrounded: true,
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, -1);
 
       const result = reconciler.reconcile(snapshot);
@@ -64,12 +60,11 @@ describe("Reconciler", () => {
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1032 }); // seq 2
 
       // Server acknowledges seq 0, position reflects that
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 10, y: 190 }, // Position after seq 0 (on floor)
         velocity: { x: 200, y: 0 },
         isGrounded: true,
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, 0);
 
       const result = reconciler.reconcile(snapshot);
@@ -83,12 +78,10 @@ describe("Reconciler", () => {
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 }); // seq 0
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1016 }); // seq 1
 
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 10, y: 0 },
-        velocity: { x: 0, y: 0 },
         isGrounded: false,
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, 0);
 
       reconciler.reconcile(snapshot);
@@ -100,23 +93,11 @@ describe("Reconciler", () => {
     });
 
     test("should handle player not in snapshot", () => {
+      const otherPlayer = createTestPlayer("other-player", { isGrounded: true });
       const snapshot: Snapshot<PlatformerWorld> = {
         tick: 1,
         timestamp: Date.now(),
-        state: {
-          players: new Map([
-            [
-              "other-player",
-              {
-                id: "other-player",
-                position: { x: 0, y: 0 },
-                velocity: { x: 0, y: 0 },
-                isGrounded: true,
-              },
-            ],
-          ]),
-          tick: 1,
-        },
+        state: createTestWorld([otherPlayer], { tick: 1, gameState: "playing" }),
         inputAcks: new Map(),
       };
 
@@ -127,19 +108,14 @@ describe("Reconciler", () => {
     });
 
     test("should handle empty acks", () => {
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 50, y: 50 },
-        velocity: { x: 0, y: 0 },
         isGrounded: false,
-      };
+      });
       const snapshot: Snapshot<PlatformerWorld> = {
         tick: 1,
         timestamp: Date.now(),
-        state: {
-          players: new Map([[playerId, serverPlayer]]),
-          tick: 1,
-        },
+        state: createTestWorld([serverPlayer], { tick: 1, gameState: "playing" }),
         inputAcks: new Map(), // No acks
       };
 
@@ -167,12 +143,10 @@ describe("Reconciler", () => {
       }
 
       // Server snapshot arrives with position before any of these inputs
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 0, y: 190 },
-        velocity: { x: 0, y: 0 },
         isGrounded: true,
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, -1); // No inputs acknowledged
 
       const result = reconciler.reconcile(snapshot);
@@ -200,12 +174,11 @@ describe("Reconciler", () => {
 
       // Server acknowledges first 3 (seq 0, 1, 2)
       // Server position reflects those 3 inputs
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 30, y: 190 }, // Moved 30 units from 3 inputs
         velocity: { x: 200, y: 0 },
         isGrounded: true,
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, 2); // Ack through seq 2
 
       const result = reconciler.reconcile(snapshot);
@@ -234,12 +207,10 @@ describe("Reconciler", () => {
       inputBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1100 }); // seq 2
 
       // Server only processed seq 0, but says player hit a wall and is at x=0
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 0, y: 190 }, // Server says we're at origin (hit wall)
-        velocity: { x: 0, y: 0 }, // And stopped
         isGrounded: true,
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, 0); // Only ack seq 0
 
       const result = reconciler.reconcile(snapshot);
@@ -258,12 +229,11 @@ describe("Reconciler", () => {
       inputBuffer.add({ moveX: 0, moveY: 0, jump: true, timestamp: 1050 }); // Still holding jump
 
       // Server confirms player is in the air
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 0, y: 100 }, // In the air
         velocity: { x: 0, y: 50 }, // Falling down
         isGrounded: false, // NOT grounded
-      };
+      });
       const snapshot = createSnapshot(serverPlayer, -1);
 
       const result = reconciler.reconcile(snapshot);
@@ -278,10 +248,12 @@ describe("Reconciler", () => {
     test("large sequence numbers: should handle near-max values", () => {
       // Simulate a very long play session with large sequence numbers
       const largeSeq = 1000000;
-      
+
       // Create a fresh reconciler with large seq context
       const freshBuffer = new InputBuffer<PlatformerInput>();
-      const freshPredictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+      const freshPredictor = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+      );
       const freshReconciler = new Reconciler<PlatformerWorld, PlatformerInput>(
         freshBuffer,
         freshPredictor,
@@ -295,26 +267,22 @@ describe("Reconciler", () => {
         freshBuffer.add({ moveX: 1, moveY: 0, jump: false, timestamp: 1000 + i * 16 });
       }
 
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 50, y: 190 },
         velocity: { x: 200, y: 0 },
         isGrounded: true,
-      };
-      
+      });
+
       // Acknowledge a subset
       const snapshot: Snapshot<PlatformerWorld> = {
         tick: largeSeq,
         timestamp: Date.now(),
-        state: {
-          players: new Map([[playerId, serverPlayer]]),
-          tick: largeSeq,
-        },
+        state: createTestWorld([serverPlayer], { tick: largeSeq, gameState: "playing" }),
         inputAcks: new Map([[playerId, 5]]), // Ack through seq 5
       };
 
       const result = freshReconciler.reconcile(snapshot);
-      
+
       // Should work correctly even with large tick numbers
       expect(result.players.has(playerId)).toBe(true);
       // Remaining inputs (6-9) should be replayed
@@ -323,31 +291,24 @@ describe("Reconciler", () => {
 
     test("stale snapshot: older tick should not corrupt state", () => {
       // Setup: receive a newer snapshot first
-      const serverPlayer: PlatformerPlayer = {
-        id: playerId,
+      const serverPlayer = createTestPlayer(playerId, {
         position: { x: 100, y: 190 },
-        velocity: { x: 0, y: 0 },
         isGrounded: true,
-      };
+      });
       const newerSnapshot = createSnapshot(serverPlayer, 0);
       newerSnapshot.tick = 10;
 
       reconciler.reconcile(newerSnapshot);
 
       // Now receive an "older" snapshot (arrived late due to network)
-      const olderPlayer: PlatformerPlayer = {
-        id: playerId,
+      const olderPlayer = createTestPlayer(playerId, {
         position: { x: 50, y: 190 }, // Earlier position
-        velocity: { x: 0, y: 0 },
         isGrounded: true,
-      };
+      });
       const olderSnapshot: Snapshot<PlatformerWorld> = {
         tick: 5, // Earlier tick
         timestamp: Date.now() - 1000,
-        state: {
-          players: new Map([[playerId, olderPlayer]]),
-          tick: 5,
-        },
+        state: createTestWorld([olderPlayer], { tick: 5, gameState: "playing" }),
         inputAcks: new Map([[playerId, -1]]),
       };
 

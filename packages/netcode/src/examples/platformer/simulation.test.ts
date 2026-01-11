@@ -11,8 +11,9 @@ import {
   removePlayerFromWorld,
   mergePlatformerInputs,
 } from "./simulation.js";
-import { createPlatformerWorld, createPlatformerPlayer } from "./types.js";
-import type { PlatformerWorld, PlatformerInput, PlatformerPlayer } from "./types.js";
+import { createPlatformerWorld } from "./types.js";
+import type { PlatformerWorld, PlatformerInput } from "./types.js";
+import { createTestPlayer, createPlayingWorld } from "../../test-utils.js";
 
 describe("simulatePlatformer", () => {
   const createWorldWithPlayer = (
@@ -21,15 +22,8 @@ describe("simulatePlatformer", () => {
     velocity = { x: 0, y: 0 },
     isGrounded = false,
   ): PlatformerWorld => {
-    const world = createPlatformerWorld();
-    const player: PlatformerPlayer = {
-      id: playerId,
-      position,
-      velocity,
-      isGrounded,
-    };
-    world.players.set(playerId, player);
-    return world;
+    const player = createTestPlayer(playerId, { position, velocity, isGrounded });
+    return createPlayingWorld([player]);
   };
 
   describe("gravity", () => {
@@ -172,21 +166,15 @@ describe("simulatePlatformer", () => {
 
   describe("multiple players", () => {
     test("should simulate all players independently", () => {
-      let world = createPlatformerWorld();
-      world.players.set(
-        "player-1",
-        createPlatformerPlayer("player-1", { x: 0, y: DEFAULT_FLOOR_Y - 10 }),
-      );
-      world.players.set(
-        "player-2",
-        createPlatformerPlayer("player-2", { x: 100, y: DEFAULT_FLOOR_Y - 10 }),
-      );
-
-      // Set both players as grounded
-      const p1 = world.players.get("player-1");
-      const p2 = world.players.get("player-2");
-      if (p1) world.players.set("player-1", { ...p1, isGrounded: true });
-      if (p2) world.players.set("player-2", { ...p2, isGrounded: true });
+      const player1 = createTestPlayer("player-1", {
+        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        isGrounded: true,
+      });
+      const player2 = createTestPlayer("player-2", {
+        position: { x: 100, y: DEFAULT_FLOOR_Y - 10 },
+        isGrounded: true,
+      });
+      const world = createPlayingWorld([player1, player2]);
 
       const inputs = new Map<string, PlatformerInput>([
         ["player-1", { moveX: 1, moveY: 0, jump: false, timestamp: Date.now() }],

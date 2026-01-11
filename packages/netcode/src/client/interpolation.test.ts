@@ -3,7 +3,7 @@ import type { Snapshot } from "../core/types.js";
 import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
 import type { PlatformerPlayer, PlatformerWorld } from "../examples/platformer/types.js";
 import { Interpolator } from "./interpolation.js";
-import { assertDefined } from "../test-utils.js";
+import { assertDefined, createTestPlayer, createTestWorld } from "../test-utils.js";
 
 describe("Interpolator", () => {
   let interpolator: Interpolator<PlatformerWorld>;
@@ -18,17 +18,27 @@ describe("Interpolator", () => {
     timestamp: number,
     players: PlatformerPlayer[],
   ): Snapshot<PlatformerWorld> => {
-    const playerMap = new Map<string, PlatformerPlayer>();
-    for (const player of players) {
-      playerMap.set(player.id, player);
-    }
     return {
       tick,
       timestamp,
-      state: { players: playerMap, tick },
+      state: createTestWorld(players, { tick, gameState: "playing" }),
       inputAcks: new Map(),
     };
   };
+
+  const createPlayerData = (
+    id: string,
+    x: number,
+    y: number,
+    isGrounded: boolean = true,
+    velocityX: number = 0,
+    velocityY: number = 0,
+  ): PlatformerPlayer =>
+    createTestPlayer(id, {
+      position: { x, y },
+      velocity: { x: velocityX, y: velocityY },
+      isGrounded,
+    });
 
   describe("addSnapshot", () => {
     test("should add snapshot to buffer", () => {
@@ -55,12 +65,7 @@ describe("Interpolator", () => {
     });
 
     test("should return latest state when only one snapshot", () => {
-      const player: PlatformerPlayer = {
-        id: "player-1",
-        position: { x: 100, y: 200 },
-        velocity: { x: 0, y: 0 },
-        isGrounded: true,
-      };
+      const player = createPlayerData("player-1", 100, 200);
       interpolator.addSnapshot(createSnapshot(0, Date.now(), [player]));
 
       const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
@@ -73,38 +78,17 @@ describe("Interpolator", () => {
 
       // Add snapshot from 200ms ago
       interpolator.addSnapshot(
-        createSnapshot(0, now - 200, [
-          {
-            id: "player-1",
-            position: { x: 0, y: 0 },
-            velocity: { x: 100, y: 0 },
-            isGrounded: true,
-          },
-        ]),
+        createSnapshot(0, now - 200, [createPlayerData("player-1", 0, 0, true, 100, 0)]),
       );
 
       // Add snapshot from 100ms ago
       interpolator.addSnapshot(
-        createSnapshot(1, now - 100, [
-          {
-            id: "player-1",
-            position: { x: 100, y: 0 },
-            velocity: { x: 100, y: 0 },
-            isGrounded: true,
-          },
-        ]),
+        createSnapshot(1, now - 100, [createPlayerData("player-1", 100, 0, true, 100, 0)]),
       );
 
       // Add snapshot from now
       interpolator.addSnapshot(
-        createSnapshot(2, now, [
-          {
-            id: "player-1",
-            position: { x: 200, y: 0 },
-            velocity: { x: 100, y: 0 },
-            isGrounded: true,
-          },
-        ]),
+        createSnapshot(2, now, [createPlayerData("player-1", 200, 0, true, 100, 0)]),
       );
 
       const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
@@ -121,32 +105,13 @@ describe("Interpolator", () => {
       const now = Date.now();
 
       // First snapshot: only player 1
-      interpolator.addSnapshot(
-        createSnapshot(0, now - 200, [
-          {
-            id: "player-1",
-            position: { x: 0, y: 0 },
-            velocity: { x: 0, y: 0 },
-            isGrounded: true,
-          },
-        ]),
-      );
+      interpolator.addSnapshot(createSnapshot(0, now - 200, [createPlayerData("player-1", 0, 0)]));
 
       // Second snapshot: player 1 and player 2
       interpolator.addSnapshot(
         createSnapshot(1, now - 100, [
-          {
-            id: "player-1",
-            position: { x: 50, y: 0 },
-            velocity: { x: 0, y: 0 },
-            isGrounded: true,
-          },
-          {
-            id: "player-2",
-            position: { x: 100, y: 100 },
-            velocity: { x: 0, y: 0 },
-            isGrounded: false,
-          },
+          createPlayerData("player-1", 50, 0),
+          createPlayerData("player-2", 100, 100, false),
         ]),
       );
 
@@ -178,14 +143,9 @@ describe("Interpolator", () => {
     test("should return the most recently added snapshot", () => {
       interpolator.addSnapshot(createSnapshot(0, Date.now() - 100, []));
       interpolator.addSnapshot(createSnapshot(1, Date.now() - 50, []));
-      interpolator.addSnapshot(createSnapshot(2, Date.now(), [
-        {
-          id: "latest-player",
-          position: { x: 999, y: 999 },
-          velocity: { x: 0, y: 0 },
-          isGrounded: true,
-        },
-      ]));
+      interpolator.addSnapshot(
+        createSnapshot(2, Date.now(), [createPlayerData("latest-player", 999, 999)]),
+      );
 
       const snapshot = interpolator.getLatestSnapshot();
       expect(snapshot).not.toBeNull();
@@ -195,12 +155,8 @@ describe("Interpolator", () => {
 
     test("should return uninterpolated raw snapshot", () => {
       const now = Date.now();
-      interpolator.addSnapshot(createSnapshot(0, now - 200, [
-        { id: "p1", position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
-      interpolator.addSnapshot(createSnapshot(1, now, [
-        { id: "p1", position: { x: 100, y: 100 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+      interpolator.addSnapshot(createSnapshot(0, now - 200, [createPlayerData("p1", 0, 0)]));
+      interpolator.addSnapshot(createSnapshot(1, now, [createPlayerData("p1", 100, 100)]));
 
       const latest = interpolator.getLatestSnapshot();
       // Should return exact position, not interpolated
@@ -213,23 +169,21 @@ describe("Interpolator", () => {
       const now = Date.now();
 
       // First snapshot: two players
-      interpolator.addSnapshot(createSnapshot(0, now - 200, [
-        { id: "staying", position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-        { id: "leaving", position: { x: 100, y: 100 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+      interpolator.addSnapshot(
+        createSnapshot(0, now - 200, [
+          createPlayerData("staying", 0, 0),
+          createPlayerData("leaving", 100, 100),
+        ]),
+      );
 
       // Second snapshot: only one player (other left)
-      interpolator.addSnapshot(createSnapshot(1, now - 100, [
-        { id: "staying", position: { x: 50, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+      interpolator.addSnapshot(createSnapshot(1, now - 100, [createPlayerData("staying", 50, 0)]));
 
       // Third snapshot: still just one player
-      interpolator.addSnapshot(createSnapshot(2, now, [
-        { id: "staying", position: { x: 100, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+      interpolator.addSnapshot(createSnapshot(2, now, [createPlayerData("staying", 100, 0)]));
 
       const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
-      
+
       // Staying player should be interpolated
       expect(state.players.has("staying")).toBe(true);
     });
@@ -238,15 +192,19 @@ describe("Interpolator", () => {
       const now = Date.now();
 
       // Add two snapshots very close in time (within interpolation window)
-      interpolator.addSnapshot(createSnapshot(0, now - 150, [
-        { id: "player", position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-        { id: "leaving", position: { x: 50, y: 50 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+      interpolator.addSnapshot(
+        createSnapshot(0, now - 150, [
+          createPlayerData("player", 0, 0),
+          createPlayerData("leaving", 50, 50),
+        ]),
+      );
 
-      interpolator.addSnapshot(createSnapshot(1, now - 50, [
-        { id: "player", position: { x: 100, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-        // "leaving" is gone
-      ]));
+      interpolator.addSnapshot(
+        createSnapshot(1, now - 50, [
+          createPlayerData("player", 100, 0),
+          // "leaving" is gone
+        ]),
+      );
 
       const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
       expect(state.players.has("player")).toBe(true);
@@ -258,13 +216,9 @@ describe("Interpolator", () => {
   describe("edge cases", () => {
     test("should handle snapshots with same timestamp", () => {
       const now = Date.now();
-      
-      interpolator.addSnapshot(createSnapshot(0, now, [
-        { id: "p1", position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
-      interpolator.addSnapshot(createSnapshot(1, now, [
-        { id: "p1", position: { x: 100, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+
+      interpolator.addSnapshot(createSnapshot(0, now, [createPlayerData("p1", 0, 0)]));
+      interpolator.addSnapshot(createSnapshot(1, now, [createPlayerData("p1", 100, 0)]));
 
       // Should not crash, should return some state
       const state = interpolator.getInterpolatedState();
@@ -273,11 +227,9 @@ describe("Interpolator", () => {
 
     test("should handle very old render time gracefully", () => {
       const now = Date.now();
-      
+
       // Only add recent snapshots
-      interpolator.addSnapshot(createSnapshot(0, now - 10, [
-        { id: "p1", position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, isGrounded: true },
-      ]));
+      interpolator.addSnapshot(createSnapshot(0, now - 10, [createPlayerData("p1", 0, 0)]));
 
       // Interpolator tries to render at now - 100ms (before our snapshot)
       const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");

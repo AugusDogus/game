@@ -7,6 +7,7 @@ import type {
   PlatformerPlayer,
 } from "../examples/platformer/types.js";
 import { platformerPredictionScope } from "../examples/platformer/prediction.js";
+import { createTestPlayer, createPlayingWorld } from "../test-utils.js";
 
 describe("Predictor", () => {
   let predictor: Predictor<PlatformerWorld, PlatformerInput>;
@@ -17,27 +18,22 @@ describe("Predictor", () => {
   });
 
   // Helper to create a grounded player
-  const createGroundedPlayer = (id: string, x: number = 0): PlatformerPlayer => ({
-    id,
-    position: { x, y: DEFAULT_FLOOR_Y - 10 },
-    velocity: { x: 0, y: 0 },
-    isGrounded: true,
-  });
+  const createGroundedPlayer = (id: string, x: number = 0): PlatformerPlayer =>
+    createTestPlayer(id, {
+      position: { x, y: DEFAULT_FLOOR_Y - 10 },
+      isGrounded: true,
+    });
 
   // Helper to create world with single player
-  const createWorld = (player: PlatformerPlayer): PlatformerWorld => ({
-    players: new Map([[player.id, player]]),
-    tick: 0,
-  });
+  const createWorld = (player: PlatformerPlayer): PlatformerWorld =>
+    createPlayingWorld([player]);
 
   describe("setBaseState", () => {
     test("should set the base state", () => {
-      const player: PlatformerPlayer = {
-        id: playerId,
+      const player = createTestPlayer(playerId, {
         position: { x: 100, y: 200 },
-        velocity: { x: 0, y: 0 },
         isGrounded: false,
-      };
+      });
       const world = createWorld(player);
 
       predictor.setBaseState(world, playerId);
@@ -119,17 +115,11 @@ describe("Predictor", () => {
     test("should only extract local player from world with multiple players", () => {
       const localPlayer = createGroundedPlayer(playerId, 0);
       const otherPlayer = createGroundedPlayer("other-player", 100);
-      
-      const world: PlatformerWorld = {
-        players: new Map([
-          [playerId, localPlayer],
-          ["other-player", otherPlayer],
-        ]),
-        tick: 0,
-      };
+
+      const world = createPlayingWorld([localPlayer, otherPlayer]);
 
       predictor.setBaseState(world, playerId);
-      
+
       const state = predictor.getState();
       // Should only have the local player
       expect(state?.players?.size).toBe(1);
@@ -140,14 +130,8 @@ describe("Predictor", () => {
     test("inputs should only affect local player prediction", () => {
       const localPlayer = createGroundedPlayer(playerId, 0);
       const otherPlayer = createGroundedPlayer("other-player", 100);
-      
-      const world: PlatformerWorld = {
-        players: new Map([
-          [playerId, localPlayer],
-          ["other-player", otherPlayer],
-        ]),
-        tick: 0,
-      };
+
+      const world = createPlayingWorld([localPlayer, otherPlayer]);
 
       predictor.setBaseState(world, playerId);
       predictor.applyInput({ moveX: 1, moveY: 0, jump: false, timestamp: Date.now() });
@@ -162,17 +146,15 @@ describe("Predictor", () => {
 
   describe("mergeWithServer", () => {
     test("should merge predicted local player with server world", () => {
-      const localPlayer = createGroundedPlayer(playerId, 0);
       const otherPlayer = createGroundedPlayer("other-player", 500);
-      
+
       // Setup server world with both players
-      const serverWorld: PlatformerWorld = {
-        players: new Map([
-          [playerId, { ...localPlayer, position: { x: 10, y: DEFAULT_FLOOR_Y - 10 } }],
-          ["other-player", otherPlayer],
-        ]),
-        tick: 5,
-      };
+      const serverLocalPlayer = createTestPlayer(playerId, {
+        position: { x: 10, y: DEFAULT_FLOOR_Y - 10 },
+        isGrounded: true,
+      });
+      const serverWorld = createPlayingWorld([serverLocalPlayer, otherPlayer]);
+      serverWorld.tick = 5;
 
       // Setup prediction with local player moved further
       predictor.setBaseState(serverWorld, playerId);
@@ -191,10 +173,8 @@ describe("Predictor", () => {
     });
 
     test("should return server world when no prediction", () => {
-      const serverWorld: PlatformerWorld = {
-        players: new Map([["player", createGroundedPlayer("player")]]),
-        tick: 10,
-      };
+      const serverWorld = createPlayingWorld([createGroundedPlayer("player")]);
+      serverWorld.tick = 10;
 
       const merged = predictor.mergeWithServer(serverWorld);
 
@@ -324,12 +304,10 @@ describe("Predictor", () => {
     });
 
     test("tab switch: large time gap between inputs should apply correct physics", () => {
-      const player: PlatformerPlayer = {
-        id: playerId,
+      const player = createTestPlayer(playerId, {
         position: { x: 0, y: 0 }, // In the air
-        velocity: { x: 0, y: 0 },
         isGrounded: false,
-      };
+      });
       const world = createWorld(player);
       predictor.setBaseState(world, playerId);
 

@@ -11,8 +11,55 @@ import type {
   PlatformerAction,
   PlatformerActionResult,
   PlatformerAttackResult,
+  PlatformerPlayer,
 } from "./types.js";
-import { ATTACK_RADIUS, ATTACK_DAMAGE } from "./types.js";
+import { ATTACK_RADIUS, ATTACK_DAMAGE, canPlayerTakeDamage } from "./types.js";
+
+/**
+ * Calculate distance between two points
+ */
+const calculateDistance = (x1: number, y1: number, x2: number, y2: number): number => {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+/**
+ * Check if a player can be hit by an attack
+ */
+const canBeHit = (player: PlatformerPlayer, attackerId: string): boolean =>
+  player.id !== attackerId && canPlayerTakeDamage(player);
+
+/**
+ * Find the closest hittable player within attack radius
+ */
+const findHitTarget = (
+  world: PlatformerWorld,
+  attackerId: string,
+  targetX: number,
+  targetY: number,
+): PlatformerPlayer | null => {
+  let closestPlayer: PlatformerPlayer | null = null;
+  let closestDistance = ATTACK_RADIUS;
+
+  for (const player of world.players.values()) {
+    if (!canBeHit(player, attackerId)) continue;
+
+    const distance = calculateDistance(
+      targetX,
+      targetY,
+      player.position.x,
+      player.position.y,
+    );
+
+    if (distance <= closestDistance) {
+      closestDistance = distance;
+      closestPlayer = player;
+    }
+  }
+
+  return closestPlayer;
+};
 
 /**
  * Validate a platformer action against the world state.
@@ -30,6 +77,17 @@ export const validatePlatformerAction: ActionValidator<
   PlatformerAction,
   PlatformerActionResult
 > = (world, clientId, action) => {
+  // Don't process actions if game is not in playing state
+  if (world.gameState !== "playing") {
+    return { success: false };
+  }
+
+  // Verify the attacker exists and is alive
+  const attacker = world.players.get(clientId);
+  if (!attacker || !canPlayerTakeDamage(attacker)) {
+    return { success: false };
+  }
+
   switch (action.type) {
     case "attack":
       return validateAttack(world, clientId, action.targetX, action.targetY);
@@ -43,6 +101,7 @@ export const validatePlatformerAction: ActionValidator<
  *
  * Checks if any player is within ATTACK_RADIUS of the target position.
  * The attacker cannot hit themselves.
+ * Only hits players that can take damage (alive and not respawning).
  *
  * @param world - The world state
  * @param attackerId - The player performing the attack
@@ -56,29 +115,18 @@ function validateAttack(
   targetX: number,
   targetY: number,
 ): { success: boolean; result?: PlatformerAttackResult } {
-  // Check each player for a hit
-  for (const [playerId, player] of world.players) {
-    // Can't hit yourself
-    if (playerId === attackerId) continue;
+  const hitTarget = findHitTarget(world, attackerId, targetX, targetY);
 
-    // Calculate distance from attack target to player center
-    const dx = player.position.x - targetX;
-    const dy = player.position.y - targetY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    // Check if within attack radius
-    if (distance <= ATTACK_RADIUS) {
-      return {
-        success: true,
-        result: {
-          targetId: playerId,
-          damage: ATTACK_DAMAGE,
-        },
-      };
-    }
+  if (hitTarget) {
+    return {
+      success: true,
+      result: {
+        targetId: hitTarget.id,
+        damage: ATTACK_DAMAGE,
+      },
+    };
   }
 
-  // No hit
   return { success: false };
 }
 

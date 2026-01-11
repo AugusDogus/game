@@ -65,6 +65,7 @@ stateDiagram-v2
 - First to X kills
 
 **Configuration**: Win condition is set via `MatchConfig` passed to server on game start:
+
 ```typescript
 interface MatchConfig {
   winCondition: 'last_standing' | 'most_kills' | 'first_to_x';
@@ -113,6 +114,7 @@ interface PlatformerWorld {
 ```
 
 **Guardrails**:
+
 - Health is clamped: `health = Math.max(0, Math.min(maxHealth, newHealth))`
 - Respawn invulnerability: While `respawnTimer !== null`, player cannot take damage
 - Kill attribution: Only the `lastHitBy` player gets the kill when `health <= 0`

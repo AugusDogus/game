@@ -86,6 +86,15 @@ export type {
   PlatformerInput,
   PlatformerPlayer,
   PlatformerWorld,
+  // Level types
+  Platform,
+  SpawnPoint,
+  Hazard,
+  LevelConfig,
+  // Match types
+  MatchConfig,
+  WinConditionType,
+  GameState,
   // Action types
   PlatformerAttackAction,
   PlatformerAction,
@@ -97,9 +106,24 @@ export {
   createPlatformerWorld,
   createPlatformerPlayer,
   createIdleInput,
-  // Action constants
+  // Combat constants
   ATTACK_RADIUS,
   ATTACK_DAMAGE,
+  DEFAULT_MAX_HEALTH,
+  RESPAWN_TIMER_TICKS,
+  KNOCKBACK_FORCE,
+  PLAYER_WIDTH,
+  PLAYER_HEIGHT,
+  DEFAULT_MATCH_CONFIG,
+  // Helper functions
+  clampHealth,
+  isPlayerAlive,
+  isPlayerInvulnerable,
+  canPlayerTakeDamage,
+  applyDamageToPlayer,
+  getAlivePlayerCount,
+  getPlayerWithMostKills,
+  hasPlayerReachedKillTarget,
 } from "./examples/platformer/types.js";
 
 export {
@@ -107,6 +131,15 @@ export {
   addPlayerToWorld,
   removePlayerFromWorld,
   mergePlatformerInputs,
+  // Game state management
+  startGame,
+  forceStartGame,
+  resetGame,
+  // Combat functions
+  applyDamage,
+  applyKnockback,
+  // Level configuration
+  setLevelConfig,
 } from "./examples/platformer/simulation.js";
 
 export { interpolatePlatformer } from "./examples/platformer/interpolation.js";

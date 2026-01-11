@@ -2,24 +2,21 @@ import { describe, it, expect } from "bun:test";
 import { validatePlatformerAction, isInAttackRange } from "./action-validator.js";
 import type { PlatformerWorld, PlatformerAction } from "./types.js";
 import { ATTACK_RADIUS } from "./types.js";
+import { createTestPlayer, createTestWorld } from "../../test-utils.js";
 
 describe("validatePlatformerAction", () => {
   const createWorld = (
     players: Array<{ id: string; x: number; y: number }>,
-  ): PlatformerWorld => ({
-    players: new Map(
-      players.map((p) => [
-        p.id,
-        {
-          id: p.id,
+  ): PlatformerWorld =>
+    createTestWorld(
+      players.map((p) =>
+        createTestPlayer(p.id, {
           position: { x: p.x, y: p.y },
-          velocity: { x: 0, y: 0 },
           isGrounded: true,
-        },
-      ]),
-    ),
-    tick: 1,
-  });
+        }),
+      ),
+      { tick: 1, gameState: "playing" },
+    );
 
   describe("attack action", () => {
     it("should hit a player within attack radius", () => {
