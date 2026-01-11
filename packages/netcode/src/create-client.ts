@@ -1,5 +1,7 @@
 /**
- * High-level client factory for easy setup with Socket.IO
+ * High-level client factory for easy setup with Socket.IO.
+ *
+ * @module create-client
  */
 
 import type { Socket } from "socket.io-client";
@@ -9,55 +11,85 @@ import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js"
 import { DEFAULT_INTERPOLATION_DELAY_MS } from "./constants.js";
 
 /**
- * Configuration for creating a netcode client
+ * Configuration for creating a netcode client.
+ *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
  */
 export interface CreateClientConfig<TWorld, TInput extends { timestamp: number }> {
-  /** Socket.IO client socket */
+  /** Socket.IO client socket instance */
   socket: Socket;
-  /** Prediction scope for local player */
+  /** Defines how to predict and merge local player state. See {@link PredictionScope}. */
   predictionScope: PredictionScope<TWorld, TInput>;
-  /** Interpolation function for smooth rendering */
+  /** Function to interpolate between two world states for smooth rendering of other players */
   interpolate: InterpolateFunction<TWorld>;
-  /** Interpolation delay in ms (default: 100) */
+  /** How far behind real-time to render other players (default: 100ms). Higher = smoother but more delay. */
   interpolationDelayMs?: number;
-  /** Simulated network latency for testing (default: 0) */
+  /** Artificial latency for testing netcode behavior (default: 0) */
   simulatedLatency?: number;
-  /** Callback when world updates */
+  /** Called when a new world snapshot is received and processed */
   onWorldUpdate?: (state: TWorld) => void;
-  /** Callback when a player joins */
+  /** Called when another player joins the game */
   onPlayerJoin?: (playerId: string) => void;
-  /** Callback when a player leaves */
+  /** Called when another player leaves the game */
   onPlayerLeave?: (playerId: string) => void;
 }
 
 /**
- * Netcode client handle
+ * Handle returned by {@link createNetcodeClient} to interact with the netcode system.
+ *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
  */
 export interface NetcodeClientHandle<TWorld, TInput extends { timestamp: number }> {
-  /** Send input to server */
+  /** Send player input to the server. Timestamp is added automatically. */
   sendInput(input: Omit<TInput, "timestamp">): void;
-  /** Get current world state for rendering */
+  /** Get the current world state for rendering. Combines predicted local player with interpolated remote players. */
   getStateForRendering(): TWorld | null;
-  /** Get the last raw server snapshot (for debug visualization) */
+  /** Get the last raw server snapshot (useful for debug visualization) */
   getLastServerSnapshot(): Snapshot<TWorld> | null;
-  /** Get local player ID */
+  /** Get the local player's ID (assigned by server on connection) */
   getPlayerId(): string | null;
-  /** Set simulated latency for testing */
+  /** Set artificial latency in milliseconds for testing */
   setSimulatedLatency(latencyMs: number): void;
-  /** Get current simulated latency */
+  /** Get current artificial latency setting */
   getSimulatedLatency(): number;
-  /** Reset client state */
+  /** Reset all client state (prediction, interpolation, input buffer) */
   reset(): void;
 }
 
 /**
  * Create a netcode client with Socket.IO integration.
  *
- * IMPORTANT: Make sure to use the superjsonParser when creating the Socket.IO client:
+ * Sets up a client that:
+ * - Predicts local player movement immediately for responsive gameplay
+ * - Sends inputs to the server with timestamps
+ * - Receives world snapshots and reconciles any mispredictions
+ * - Interpolates other players between past snapshots for smooth rendering
  *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
+ *
+ * @param config - Client configuration
+ * @returns A handle to send input and get world state for rendering
+ *
+ * @example
  * ```ts
- * import { superjsonParser } from "@game/netcode";
- * const socket = io({ parser: superjsonParser });
+ * import { io } from "socket.io-client";
+ * import { createNetcodeClient, superjsonParser } from "@game/netcode";
+ *
+ * const socket = io("http://localhost:3000", { parser: superjsonParser });
+ *
+ * const client = createNetcodeClient({
+ *   socket,
+ *   predictionScope: myPredictionScope,
+ *   interpolate: (from, to, alpha) => { ... },
+ *   onWorldUpdate: (world) => render(world),
+ * });
+ *
+ * // In your game loop:
+ * client.sendInput({ moveX: 1, moveY: 0, jump: false });
+ * const worldToRender = client.getStateForRendering();
  * ```
  */
 export function createNetcodeClient<TWorld, TInput extends { timestamp: number }>(
