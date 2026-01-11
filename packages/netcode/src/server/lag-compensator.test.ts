@@ -83,16 +83,31 @@ describe("LagCompensator", () => {
       expect(Math.abs(result - (now - 100))).toBeLessThan(10);
     });
 
-    it("should fall back to RTT/2 when no clock offset", () => {
+    it("should treat clockOffset=0 as valid synchronized offset", () => {
+      // clockOffset of 0 means clocks are perfectly synchronized
       compensator.updateClientClock("client1", { clockOffset: 0, rtt: 100 });
 
       const now = Date.now();
-      const result = compensator.calculateRewindTimestamp("client1", now);
+      const clientTimestamp = now - 50;
+      const result = compensator.calculateRewindTimestamp("client1", clientTimestamp);
 
-      // Should be approximately now - RTT/2 - interpolationDelay
-      // = now - 50 - 100 = now - 150
-      expect(result).toBeGreaterThan(now - 200);
-      expect(result).toBeLessThan(now);
+      // serverTime = clientTime + clockOffset - interpolationDelay
+      // = (now - 50) + 0 - 100 = now - 150
+      expect(result).toBeGreaterThanOrEqual(now - 200);
+      expect(result).toBeLessThanOrEqual(now);
+      // Should be approximately now - 150
+      expect(Math.abs(result - (now - 150))).toBeLessThan(10);
+    });
+
+    it("should fall back to now - interpolationDelay when no clock info", () => {
+      // No updateClientClock called - no clock info exists
+      const now = Date.now();
+      const result = compensator.calculateRewindTimestamp("unknown-client", now);
+
+      // Should be approximately now - interpolationDelay = now - 100
+      expect(result).toBeGreaterThanOrEqual(now - 200);
+      expect(result).toBeLessThanOrEqual(now);
+      expect(Math.abs(result - (now - 100))).toBeLessThan(10);
     });
 
     it("should clamp to maxRewindMs", () => {
