@@ -207,9 +207,13 @@ describe("RollbackClient", () => {
         client.advanceFrame();
       }
 
-      // Get state before rollback
+      // Get state before rollback - must exist
       const stateBeforeRollback = client.getStateForRendering();
+      expect(stateBeforeRollback).not.toBeNull();
       const remotePlayerBefore = stateBeforeRollback?.players.get("remote-player");
+      expect(remotePlayerBefore).toBeDefined();
+      const positionBeforeX = remotePlayerBefore?.position.x;
+      expect(typeof positionBeforeX).toBe("number");
 
       // Receive late remote input for frame 1 (in the past)
       client.onRemoteInput(
@@ -220,10 +224,14 @@ describe("RollbackClient", () => {
 
       // State should have been resimulated
       const stateAfterRollback = client.getStateForRendering();
+      expect(stateAfterRollback).not.toBeNull();
       const remotePlayerAfter = stateAfterRollback?.players.get("remote-player");
+      expect(remotePlayerAfter).toBeDefined();
+      const positionAfterX = remotePlayerAfter?.position.x;
+      expect(typeof positionAfterX).toBe("number");
 
       // Remote player's position should have changed due to the late input
-      expect(remotePlayerAfter?.position.x).toBeGreaterThan(remotePlayerBefore?.position.x ?? 0);
+      expect(positionAfterX).toBeGreaterThan(positionBeforeX as number);
     });
 
     test("input prediction: uses last known input for missing frames", () => {
