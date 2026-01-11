@@ -133,8 +133,6 @@ export class ServerAuthoritativeClient<
  * Server-side server-authoritative strategy configuration
  */
 export interface ServerAuthoritativeServerConfig<TWorld, TInput> {
-  /** Initial world state */
-  initialWorld: TWorld;
   /** Function to simulate the world */
   simulate: (world: TWorld, inputs: Map<string, TInput>, deltaTime: number) => TWorld;
   /** Function to add a new player to the world */
