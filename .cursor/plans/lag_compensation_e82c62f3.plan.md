@@ -4,16 +4,16 @@ overview: Implement server-side lag compensation for hit detection, allowing the
 todos:
   - id: action-types
     content: Define ActionMessage type and action queue infrastructure
-    status: pending
+    status: completed
   - id: lag-compensator
     content: Create LagCompensator class for server-side hit validation
-    status: pending
+    status: completed
   - id: client-api
     content: Add sendAction to client handle and wire up Socket.IO events
-    status: pending
+    status: completed
   - id: platformer-attack
     content: Add attack action to platformer example with hitbox detection
-    status: pending
+    status: completed
 ---
 
 # Lag Compensation for Hit Detection
