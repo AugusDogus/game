@@ -9,8 +9,128 @@ import {
   DEFAULT_FLOOR_Y,
 } from "../../constants.js";
 import type { SimulateFunction, InputMerger } from "../../core/types.js";
-import type { PlatformerWorld, PlatformerInput, PlatformerPlayer } from "./types.js";
-import { createPlatformerPlayer, createIdleInput } from "./types.js";
+import type {
+  PlatformerWorld,
+  PlatformerInput,
+  PlatformerPlayer,
+  Vector2,
+  Platform,
+  Hazard,
+  SpawnPoint,
+} from "./types.js";
+import {
+  createPlatformerPlayer,
+  createIdleInput,
+  PLAYER_WIDTH,
+  PLAYER_HEIGHT,
+  RESPAWN_TIMER_TICKS,
+  clampHealth,
+  isPlayerAlive,
+  canPlayerTakeDamage,
+  getPlayerWithMostKills,
+  hasPlayerReachedKillTarget,
+  DEFAULT_MAX_HEALTH,
+} from "./types.js";
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Countdown duration in ticks (3 seconds at 20Hz) */
+const COUNTDOWN_DURATION_TICKS = 60;
+
+/** Minimum players required to start a match */
+const MIN_PLAYERS_TO_START = 2;
+
+// =============================================================================
+// AABB Collision Detection
+// =============================================================================
+
+/**
+ * Axis-Aligned Bounding Box for collision detection
+ */
+interface AABB {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Get the AABB for a player
+ */
+const getPlayerAABB = (player: PlatformerPlayer): AABB => ({
+  x: player.position.x - PLAYER_WIDTH / 2,
+  y: player.position.y - PLAYER_HEIGHT / 2,
+  width: PLAYER_WIDTH,
+  height: PLAYER_HEIGHT,
+});
+
+/**
+ * Check if two AABBs are overlapping
+ */
+const aabbOverlap = (a: AABB, b: AABB): boolean =>
+  a.x < b.x + b.width &&
+  a.x + a.width > b.x &&
+  a.y < b.y + b.height &&
+  a.y + a.height > b.y;
+
+/**
+ * Calculate the minimum translation vector to separate two overlapping AABBs
+ * Returns the vector to move 'a' so it no longer overlaps 'b'
+ */
+const calculateSeparation = (a: AABB, b: AABB): Vector2 => {
+  const overlapLeft = a.x + a.width - b.x;
+  const overlapRight = b.x + b.width - a.x;
+  const overlapTop = a.y + a.height - b.y;
+  const overlapBottom = b.y + b.height - a.y;
+
+  const minOverlapX = overlapLeft < overlapRight ? -overlapLeft : overlapRight;
+  const minOverlapY = overlapTop < overlapBottom ? -overlapTop : overlapBottom;
+
+  // Push out along the axis with the smallest overlap
+  if (Math.abs(minOverlapX) < Math.abs(minOverlapY)) {
+    return { x: minOverlapX, y: 0 };
+  }
+  return { x: 0, y: minOverlapY };
+};
+
+/**
+ * Check if a player AABB collides with a platform
+ */
+const playerPlatformCollision = (
+  playerAABB: AABB,
+  platform: Platform,
+): { collides: boolean; separation: Vector2 } => {
+  const platformAABB: AABB = {
+    x: platform.position.x,
+    y: platform.position.y,
+    width: platform.width,
+    height: platform.height,
+  };
+
+  if (!aabbOverlap(playerAABB, platformAABB)) {
+    return { collides: false, separation: { x: 0, y: 0 } };
+  }
+
+  return {
+    collides: true,
+    separation: calculateSeparation(playerAABB, platformAABB),
+  };
+};
+
+/**
+ * Check if a player AABB collides with a hazard
+ */
+const playerHazardCollision = (playerAABB: AABB, hazard: Hazard): boolean => {
+  const hazardAABB: AABB = {
+    x: hazard.position.x,
+    y: hazard.position.y,
+    width: hazard.width,
+    height: hazard.height,
+  };
+  return aabbOverlap(playerAABB, hazardAABB);
+};
 
 /**
  * Merge multiple platformer inputs into one.
@@ -37,11 +157,11 @@ export const mergePlatformerInputs: InputMerger<PlatformerInput> = (
 /**
  * Simulate one tick of the platformer world.
  * This is the whole-world simulation function used by the netcode engine.
- * 
+ *
  * Behavior:
  * - If inputs map is EMPTY: Apply idle physics to ALL players (legacy behavior)
  * - If inputs map has entries: ONLY simulate players in the map, leave others unchanged
- * 
+ *
  * This is crucial for multi-client scenarios where each client's inputs
  * are processed separately with their own deltas.
  */
@@ -50,37 +170,67 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
   inputs: Map<string, PlatformerInput>,
   deltaTime: number,
 ): PlatformerWorld => {
+  // First, handle game state transitions
+  const worldAfterStateUpdate = updateGameState(world);
+
+  // Only simulate player physics during 'playing' state
+  if (worldAfterStateUpdate.gameState !== "playing") {
+    return {
+      ...worldAfterStateUpdate,
+      tick: worldAfterStateUpdate.tick + 1,
+    };
+  }
+
   const deltaSeconds = deltaTime / 1000;
-  const newPlayers = new Map<string, PlatformerPlayer>();
 
   // If no inputs provided, simulate ALL players with idle input (legacy behavior)
   const simulateAll = inputs.size === 0;
 
-  // Process each player
-  for (const [playerId, player] of world.players) {
+  // Step 1: Simulate physics for each player
+  let newPlayers = new Map<string, PlatformerPlayer>();
+  for (const [playerId, player] of worldAfterStateUpdate.players) {
     if (simulateAll) {
-      // No inputs at all - apply idle physics to everyone
       const input = createIdleInput();
-      const newPlayer = simulatePlayer(player, input, deltaSeconds);
+      const newPlayer = simulatePlayer(
+        player,
+        input,
+        deltaSeconds,
+        worldAfterStateUpdate.platforms,
+      );
       newPlayers.set(playerId, newPlayer);
     } else {
-      // Check if this player has input
       const input = inputs.get(playerId);
       if (input) {
-        // This player has input - simulate them
-        const newPlayer = simulatePlayer(player, input, deltaSeconds);
+        const newPlayer = simulatePlayer(
+          player,
+          input,
+          deltaSeconds,
+          worldAfterStateUpdate.platforms,
+        );
         newPlayers.set(playerId, newPlayer);
       } else {
-        // Player not in inputs map - keep unchanged (they'll get their own simulation)
         newPlayers.set(playerId, player);
       }
     }
   }
 
-  return {
+  // Step 2: Handle player-player collisions
+  newPlayers = resolvePlayerCollisions(newPlayers);
+
+  // Step 3: Handle hazard damage
+  newPlayers = processHazardDamage(newPlayers, worldAfterStateUpdate.hazards);
+
+  // Step 4: Process respawn timers and deaths
+  newPlayers = processRespawns(newPlayers, worldAfterStateUpdate.spawnPoints);
+
+  // Step 5: Check win conditions
+  const worldWithPlayers: PlatformerWorld = {
+    ...worldAfterStateUpdate,
     players: newPlayers,
-    tick: world.tick + 1,
+    tick: worldAfterStateUpdate.tick + 1,
   };
+
+  return checkWinConditions(worldWithPlayers);
 };
 
 /**
@@ -90,7 +240,18 @@ function simulatePlayer(
   player: PlatformerPlayer,
   input: PlatformerInput,
   deltaSeconds: number,
+  platforms: Platform[],
 ): PlatformerPlayer {
+  // If player is respawning, they can't act - just decrement timer
+  if (player.respawnTimer !== null) {
+    return player; // Respawn timer is handled in processRespawns
+  }
+
+  // If player is dead, don't simulate
+  if (player.health <= 0) {
+    return player;
+  }
+
   // Start with current velocity
   let velocityX = input.moveX * DEFAULT_PLAYER_SPEED;
   let velocityY = player.velocity.y;
@@ -109,12 +270,39 @@ function simulatePlayer(
 
   // Check floor collision
   let isGrounded = false;
-  const playerHeight = 20; // Half of player size (10 from center to bottom)
 
-  if (newY + playerHeight / 2 >= DEFAULT_FLOOR_Y) {
-    newY = DEFAULT_FLOOR_Y - playerHeight / 2;
+  if (newY + PLAYER_HEIGHT / 2 >= DEFAULT_FLOOR_Y) {
+    newY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
     velocityY = 0;
     isGrounded = true;
+  }
+
+  // Check platform collisions
+  const playerAABB = getPlayerAABB({
+    ...player,
+    position: { x: newX, y: newY },
+  });
+
+  for (const platform of platforms) {
+    const collision = playerPlatformCollision(playerAABB, platform);
+    if (collision.collides) {
+      newX += collision.separation.x;
+      newY += collision.separation.y;
+
+      // If pushed up (landed on platform), ground the player
+      if (collision.separation.y < 0) {
+        velocityY = 0;
+        isGrounded = true;
+      }
+      // If pushed down (hit head), stop upward velocity
+      if (collision.separation.y > 0) {
+        velocityY = Math.max(0, velocityY);
+      }
+      // If pushed horizontally, stop horizontal velocity
+      if (collision.separation.x !== 0) {
+        velocityX = 0;
+      }
+    }
   }
 
   return {
@@ -124,6 +312,370 @@ function simulatePlayer(
     isGrounded,
   };
 }
+
+// =============================================================================
+// Player Collision Resolution
+// =============================================================================
+
+/**
+ * Resolve collisions between all players (push-out resolution)
+ */
+function resolvePlayerCollisions(
+  players: Map<string, PlatformerPlayer>,
+): Map<string, PlatformerPlayer> {
+  const playerArray = Array.from(players.entries());
+  const newPlayers = new Map(players);
+
+  // Check each pair of players
+  for (let i = 0; i < playerArray.length; i++) {
+    for (let j = i + 1; j < playerArray.length; j++) {
+      const [idA, playerA] = playerArray[i] as [string, PlatformerPlayer];
+      const [idB, playerB] = playerArray[j] as [string, PlatformerPlayer];
+
+      // Skip dead or respawning players
+      if (!isPlayerAlive(playerA) || !isPlayerAlive(playerB)) {
+        continue;
+      }
+
+      const aabbA = getPlayerAABB(playerA);
+      const aabbB = getPlayerAABB(playerB);
+
+      if (aabbOverlap(aabbA, aabbB)) {
+        // Calculate separation and split it between both players
+        const separation = calculateSeparation(aabbA, aabbB);
+        const halfSepX = separation.x / 2;
+        const halfSepY = separation.y / 2;
+
+        const currentA = newPlayers.get(idA);
+        const currentB = newPlayers.get(idB);
+
+        if (currentA) {
+          newPlayers.set(idA, {
+            ...currentA,
+            position: {
+              x: currentA.position.x + halfSepX,
+              y: currentA.position.y + halfSepY,
+            },
+          });
+        }
+
+        if (currentB) {
+          newPlayers.set(idB, {
+            ...currentB,
+            position: {
+              x: currentB.position.x - halfSepX,
+              y: currentB.position.y - halfSepY,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return newPlayers;
+}
+
+// =============================================================================
+// Hazard Processing
+// =============================================================================
+
+/**
+ * Process hazard damage for all players
+ */
+function processHazardDamage(
+  players: Map<string, PlatformerPlayer>,
+  hazards: Hazard[],
+): Map<string, PlatformerPlayer> {
+  if (hazards.length === 0) return players;
+
+  const newPlayers = new Map<string, PlatformerPlayer>();
+
+  for (const [playerId, player] of players) {
+    if (!canPlayerTakeDamage(player)) {
+      newPlayers.set(playerId, player);
+      continue;
+    }
+
+    const playerAABB = getPlayerAABB(player);
+    let totalDamage = 0;
+
+    for (const hazard of hazards) {
+      if (playerHazardCollision(playerAABB, hazard)) {
+        totalDamage += hazard.damage;
+      }
+    }
+
+    if (totalDamage > 0) {
+      newPlayers.set(playerId, {
+        ...player,
+        health: clampHealth(player.health - totalDamage, player.maxHealth),
+        // Hazard damage doesn't set lastHitBy (environmental death)
+      });
+    } else {
+      newPlayers.set(playerId, player);
+    }
+  }
+
+  return newPlayers;
+}
+
+// =============================================================================
+// Respawn Processing
+// =============================================================================
+
+/**
+ * Get a random spawn point
+ */
+const getRandomSpawnPoint = (spawnPoints: SpawnPoint[]): Vector2 => {
+  if (spawnPoints.length === 0) {
+    return { x: 0, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 };
+  }
+  const index = Math.floor(Math.random() * spawnPoints.length);
+  const spawnPoint = spawnPoints[index];
+  return spawnPoint ? spawnPoint.position : { x: 0, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 };
+};
+
+/**
+ * Process respawn timers and handle deaths
+ */
+function processRespawns(
+  players: Map<string, PlatformerPlayer>,
+  spawnPoints: SpawnPoint[],
+): Map<string, PlatformerPlayer> {
+  const newPlayers = new Map<string, PlatformerPlayer>();
+
+  for (const [playerId, player] of players) {
+    // Player just died - start respawn timer
+    if (player.health <= 0 && player.respawnTimer === null) {
+      // Attribute kill to lastHitBy player
+      const killerId = player.lastHitBy;
+      if (killerId) {
+        const killer = players.get(killerId);
+        if (killer) {
+          // We'll update the killer's kills in a second pass
+        }
+      }
+
+      newPlayers.set(playerId, {
+        ...player,
+        respawnTimer: RESPAWN_TIMER_TICKS,
+        deaths: player.deaths + 1,
+      });
+      continue;
+    }
+
+    // Player is respawning - decrement timer
+    if (player.respawnTimer !== null) {
+      const newTimer = player.respawnTimer - 1;
+
+      if (newTimer <= 0) {
+        // Respawn complete - reset player
+        const spawnPos = getRandomSpawnPoint(spawnPoints);
+        newPlayers.set(playerId, {
+          ...player,
+          position: spawnPos,
+          velocity: { x: 0, y: 0 },
+          health: DEFAULT_MAX_HEALTH,
+          respawnTimer: null,
+          lastHitBy: null,
+          isGrounded: false,
+        });
+      } else {
+        newPlayers.set(playerId, {
+          ...player,
+          respawnTimer: newTimer,
+        });
+      }
+      continue;
+    }
+
+    newPlayers.set(playerId, player);
+  }
+
+  // Second pass: attribute kills
+  const playersToUpdate = new Map(newPlayers);
+  for (const [_playerId, player] of players) {
+    if (player.health <= 0 && player.respawnTimer === null && player.lastHitBy) {
+      const killer = playersToUpdate.get(player.lastHitBy);
+      if (killer) {
+        playersToUpdate.set(player.lastHitBy, {
+          ...killer,
+          kills: killer.kills + 1,
+        });
+      }
+    }
+  }
+
+  return playersToUpdate;
+}
+
+// =============================================================================
+// Game State Management
+// =============================================================================
+
+/**
+ * Update game state based on current conditions
+ */
+function updateGameState(world: PlatformerWorld): PlatformerWorld {
+  switch (world.gameState) {
+    case "lobby":
+      return updateLobbyState(world);
+    case "countdown":
+      return updateCountdownState(world);
+    case "playing":
+      return world; // Playing state is handled by win condition checks
+    case "gameover":
+      return world; // Game over - no more updates
+    default:
+      return world;
+  }
+}
+
+/**
+ * Update lobby state - check if enough players to start
+ */
+function updateLobbyState(world: PlatformerWorld): PlatformerWorld {
+  if (world.players.size >= MIN_PLAYERS_TO_START) {
+    return {
+      ...world,
+      gameState: "countdown",
+      countdownTicks: COUNTDOWN_DURATION_TICKS,
+    };
+  }
+  return world;
+}
+
+/**
+ * Update countdown state - decrement timer and start game
+ */
+function updateCountdownState(world: PlatformerWorld): PlatformerWorld {
+  if (world.countdownTicks === null) {
+    return {
+      ...world,
+      gameState: "playing",
+      matchStartTick: world.tick,
+    };
+  }
+
+  const newCountdown = world.countdownTicks - 1;
+
+  if (newCountdown <= 0) {
+    return {
+      ...world,
+      gameState: "playing",
+      countdownTicks: null,
+      matchStartTick: world.tick,
+    };
+  }
+
+  return {
+    ...world,
+    countdownTicks: newCountdown,
+  };
+}
+
+// =============================================================================
+// Win Condition Checking
+// =============================================================================
+
+/**
+ * Check win conditions and update game state if a winner is found
+ */
+function checkWinConditions(world: PlatformerWorld): PlatformerWorld {
+  if (world.gameState !== "playing") {
+    return world;
+  }
+
+  const { winCondition, killTarget, timeLimitMs } = world.matchConfig;
+
+  switch (winCondition) {
+    case "last_standing":
+      return checkLastStandingWin(world);
+    case "first_to_x":
+      return checkFirstToXWin(world, killTarget ?? 10);
+    case "most_kills":
+      return checkMostKillsWin(world, timeLimitMs ?? 120000);
+    default:
+      return world;
+  }
+}
+
+/**
+ * Check last standing win condition
+ */
+function checkLastStandingWin(world: PlatformerWorld): PlatformerWorld {
+  const alivePlayers = Array.from(world.players.values()).filter(isPlayerAlive);
+
+  // Need at least 2 players to have a winner
+  if (world.players.size < 2) {
+    return world;
+  }
+
+  // If only one player is alive, they win
+  if (alivePlayers.length === 1 && alivePlayers[0]) {
+    return {
+      ...world,
+      gameState: "gameover",
+      winner: alivePlayers[0].id,
+    };
+  }
+
+  // If no players are alive, it's a draw (no winner)
+  if (alivePlayers.length === 0) {
+    return {
+      ...world,
+      gameState: "gameover",
+      winner: null,
+    };
+  }
+
+  return world;
+}
+
+/**
+ * Check first to X kills win condition
+ */
+function checkFirstToXWin(world: PlatformerWorld, killTarget: number): PlatformerWorld {
+  const winner = hasPlayerReachedKillTarget(world, killTarget);
+
+  if (winner) {
+    return {
+      ...world,
+      gameState: "gameover",
+      winner: winner.id,
+    };
+  }
+
+  return world;
+}
+
+/**
+ * Check most kills within time limit win condition
+ */
+function checkMostKillsWin(world: PlatformerWorld, timeLimitMs: number): PlatformerWorld {
+  if (world.matchStartTick === null) {
+    return world;
+  }
+
+  // Convert time limit to ticks (assuming 50ms per tick)
+  const timeLimitTicks = Math.floor(timeLimitMs / 50);
+  const elapsedTicks = world.tick - world.matchStartTick;
+
+  if (elapsedTicks >= timeLimitTicks) {
+    const winner = getPlayerWithMostKills(world);
+    return {
+      ...world,
+      gameState: "gameover",
+      winner: winner?.id ?? null,
+    };
+  }
+
+  return world;
+}
+
+// =============================================================================
+// World Management Functions
+// =============================================================================
 
 /**
  * Add a player to the world
@@ -150,5 +702,134 @@ export function removePlayerFromWorld(world: PlatformerWorld, playerId: string):
   return {
     ...world,
     players: newPlayers,
+  };
+}
+
+/**
+ * Start the game (transition from lobby to countdown)
+ */
+export function startGame(world: PlatformerWorld): PlatformerWorld {
+  if (world.gameState !== "lobby") {
+    return world;
+  }
+  return {
+    ...world,
+    gameState: "countdown",
+    countdownTicks: COUNTDOWN_DURATION_TICKS,
+  };
+}
+
+/**
+ * Force start the game immediately (skip countdown)
+ */
+export function forceStartGame(world: PlatformerWorld): PlatformerWorld {
+  return {
+    ...world,
+    gameState: "playing",
+    countdownTicks: null,
+    matchStartTick: world.tick,
+  };
+}
+
+/**
+ * Reset the game to lobby state
+ */
+export function resetGame(world: PlatformerWorld): PlatformerWorld {
+  // Reset all players
+  const newPlayers = new Map<string, PlatformerPlayer>();
+  for (const [playerId, player] of world.players) {
+    newPlayers.set(playerId, {
+      ...createPlatformerPlayer(playerId, player.position),
+    });
+  }
+
+  return {
+    ...world,
+    players: newPlayers,
+    gameState: "lobby",
+    winner: null,
+    countdownTicks: null,
+    matchStartTick: null,
+  };
+}
+
+/**
+ * Apply damage to a player (used by action validator)
+ */
+export function applyDamage(
+  world: PlatformerWorld,
+  targetId: string,
+  damage: number,
+  attackerId: string,
+): PlatformerWorld {
+  const target = world.players.get(targetId);
+  if (!target || !canPlayerTakeDamage(target)) {
+    return world;
+  }
+
+  const newHealth = clampHealth(target.health - damage, target.maxHealth);
+  const newPlayers = new Map(world.players);
+
+  newPlayers.set(targetId, {
+    ...target,
+    health: newHealth,
+    lastHitBy: attackerId,
+  });
+
+  return {
+    ...world,
+    players: newPlayers,
+  };
+}
+
+/**
+ * Apply knockback to a player
+ */
+export function applyKnockback(
+  world: PlatformerWorld,
+  targetId: string,
+  direction: Vector2,
+  force: number,
+): PlatformerWorld {
+  const target = world.players.get(targetId);
+  if (!target) {
+    return world;
+  }
+
+  // Normalize direction and apply force
+  const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+  const normalizedX = magnitude > 0 ? direction.x / magnitude : 0;
+  const normalizedY = magnitude > 0 ? direction.y / magnitude : -1; // Default up if no direction
+
+  const newPlayers = new Map(world.players);
+  newPlayers.set(targetId, {
+    ...target,
+    velocity: {
+      x: target.velocity.x + normalizedX * force,
+      y: target.velocity.y + normalizedY * force,
+    },
+    isGrounded: false,
+  });
+
+  return {
+    ...world,
+    players: newPlayers,
+  };
+}
+
+/**
+ * Set the level configuration
+ */
+export function setLevelConfig(
+  world: PlatformerWorld,
+  platforms: Platform[],
+  spawnPoints: SpawnPoint[],
+  hazards: Hazard[],
+): PlatformerWorld {
+  return {
+    ...world,
+    platforms,
+    spawnPoints,
+    hazards,
   };
 }

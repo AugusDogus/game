@@ -28,6 +28,107 @@ export interface PlatformerInput {
   timestamp: number;
 }
 
+// =============================================================================
+// Combat & Health Constants
+// =============================================================================
+
+/** Default maximum health for players */
+export const DEFAULT_MAX_HEALTH = 100;
+
+/** Duration of respawn invulnerability in ticks */
+export const RESPAWN_TIMER_TICKS = 60; // 3 seconds at 20Hz
+
+/** Knockback force applied when hit */
+export const KNOCKBACK_FORCE = 300;
+
+/** Player hitbox dimensions for collision detection */
+export const PLAYER_WIDTH = 20;
+export const PLAYER_HEIGHT = 20;
+
+// =============================================================================
+// Platform Types
+// =============================================================================
+
+/**
+ * A platform in the game world
+ */
+export interface Platform {
+  /** Unique identifier for the platform */
+  id: string;
+  /** Position of the platform's top-left corner */
+  position: Vector2;
+  /** Width of the platform */
+  width: number;
+  /** Height of the platform */
+  height: number;
+}
+
+/**
+ * A spawn point in the level
+ */
+export interface SpawnPoint {
+  /** Position of the spawn point */
+  position: Vector2;
+}
+
+/**
+ * A hazard in the level (e.g., spikes, pits)
+ */
+export interface Hazard {
+  /** Unique identifier for the hazard */
+  id: string;
+  /** Position of the hazard's top-left corner */
+  position: Vector2;
+  /** Width of the hazard */
+  width: number;
+  /** Height of the hazard */
+  height: number;
+  /** Damage dealt per tick while in contact */
+  damage: number;
+}
+
+/**
+ * Level configuration loaded from JSON
+ */
+export interface LevelConfig {
+  /** Platforms in the level */
+  platforms: Platform[];
+  /** Spawn points for players */
+  spawnPoints: SpawnPoint[];
+  /** Hazards in the level */
+  hazards: Hazard[];
+}
+
+// =============================================================================
+// Match Configuration
+// =============================================================================
+
+/**
+ * Win condition types
+ */
+export type WinConditionType = "last_standing" | "most_kills" | "first_to_x";
+
+/**
+ * Match configuration set on game start
+ */
+export interface MatchConfig {
+  /** Type of win condition */
+  winCondition: WinConditionType;
+  /** Target kills for 'first_to_x' win condition */
+  killTarget?: number;
+  /** Time limit in milliseconds for 'most_kills' win condition */
+  timeLimitMs?: number;
+}
+
+/**
+ * Game state machine states
+ */
+export type GameState = "lobby" | "countdown" | "playing" | "gameover";
+
+// =============================================================================
+// Player State
+// =============================================================================
+
 /**
  * Player state in the platformer world
  */
@@ -40,7 +141,23 @@ export interface PlatformerPlayer {
   velocity: Vector2;
   /** Whether player is on the ground */
   isGrounded: boolean;
+  /** Current health, clamped to [0, maxHealth] */
+  health: number;
+  /** Maximum health (no overheal) */
+  maxHealth: number;
+  /** Number of deaths */
+  deaths: number;
+  /** Number of kills (incremented for final blow only, no assists) */
+  kills: number;
+  /** ID of the last player who damaged this player (for kill attribution) */
+  lastHitBy: string | null;
+  /** Respawn timer in ticks. When non-null, player is invulnerable and cannot act */
+  respawnTimer: number | null;
 }
+
+// =============================================================================
+// World State
+// =============================================================================
 
 /**
  * Complete platformer world state
@@ -50,15 +167,48 @@ export interface PlatformerWorld {
   players: Map<string, PlatformerPlayer>;
   /** Current tick number */
   tick: number;
+  /** Current game state */
+  gameState: GameState;
+  /** Platforms in the level */
+  platforms: Platform[];
+  /** Spawn points for players */
+  spawnPoints: SpawnPoint[];
+  /** Hazards in the level */
+  hazards: Hazard[];
+  /** Winner player ID (set when gameState is 'gameover') */
+  winner: string | null;
+  /** Match configuration */
+  matchConfig: MatchConfig;
+  /** Countdown timer (ticks remaining, used in 'countdown' state) */
+  countdownTicks: number | null;
+  /** Match start tick (for time-based win conditions) */
+  matchStartTick: number | null;
 }
+
+/**
+ * Default match configuration
+ */
+export const DEFAULT_MATCH_CONFIG: MatchConfig = {
+  winCondition: "last_standing",
+};
 
 /**
  * Create an empty platformer world
  */
-export function createPlatformerWorld(): PlatformerWorld {
+export function createPlatformerWorld(
+  matchConfig: MatchConfig = DEFAULT_MATCH_CONFIG,
+): PlatformerWorld {
   return {
     players: new Map(),
     tick: 0,
+    gameState: "lobby",
+    platforms: [],
+    spawnPoints: [],
+    hazards: [],
+    winner: null,
+    matchConfig,
+    countdownTicks: null,
+    matchStartTick: null,
   };
 }
 
@@ -74,6 +224,12 @@ export function createPlatformerPlayer(
     position,
     velocity: { x: 0, y: 0 },
     isGrounded: false,
+    health: DEFAULT_MAX_HEALTH,
+    maxHealth: DEFAULT_MAX_HEALTH,
+    deaths: 0,
+    kills: 0,
+    lastHitBy: null,
+    respawnTimer: null,
   };
 }
 
@@ -132,3 +288,85 @@ export type PlatformerActionResult = PlatformerAttackResult;
  */
 export const ATTACK_RADIUS = 50; // pixels
 export const ATTACK_DAMAGE = 10;
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Clamp health to valid range [0, maxHealth]
+ */
+export const clampHealth = (health: number, maxHealth: number): number =>
+  Math.max(0, Math.min(maxHealth, health));
+
+/**
+ * Check if a player is alive (health > 0 and not respawning)
+ */
+export const isPlayerAlive = (player: PlatformerPlayer): boolean =>
+  player.health > 0 && player.respawnTimer === null;
+
+/**
+ * Check if a player is invulnerable (respawning)
+ */
+export const isPlayerInvulnerable = (player: PlatformerPlayer): boolean =>
+  player.respawnTimer !== null;
+
+/**
+ * Check if a player can take damage
+ */
+export const canPlayerTakeDamage = (player: PlatformerPlayer): boolean =>
+  player.health > 0 && player.respawnTimer === null;
+
+/**
+ * Create a damaged player with proper clamping and attribution
+ */
+export const applyDamageToPlayer = (
+  player: PlatformerPlayer,
+  damage: number,
+  attackerId: string,
+): PlatformerPlayer => {
+  if (!canPlayerTakeDamage(player)) {
+    return player;
+  }
+  const newHealth = clampHealth(player.health - damage, player.maxHealth);
+  return {
+    ...player,
+    health: newHealth,
+    lastHitBy: attackerId,
+  };
+};
+
+/**
+ * Get count of alive players in the world
+ */
+export const getAlivePlayerCount = (world: PlatformerWorld): number =>
+  Array.from(world.players.values()).filter(isPlayerAlive).length;
+
+/**
+ * Get the player with the most kills
+ */
+export const getPlayerWithMostKills = (
+  world: PlatformerWorld,
+): PlatformerPlayer | null => {
+  const players = Array.from(world.players.values());
+  if (players.length === 0) return null;
+
+  return players.reduce((best, current) =>
+    current.kills > best.kills ? current : best,
+  );
+};
+
+/**
+ * Check if any player has reached the kill target
+ */
+export const hasPlayerReachedKillTarget = (
+  world: PlatformerWorld,
+  killTarget: number,
+): PlatformerPlayer | null => {
+  for (const player of world.players.values()) {
+    if (player.kills >= killTarget) {
+      return player;
+    }
+  }
+  return null;
+};

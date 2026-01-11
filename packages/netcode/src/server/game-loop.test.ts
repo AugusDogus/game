@@ -4,6 +4,7 @@ import type { Snapshot } from "../core/types.js";
 import { DefaultWorldManager } from "../core/world.js";
 import {
   addPlayerToWorld,
+  forceStartGame,
   mergePlatformerInputs,
   simulatePlatformer,
 } from "../examples/platformer/simulation.js";
@@ -20,7 +21,9 @@ describe("GameLoop", () => {
   let gameLoop: GameLoop<PlatformerWorld, PlatformerInput>;
 
   beforeEach(() => {
-    worldManager = new DefaultWorldManager(createPlatformerWorld());
+    // Create world in "playing" state so physics are applied
+    const initialWorld = forceStartGame(createPlatformerWorld());
+    worldManager = new DefaultWorldManager(initialWorld);
     inputQueue = new InputQueue<PlatformerInput>();
     snapshotBuffer = new SnapshotBuffer<PlatformerWorld>(60);
     gameLoop = new GameLoop<PlatformerWorld, PlatformerInput>(

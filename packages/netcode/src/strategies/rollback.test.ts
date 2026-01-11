@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import type { PlatformerWorld, PlatformerInput } from "../examples/platformer/types.js";
 import { createPlatformerWorld, createIdleInput } from "../examples/platformer/types.js";
-import { simulatePlatformer, addPlayerToWorld } from "../examples/platformer/simulation.js";
+import { simulatePlatformer, addPlayerToWorld, forceStartGame } from "../examples/platformer/simulation.js";
 import { RollbackClient } from "./rollback.js";
 import { assertDefined, getPlayer } from "../test-utils.js";
 
@@ -10,7 +10,8 @@ describe("RollbackClient", () => {
   let initialWorld: PlatformerWorld;
 
   beforeEach(() => {
-    initialWorld = createPlatformerWorld();
+    // Create world in "playing" state so physics are applied
+    initialWorld = forceStartGame(createPlatformerWorld());
     initialWorld = addPlayerToWorld(initialWorld, "local-player");
     initialWorld = addPlayerToWorld(initialWorld, "remote-player");
 
@@ -335,6 +336,7 @@ describe("RollbackClient", () => {
   describe("getConfirmedFrame", () => {
     test("should return -1 initially", () => {
       // After reset, confirmed frame should be -1
+      // initialWorld is already in "playing" state from beforeEach
       const freshClient = new RollbackClient<PlatformerWorld, PlatformerInput>(
         simulatePlatformer,
         initialWorld,

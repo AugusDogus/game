@@ -7,6 +7,7 @@ import {
   addPlayerToWorld,
   removePlayerFromWorld,
   mergePlatformerInputs,
+  forceStartGame,
 } from "../examples/platformer/simulation.js";
 import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
 import { platformerPredictionScope } from "../examples/platformer/prediction.js";
@@ -105,7 +106,9 @@ describe("ServerAuthoritativeServer", () => {
   let worldManager: DefaultWorldManager<PlatformerWorld>;
 
   beforeEach(() => {
-    worldManager = new DefaultWorldManager(createPlatformerWorld());
+    // Create world in "playing" state so physics are applied
+    const initialWorld = forceStartGame(createPlatformerWorld());
+    worldManager = new DefaultWorldManager(initialWorld);
     server = new ServerAuthoritativeServer<PlatformerWorld, PlatformerInput>(worldManager, {
       simulate: simulatePlatformer,
       addPlayerToWorld: addPlayerToWorld,
@@ -289,6 +292,17 @@ describe("ServerAuthoritativeServer", () => {
       // caused gravity to be applied multiple times per tick
       server.addClient("player-1");
       server.addClient("player-2");
+      
+      // Move players apart to avoid collision (they spawn at same position)
+      const world = server.getWorldState();
+      const p1 = world.players.get("player-1");
+      const p2 = world.players.get("player-2");
+      if (p1 && p2) {
+        const newPlayers = new Map(world.players);
+        newPlayers.set("player-1", { ...p1, position: { x: 0, y: 0 } });
+        newPlayers.set("player-2", { ...p2, position: { x: 100, y: 0 } });
+        worldManager.setState({ ...world, players: newPlayers });
+      }
 
       // Both players send idle inputs (just standing)
       const now = Date.now();
@@ -312,6 +326,17 @@ describe("ServerAuthoritativeServer", () => {
     test("two clients with different input counts: physics isolation", () => {
       server.addClient("active");
       server.addClient("idle");
+      
+      // Move players apart to avoid collision
+      const world = server.getWorldState();
+      const activeP = world.players.get("active");
+      const idleP = world.players.get("idle");
+      if (activeP && idleP) {
+        const newPlayers = new Map(world.players);
+        newPlayers.set("active", { ...activeP, position: { x: 0, y: 0 } });
+        newPlayers.set("idle", { ...idleP, position: { x: 100, y: 0 } });
+        worldManager.setState({ ...world, players: newPlayers });
+      }
 
       // Active player sends 3 inputs
       const now = Date.now();
@@ -329,8 +354,8 @@ describe("ServerAuthoritativeServer", () => {
       // Active player should have moved
       expect(activePlayer?.position.x).toBeGreaterThan(0);
 
-      // Idle player should NOT have moved horizontally
-      expect(idlePlayer?.position.x).toBe(0);
+      // Idle player should NOT have moved horizontally (stays at x=100)
+      expect(idlePlayer?.position.x).toBe(100);
 
       // But idle player SHOULD have fallen (gravity for tickInterval)
       expect(idlePlayer?.position.y).toBeGreaterThan(0);
@@ -387,6 +412,19 @@ describe("ServerAuthoritativeServer", () => {
       server.addClient("player-1");
       server.addClient("player-2");
       server.addClient("player-3");
+      
+      // Move players apart to avoid collision
+      const world = server.getWorldState();
+      const p1Init = world.players.get("player-1");
+      const p2Init = world.players.get("player-2");
+      const p3Init = world.players.get("player-3");
+      if (p1Init && p2Init && p3Init) {
+        const newPlayers = new Map(world.players);
+        newPlayers.set("player-1", { ...p1Init, position: { x: 0, y: 0 } });
+        newPlayers.set("player-2", { ...p2Init, position: { x: 100, y: 0 } });
+        newPlayers.set("player-3", { ...p3Init, position: { x: 200, y: 0 } });
+        worldManager.setState({ ...world, players: newPlayers });
+      }
 
       const now = Date.now();
       // All three send different inputs
@@ -400,12 +438,12 @@ describe("ServerAuthoritativeServer", () => {
       const p2 = getPlayer(snapshot.state, "player-2");
       const p3 = getPlayer(snapshot.state, "player-3");
 
-      // Player 1 moved right
+      // Player 1 moved right (started at x=0)
       expect(p1.position.x).toBeGreaterThan(0);
-      // Player 2 moved left
-      expect(p2.position.x).toBeLessThan(0);
-      // Player 3 stayed put horizontally
-      expect(p3.position.x).toBe(0);
+      // Player 2 moved left (started at x=100)
+      expect(p2.position.x).toBeLessThan(100);
+      // Player 3 stayed put horizontally (at x=200)
+      expect(p3.position.x).toBe(200);
 
       // All three should have fallen the same amount (same physics applied once each)
       expect(p1.position.y).toBeCloseTo(p2.position.y, 3);
@@ -514,8 +552,9 @@ describe("ServerAuthoritativeServer", () => {
     });
 
     test("should handle very high tick rate", () => {
-      // Create server with 120Hz tick rate
-      const fastWorldManager = new DefaultWorldManager(createPlatformerWorld());
+      // Create server with 120Hz tick rate (in playing state)
+      const fastInitialWorld = forceStartGame(createPlatformerWorld());
+      const fastWorldManager = new DefaultWorldManager(fastInitialWorld);
       const fastServer = new ServerAuthoritativeServer<PlatformerWorld, PlatformerInput>(
         fastWorldManager,
         {
