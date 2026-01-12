@@ -197,7 +197,8 @@ export interface PlatformerWorld {
  * Default match configuration
  */
 export const DEFAULT_MATCH_CONFIG: MatchConfig = {
-  winCondition: "last_standing",
+  winCondition: "first_to_x",
+  killTarget: 3,
 };
 
 /**

@@ -95,22 +95,17 @@ export class CanvasRenderer {
       // Dead/respawning: gray with transparency
       this.ctx.globalAlpha = 0.4;
       this.ctx.fillStyle = "#6b7280";
-      this.ctx.strokeStyle = "#4b5563";
     } else if (isLocal) {
       // Local player: green
       this.ctx.fillStyle = "#10b981";
-      this.ctx.strokeStyle = "#059669";
     } else {
       // Other players: blue
       this.ctx.fillStyle = "#3b82f6";
-      this.ctx.strokeStyle = "#2563eb";
     }
-    this.ctx.lineWidth = 2;
 
-    // Draw player as a square
+    // Draw player as a square (no stroke - hitbox matches visual exactly)
     const size = 20;
     this.ctx.fillRect(player.position.x - size / 2, player.position.y - size / 2, size, size);
-    this.ctx.strokeRect(player.position.x - size / 2, player.position.y - size / 2, size, size);
 
     this.ctx.globalAlpha = 1;
 

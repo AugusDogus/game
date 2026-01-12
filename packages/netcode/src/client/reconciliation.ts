@@ -1,4 +1,4 @@
-import { DEFAULT_FRAME_DELTA_MS, MIN_DELTA_MS, MAX_DELTA_MS } from "../constants.js";
+import { DEFAULT_FRAME_DELTA_MS, MAX_DELTA_MS, MIN_DELTA_MS } from "../constants.js";
 import type { Snapshot } from "../core/types.js";
 import type { InputBuffer } from "./input-buffer.js";
 import type { PredictionScope } from "./prediction-scope.js";

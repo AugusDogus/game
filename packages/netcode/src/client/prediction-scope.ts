@@ -77,9 +77,10 @@ export interface PredictionScope<TWorld, TInput> {
    *
    * @param serverWorld - Authoritative/interpolated world state from server
    * @param predicted - Locally predicted state from {@link extractPredictable}
+   * @param localPlayerId - The local player's ID (optional for backwards compatibility)
    * @returns Complete world state ready for rendering
    */
-  mergePrediction(serverWorld: TWorld, predicted: Partial<TWorld>): TWorld;
+  mergePrediction(serverWorld: TWorld, predicted: Partial<TWorld>, localPlayerId?: string): TWorld;
 
   /**
    * Simulate the predictable portion of the world with a local input.
@@ -91,9 +92,10 @@ export interface PredictionScope<TWorld, TInput> {
    * @param state - Current predicted state
    * @param input - Local player's input
    * @param deltaTime - Time delta in milliseconds since last input
+   * @param localPlayerId - The local player's ID (optional for backwards compatibility)
    * @returns Updated predicted state
    */
-  simulatePredicted(state: Partial<TWorld>, input: TInput, deltaTime: number): Partial<TWorld>;
+  simulatePredicted(state: Partial<TWorld>, input: TInput, deltaTime: number, localPlayerId?: string): Partial<TWorld>;
 
   /**
    * Create a neutral/idle input with no actions.

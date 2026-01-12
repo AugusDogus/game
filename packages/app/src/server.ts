@@ -16,7 +16,13 @@ const startTime = Date.now();
 
 // Create Socket.IO server and Bun engine with superjson parser for Map/Set/Date support
 // TODO: Add "webtransport" once Bun supports HTTP/3 (https://github.com/oven-sh/bun/issues/13656)
-const io = new Server({ parser: superjsonParser });
+const io = new Server({
+  parser: superjsonParser,
+  // Increase timeouts to handle background tab throttling
+  // Browsers throttle timers in background tabs, which can cause missed heartbeats
+  pingTimeout: 60000, // 60 seconds (default is 20s)
+  pingInterval: 25000, // 25 seconds (default)
+});
 const engine = new Engine({
   path: "/socket.io/",
 });
@@ -48,7 +54,9 @@ const { websocket } = engine.handler();
 
 const server = Bun.serve({
   port: 3000,
-  idleTimeout: 30,
+  // Increase idle timeout to prevent WebSocket disconnects when tabs are in background
+  // Background tabs throttle timers, which can make the connection appear idle
+  idleTimeout: 120, // 120 seconds (2 minutes)
 
   routes: {
     "/": homepage,

@@ -113,7 +113,7 @@ const interpolateProjectiles = (
     } else {
       // New projectile, use current state
       interpolated.push(toProj);
-    }
+}
   }
 
   return interpolated;

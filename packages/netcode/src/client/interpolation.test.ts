@@ -183,7 +183,7 @@ describe("Interpolator", () => {
       interpolator.addSnapshot(createSnapshot(2, now, [createPlayerData("staying", 100, 0)]));
 
       const state = assertDefined(interpolator.getInterpolatedState(), "interpolated state");
-
+      
       // Staying player should be interpolated
       expect(state.players.has("staying")).toBe(true);
     });
@@ -202,7 +202,7 @@ describe("Interpolator", () => {
       interpolator.addSnapshot(
         createSnapshot(1, now - 50, [
           createPlayerData("player", 100, 0),
-          // "leaving" is gone
+        // "leaving" is gone
         ]),
       );
 
@@ -216,7 +216,7 @@ describe("Interpolator", () => {
   describe("edge cases", () => {
     test("should handle snapshots with same timestamp", () => {
       const now = Date.now();
-
+      
       interpolator.addSnapshot(createSnapshot(0, now, [createPlayerData("p1", 0, 0)]));
       interpolator.addSnapshot(createSnapshot(1, now, [createPlayerData("p1", 100, 0)]));
 
@@ -227,7 +227,7 @@ describe("Interpolator", () => {
 
     test("should handle very old render time gracefully", () => {
       const now = Date.now();
-
+      
       // Only add recent snapshots
       interpolator.addSnapshot(createSnapshot(0, now - 10, [createPlayerData("p1", 0, 0)]));
 

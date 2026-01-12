@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { socket } from "./socket";
 import { GameClient } from "../game/game-client.js";
+import { socket } from "./socket";
 
 const queryClient = new QueryClient();
 
@@ -70,7 +70,7 @@ function App() {
     };
   }, []);
 
-  // Connection management
+  // Connection and game client lifecycle management
   useEffect(() => {
     socket.connect();
 
@@ -90,11 +90,22 @@ function App() {
     };
   }, []);
 
-  // Initialize game when socket connects and canvas is ready
+  // Create/destroy GameClient when connection state changes
   useEffect(() => {
-    if (isConnected && canvasRef.current && !gameClientRef.current) {
-      gameClientRef.current = new GameClient(socket, canvasRef.current);
+    if (!isConnected || !canvasRef.current) {
+      // Stop game client when disconnected
+      if (gameClientRef.current) {
+        gameClientRef.current.stop();
+        gameClientRef.current = null;
+      }
+      return;
     }
+
+    // Create fresh GameClient on connect
+    if (gameClientRef.current) {
+      gameClientRef.current.stop();
+    }
+    gameClientRef.current = new GameClient(socket, canvasRef.current);
   }, [isConnected]);
 
   return (
