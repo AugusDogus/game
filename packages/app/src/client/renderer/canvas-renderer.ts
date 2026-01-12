@@ -149,7 +149,8 @@ export class CanvasRenderer {
   drawHealthBar(player: PlatformerPlayer): void {
     const barWidth = 30;
     const barHeight = 4;
-    const barY = player.position.y - 20;
+    // Position health bar above the player ID text (which is at y - 15)
+    const barY = player.position.y - 28;
 
     // Background (dark)
     this.ctx.fillStyle = "#1f2937";
