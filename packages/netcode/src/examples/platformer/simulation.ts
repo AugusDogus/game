@@ -353,83 +353,111 @@ function simulatePlayer(
 // =============================================================================
 
 /**
- * Clamp a player's position to not go below the floor
- */
-function clampToFloor(player: PlatformerPlayer): PlatformerPlayer {
-  const maxY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
-  if (player.position.y > maxY) {
-    return {
-      ...player,
-      position: { x: player.position.x, y: maxY },
-      velocity: { x: player.velocity.x, y: 0 },
-      isGrounded: true,
-    };
-  }
-  return player;
-}
-
-/**
- * Resolve collisions between all players (push-out resolution)
- * Uses horizontal-only push to avoid squishy vertical behavior
+ * Resolve collisions between all players using proper AABB collision.
+ * Uses minimum translation vector (MTV) to push players apart along the
+ * axis of least penetration. This allows:
+ * - Standing on top of other players
+ * - Solid horizontal blocking (no overlap/jitter)
  */
 function resolvePlayerCollisions(
   players: Map<string, PlatformerPlayer>,
 ): Map<string, PlatformerPlayer> {
-  const playerArray = Array.from(players.entries());
-  let newPlayers = new Map(players);
+  const playerIds = Array.from(players.keys());
+  const newPlayers = new Map(players);
 
-  // Check each pair of players
-  for (let i = 0; i < playerArray.length; i++) {
-    for (let j = i + 1; j < playerArray.length; j++) {
-      const [idA] = playerArray[i] as [string, PlatformerPlayer];
-      const [idB] = playerArray[j] as [string, PlatformerPlayer];
+  // Multiple iterations to resolve stacked collisions
+  const iterations = 3;
+  
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < playerIds.length; i++) {
+      for (let j = i + 1; j < playerIds.length; j++) {
+        const idA = playerIds[i] as string;
+        const idB = playerIds[j] as string;
 
-      // Get current positions (may have been updated by previous collision)
-      const currentA = newPlayers.get(idA);
-      const currentB = newPlayers.get(idB);
+        const playerA = newPlayers.get(idA);
+        const playerB = newPlayers.get(idB);
 
-      if (!currentA || !currentB) continue;
+        if (!playerA || !playerB) continue;
 
-      // Skip dead or respawning players
-      if (!isPlayerAlive(currentA) || !isPlayerAlive(currentB)) {
-        continue;
-      }
+        // Skip dead or respawning players
+        if (!isPlayerAlive(playerA) || !isPlayerAlive(playerB)) {
+          continue;
+        }
 
-      const aabbA = getPlayerAABB(currentA);
-      const aabbB = getPlayerAABB(currentB);
+        const aabbA = getPlayerAABB(playerA);
+        const aabbB = getPlayerAABB(playerB);
 
-      if (aabbOverlap(aabbA, aabbB)) {
-        // Only push horizontally to avoid squishy vertical collisions
-        // This creates solid "bumping" behavior instead of bouncy/squishy physics
-        const overlapLeft = aabbA.x + aabbA.width - aabbB.x;
-        const overlapRight = aabbB.x + aabbB.width - aabbA.x;
-        
-        // Choose smallest horizontal push direction
-        const pushX = overlapLeft < overlapRight ? -overlapLeft : overlapRight;
-        const halfPushX = pushX / 2;
+        if (!aabbOverlap(aabbA, aabbB)) continue;
 
-        newPlayers.set(idA, {
-          ...currentA,
-          position: {
-            x: currentA.position.x + halfPushX,
-            y: currentA.position.y,
-          },
-        });
+        // Calculate overlap on each axis
+        const overlapX = Math.min(
+          aabbA.x + aabbA.width - aabbB.x,
+          aabbB.x + aabbB.width - aabbA.x,
+        );
+        const overlapY = Math.min(
+          aabbA.y + aabbA.height - aabbB.y,
+          aabbB.y + aabbB.height - aabbA.y,
+        );
 
-        newPlayers.set(idB, {
-          ...currentB,
-          position: {
-            x: currentB.position.x - halfPushX,
-            y: currentB.position.y,
-          },
-        });
+        // Resolve along axis of minimum penetration
+        if (overlapX < overlapY) {
+          // Horizontal collision - push apart equally
+          const pushDir = playerA.position.x < playerB.position.x ? -1 : 1;
+          const halfPush = overlapX / 2;
+
+          newPlayers.set(idA, {
+            ...playerA,
+            position: {
+              x: playerA.position.x + pushDir * halfPush,
+              y: playerA.position.y,
+            },
+          });
+          newPlayers.set(idB, {
+            ...playerB,
+            position: {
+              x: playerB.position.x - pushDir * halfPush,
+              y: playerB.position.y,
+            },
+          });
+        } else {
+          // Vertical collision - determine who's on top
+          const aOnTop = playerA.position.y < playerB.position.y;
+          const topPlayer = aOnTop ? playerA : playerB;
+          const bottomPlayer = aOnTop ? playerB : playerA;
+          const topId = aOnTop ? idA : idB;
+          const bottomId = aOnTop ? idB : idA;
+
+          // Push the top player up, bottom player stays (they're probably on floor)
+          // Top player lands on bottom player's head
+          const topAABB = getPlayerAABB(topPlayer);
+          const bottomAABB = getPlayerAABB(bottomPlayer);
+          const newTopY = bottomAABB.y - topAABB.height / 2 - PLAYER_HEIGHT / 2;
+
+          newPlayers.set(topId, {
+            ...topPlayer,
+            position: { x: topPlayer.position.x, y: newTopY },
+            velocity: { x: topPlayer.velocity.x, y: 0 },
+            isGrounded: true, // Standing on another player counts as grounded
+          });
+          
+          // Bottom player unchanged (or slightly pushed down if needed)
+          newPlayers.set(bottomId, bottomPlayer);
+        }
       }
     }
   }
 
-  // After all player-player collisions, ensure no one is below the floor
+  // Final pass: ensure no one is below the floor
   for (const [playerId, player] of newPlayers) {
-    newPlayers.set(playerId, clampToFloor(player));
+    const maxY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
+    if (player.position.y > maxY) {
+      newPlayers.set(playerId, {
+        ...player,
+        position: { x: player.position.x, y: maxY },
+        velocity: { x: player.velocity.x, y: 0 },
+        isGrounded: true,
+      });
+    }
   }
 
   return newPlayers;
