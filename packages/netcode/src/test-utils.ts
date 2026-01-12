@@ -63,6 +63,7 @@ export function createTestPlayer(
     kills: overrides.kills ?? 0,
     lastHitBy: overrides.lastHitBy ?? null,
     respawnTimer: overrides.respawnTimer ?? null,
+    projectileSeq: overrides.projectileSeq ?? 0,
   };
 }
 

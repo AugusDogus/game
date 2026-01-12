@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import { platformerPredictionScope } from "./prediction.js";
 import { createIdleInput } from "./types.js";
 import type { PlatformerWorld, PlatformerPlayer, PlatformerInput } from "./types.js";
-import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED, DEFAULT_JUMP_VELOCITY } from "../../constants.js";
+import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED } from "../../constants.js";
 import { createTestPlayer, createTestWorld } from "../../test-utils.js";
 
 /** Helper to create test input with all required fields */

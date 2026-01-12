@@ -159,6 +159,8 @@ export interface PlatformerPlayer {
   lastHitBy: string | null;
   /** Respawn timer in ticks. When non-null, player is invulnerable and cannot act */
   respawnTimer: number | null;
+  /** Sequence counter for deterministic projectile ID generation */
+  projectileSeq: number;
 }
 
 // =============================================================================
@@ -240,6 +242,7 @@ export function createPlatformerPlayer(
     kills: 0,
     lastHitBy: null,
     respawnTimer: null,
+    projectileSeq: 0,
   };
 }
 
