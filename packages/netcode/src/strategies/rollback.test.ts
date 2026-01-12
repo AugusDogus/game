@@ -28,8 +28,9 @@ describe("RollbackClient", () => {
   beforeEach(() => {
     // Create world in "playing" state so physics are applied
     initialWorld = forceStartGame(createPlatformerWorld());
-    initialWorld = addPlayerToWorld(initialWorld, "local-player");
-    initialWorld = addPlayerToWorld(initialWorld, "remote-player");
+    // Spawn players at different x positions to avoid collision
+    initialWorld = addPlayerToWorld(initialWorld, "local-player", { x: 0, y: 0 });
+    initialWorld = addPlayerToWorld(initialWorld, "remote-player", { x: 100, y: 0 });
 
     client = new RollbackClient<PlatformerWorld, PlatformerInput>(
       simulatePlatformer,
@@ -116,9 +117,11 @@ describe("RollbackClient", () => {
 
   describe("onRemoteInput", () => {
     test("should store remote input", () => {
+      // Remote player starts at x=100
+      const initialX = 100;
       const input = createInput(-1, 0, false, Date.now());
 
-      // Remote input for frame 0
+      // Remote input for frame 0 (moving left)
       client.onRemoteInput("remote-player", input, 0);
 
       // Advance frame to apply it
@@ -127,8 +130,8 @@ describe("RollbackClient", () => {
       const state = client.getStateForRendering();
       const player = state?.players.get("remote-player");
 
-      // Remote player should have moved left
-      expect(player?.position.x).toBeLessThan(0);
+      // Remote player should have moved left from initial position
+      expect(player?.position.x).toBeLessThan(initialX);
     });
   });
 
@@ -358,12 +361,15 @@ describe("RollbackClient", () => {
 
   describe("edge cases", () => {
     test("should handle rollback to frame 0", () => {
+      // Remote player starts at x=100
+      const initialX = 100;
+      
       // Advance a few frames
       for (let i = 0; i < 5; i++) {
         client.advanceFrame();
       }
 
-      // Receive late input for frame 0
+      // Receive late input for frame 0 (moving left)
       client.onRemoteInput(
         "remote-player",
         createInput(-1, 0, false, Date.now()),
@@ -374,16 +380,20 @@ describe("RollbackClient", () => {
       expect(client.getCurrentFrame()).toBe(5);
       
       const state = client.getStateForRendering();
-      expect(state?.players.get("remote-player")?.position.x).toBeLessThan(0);
+      // Remote player should have moved left from initial position
+      expect(state?.players.get("remote-player")?.position.x).toBeLessThan(initialX);
     });
 
     test("should handle multiple late inputs in sequence", () => {
+      // Remote player starts at x=100
+      const initialX = 100;
+      
       // Advance several frames
       for (let i = 0; i < 10; i++) {
         client.advanceFrame();
       }
 
-      // Receive multiple late inputs
+      // Receive multiple late inputs (moving right)
       client.onRemoteInput(
         "remote-player",
         createInput(1, 0, false, Date.now()),
@@ -402,7 +412,8 @@ describe("RollbackClient", () => {
 
       const state = client.getStateForRendering();
       expect(state).not.toBeNull();
-      expect(state?.players.get("remote-player")?.position.x).toBeGreaterThan(0);
+      // Remote player should have moved right from initial position
+      expect(state?.players.get("remote-player")?.position.x).toBeGreaterThan(initialX);
     });
   });
 });

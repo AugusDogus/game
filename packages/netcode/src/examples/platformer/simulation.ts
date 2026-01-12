@@ -353,58 +353,83 @@ function simulatePlayer(
 // =============================================================================
 
 /**
+ * Clamp a player's position to not go below the floor
+ */
+function clampToFloor(player: PlatformerPlayer): PlatformerPlayer {
+  const maxY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
+  if (player.position.y > maxY) {
+    return {
+      ...player,
+      position: { x: player.position.x, y: maxY },
+      velocity: { x: player.velocity.x, y: 0 },
+      isGrounded: true,
+    };
+  }
+  return player;
+}
+
+/**
  * Resolve collisions between all players (push-out resolution)
+ * Uses horizontal-only push to avoid squishy vertical behavior
  */
 function resolvePlayerCollisions(
   players: Map<string, PlatformerPlayer>,
 ): Map<string, PlatformerPlayer> {
   const playerArray = Array.from(players.entries());
-  const newPlayers = new Map(players);
+  let newPlayers = new Map(players);
 
   // Check each pair of players
   for (let i = 0; i < playerArray.length; i++) {
     for (let j = i + 1; j < playerArray.length; j++) {
-      const [idA, playerA] = playerArray[i] as [string, PlatformerPlayer];
-      const [idB, playerB] = playerArray[j] as [string, PlatformerPlayer];
+      const [idA] = playerArray[i] as [string, PlatformerPlayer];
+      const [idB] = playerArray[j] as [string, PlatformerPlayer];
+
+      // Get current positions (may have been updated by previous collision)
+      const currentA = newPlayers.get(idA);
+      const currentB = newPlayers.get(idB);
+
+      if (!currentA || !currentB) continue;
 
       // Skip dead or respawning players
-      if (!isPlayerAlive(playerA) || !isPlayerAlive(playerB)) {
+      if (!isPlayerAlive(currentA) || !isPlayerAlive(currentB)) {
         continue;
       }
 
-      const aabbA = getPlayerAABB(playerA);
-      const aabbB = getPlayerAABB(playerB);
+      const aabbA = getPlayerAABB(currentA);
+      const aabbB = getPlayerAABB(currentB);
 
       if (aabbOverlap(aabbA, aabbB)) {
-        // Calculate separation and split it between both players
-        const separation = calculateSeparation(aabbA, aabbB);
-        const halfSepX = separation.x / 2;
-        const halfSepY = separation.y / 2;
+        // Only push horizontally to avoid squishy vertical collisions
+        // This creates solid "bumping" behavior instead of bouncy/squishy physics
+        const overlapLeft = aabbA.x + aabbA.width - aabbB.x;
+        const overlapRight = aabbB.x + aabbB.width - aabbA.x;
+        
+        // Choose smallest horizontal push direction
+        const pushX = overlapLeft < overlapRight ? -overlapLeft : overlapRight;
+        const halfPushX = pushX / 2;
 
-        const currentA = newPlayers.get(idA);
-        const currentB = newPlayers.get(idB);
+        newPlayers.set(idA, {
+          ...currentA,
+          position: {
+            x: currentA.position.x + halfPushX,
+            y: currentA.position.y,
+          },
+        });
 
-        if (currentA) {
-          newPlayers.set(idA, {
-            ...currentA,
-            position: {
-              x: currentA.position.x + halfSepX,
-              y: currentA.position.y + halfSepY,
-            },
-          });
-        }
-
-        if (currentB) {
-          newPlayers.set(idB, {
-            ...currentB,
-            position: {
-              x: currentB.position.x - halfSepX,
-              y: currentB.position.y - halfSepY,
-            },
-          });
-        }
+        newPlayers.set(idB, {
+          ...currentB,
+          position: {
+            x: currentB.position.x - halfPushX,
+            y: currentB.position.y,
+          },
+        });
       }
     }
+  }
+
+  // After all player-player collisions, ensure no one is below the floor
+  for (const [playerId, player] of newPlayers) {
+    newPlayers.set(playerId, clampToFloor(player));
   }
 
   return newPlayers;

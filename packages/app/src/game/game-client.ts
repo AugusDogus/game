@@ -293,9 +293,6 @@ export class GameClient {
       const world = this.netcodeClient.getStateForRendering();
       const localPlayerId = this.netcodeClient.getPlayerId();
 
-      // Convert to array for renderer
-      const players = world ? Array.from(world.players.values()) : [];
-
       // Update position histories if debug visualization is enabled
       if (world && (this.debugOptions.showTrails || this.debugOptions.showServerPositions)) {
         this.updatePositionHistories(world, localPlayerId);
@@ -305,13 +302,23 @@ export class GameClient {
       const serverSnapshot = this.netcodeClient.getLastServerSnapshot();
       const serverWorld = serverSnapshot?.state as PlatformerWorld | null;
 
-      // Render with debug options
-      this.renderer.render(players, localPlayerId, {
-        debugData: this.buildDebugData(),
-        serverSnapshot: serverWorld ?? null,
-        showTrails: this.debugOptions.showTrails,
-        showServerPositions: this.debugOptions.showServerPositions,
-      });
+      // Render with full game state (includes projectiles, platforms, game state overlay)
+      if (world) {
+        this.renderer.renderWithGameState(world, localPlayerId, {
+          debugData: this.buildDebugData(),
+          serverSnapshot: serverWorld ?? null,
+          showTrails: this.debugOptions.showTrails,
+          showServerPositions: this.debugOptions.showServerPositions,
+        });
+      } else {
+        // Fallback to basic render if no world state yet
+        this.renderer.render([], localPlayerId, {
+          debugData: this.buildDebugData(),
+          serverSnapshot: serverWorld ?? null,
+          showTrails: this.debugOptions.showTrails,
+          showServerPositions: this.debugOptions.showServerPositions,
+        });
+      }
 
       // Continue loop
       this.animationFrameId = requestAnimationFrame(render);
