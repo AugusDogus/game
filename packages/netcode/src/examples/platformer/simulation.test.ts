@@ -212,6 +212,187 @@ describe("simulatePlatformer", () => {
     });
   });
 
+  describe("player-player collision", () => {
+    test("horizontal collision: players should not overlap when walking into each other", () => {
+      // Two players on the ground, close together
+      const player1 = createTestPlayer("player-1", {
+        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        isGrounded: true,
+      });
+      const player2 = createTestPlayer("player-2", {
+        position: { x: 25, y: DEFAULT_FLOOR_Y - 10 }, // 25 units apart (player width is 20)
+        isGrounded: true,
+      });
+      let world = createPlayingWorld([player1, player2]);
+
+      // Player 1 walks right into player 2
+      const inputs = new Map<string, PlatformerInput>([
+        ["player-1", createInput(1, 0, false, Date.now())],
+        ["player-2", createInput(0, 0, false, Date.now())],
+      ]);
+
+      // Simulate several ticks and check EVERY frame for overlap
+      for (let i = 0; i < 20; i++) {
+        world = simulatePlatformer(world, inputs, 50);
+        
+        const p1 = world.players.get("player-1");
+        const p2 = world.players.get("player-2");
+        
+        // Players should NEVER overlap - their centers should be at least 20 units apart
+        // (player width is 20, so centers must be >= 20 apart to not overlap)
+        const distance = Math.abs((p2?.position.x ?? 0) - (p1?.position.x ?? 0));
+        expect(distance).toBeGreaterThanOrEqual(20);
+      }
+    });
+
+    test("horizontal collision: pushing should be stable (no jitter)", () => {
+      // Two players overlapping - simulate collision resolution
+      const player1 = createTestPlayer("player-1", {
+        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        isGrounded: true,
+      });
+      const player2 = createTestPlayer("player-2", {
+        position: { x: 15, y: DEFAULT_FLOOR_Y - 10 }, // Overlapping (within 20 units)
+        isGrounded: true,
+      });
+      let world = createPlayingWorld([player1, player2]);
+
+      // No input - just let collision resolve
+      const inputs = new Map<string, PlatformerInput>();
+
+      // Simulate several ticks and record positions
+      const p1Positions: number[] = [];
+      const p2Positions: number[] = [];
+      
+      for (let i = 0; i < 10; i++) {
+        world = simulatePlatformer(world, inputs, 50);
+        p1Positions.push(world.players.get("player-1")?.position.x ?? 0);
+        p2Positions.push(world.players.get("player-2")?.position.x ?? 0);
+      }
+
+      // After first frame, positions should stabilize (not jitter back and forth)
+      // Check that positions don't oscillate after frame 2
+      for (let i = 2; i < p1Positions.length - 1; i++) {
+        const p1Diff = Math.abs((p1Positions[i + 1] ?? 0) - (p1Positions[i] ?? 0));
+        const p2Diff = Math.abs((p2Positions[i + 1] ?? 0) - (p2Positions[i] ?? 0));
+        expect(p1Diff).toBeLessThan(0.1); // Should be stable, not moving
+        expect(p2Diff).toBeLessThan(0.1);
+      }
+    });
+
+    test("horizontal collision: continuous movement into player should not jitter", () => {
+      // This tests the bug where holding left/right into another player causes jitter
+      const player1 = createTestPlayer("player-1", {
+        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        isGrounded: true,
+      });
+      const player2 = createTestPlayer("player-2", {
+        position: { x: 25, y: DEFAULT_FLOOR_Y - 10 }, // 25 units apart (player width is 20)
+        isGrounded: true,
+      });
+      let world = createPlayingWorld([player1, player2]);
+
+      // Player 1 continuously holds right, player 2 is stationary
+      const inputs = new Map<string, PlatformerInput>([
+        ["player-1", createInput(1, 0, false, Date.now())],
+        ["player-2", createInput(0, 0, false, Date.now())],
+      ]);
+
+      // Simulate many ticks with continuous input
+      const p2Positions: number[] = [];
+      
+      for (let i = 0; i < 30; i++) {
+        world = simulatePlatformer(world, inputs, 50);
+        p2Positions.push(world.players.get("player-2")?.position.x ?? 0);
+      }
+
+      // After initial contact, player 2's position should stabilize
+      // (player 1 pushing shouldn't cause oscillation)
+      // Find when they first make contact (p2 starts moving)
+      let contactFrame = -1;
+      for (let i = 1; i < p2Positions.length; i++) {
+        if (Math.abs((p2Positions[i] ?? 0) - (p2Positions[i - 1] ?? 0)) > 0.1) {
+          contactFrame = i;
+          break;
+        }
+      }
+
+      // After contact + 2 frames of settling, position should be stable
+      if (contactFrame >= 0 && contactFrame + 3 < p2Positions.length) {
+        for (let i = contactFrame + 3; i < p2Positions.length - 1; i++) {
+          const diff = Math.abs((p2Positions[i + 1] ?? 0) - (p2Positions[i] ?? 0));
+          // Should be stable (not jittering), allowing small movement from being pushed
+          expect(diff).toBeLessThan(2); // Allow some push but not wild oscillation
+        }
+      }
+    });
+
+    test("vertical collision: player should be able to stand on another player", () => {
+      // Player 2 on the ground, player 1 falling onto them
+      const player1 = createTestPlayer("player-1", {
+        position: { x: 0, y: DEFAULT_FLOOR_Y - 50 }, // Above player 2
+        velocity: { x: 0, y: 100 }, // Falling down
+        isGrounded: false,
+      });
+      const player2 = createTestPlayer("player-2", {
+        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 }, // On the ground
+        isGrounded: true,
+      });
+      let world = createPlayingWorld([player1, player2]);
+
+      const inputs = new Map<string, PlatformerInput>();
+
+      // Simulate until player 1 lands
+      for (let i = 0; i < 20; i++) {
+        world = simulatePlatformer(world, inputs, 50);
+      }
+
+      const p1 = world.players.get("player-1");
+      const p2 = world.players.get("player-2");
+
+      // Player 1 should be on top of player 2 (not overlapping, not on floor)
+      // Player 1's bottom should be at player 2's top
+      const p1Bottom = (p1?.position.y ?? 0) + 10; // center + half height
+      const p2Top = (p2?.position.y ?? 0) - 10; // center - half height
+      
+      expect(p1Bottom).toBeCloseTo(p2Top, 1);
+      expect(p1?.isGrounded).toBe(true); // Should be grounded (standing on player)
+      expect(p1?.velocity.y).toBe(0); // Should not be falling
+    });
+
+    test("vertical collision: standing on player should be stable (no bouncing)", () => {
+      // Player 1 already positioned on top of player 2
+      const player2Y = DEFAULT_FLOOR_Y - 10;
+      const player1Y = player2Y - 20; // Exactly on top (20 = player height)
+      
+      const player1 = createTestPlayer("player-1", {
+        position: { x: 0, y: player1Y },
+        velocity: { x: 0, y: 0 },
+        isGrounded: true,
+      });
+      const player2 = createTestPlayer("player-2", {
+        position: { x: 0, y: player2Y },
+        isGrounded: true,
+      });
+      let world = createPlayingWorld([player1, player2]);
+
+      const inputs = new Map<string, PlatformerInput>();
+
+      // Record player 1's Y position over several frames
+      const p1YPositions: number[] = [];
+      for (let i = 0; i < 10; i++) {
+        world = simulatePlatformer(world, inputs, 50);
+        p1YPositions.push(world.players.get("player-1")?.position.y ?? 0);
+      }
+
+      // Player 1 should stay at the same Y position (not bounce)
+      for (let i = 1; i < p1YPositions.length; i++) {
+        const diff = Math.abs((p1YPositions[i] ?? 0) - (p1YPositions[0] ?? 0));
+        expect(diff).toBeLessThan(1); // Should be stable
+      }
+    });
+  });
+
   describe("tick increment", () => {
     test("should increment world tick", () => {
       const world = createPlatformerWorld();

@@ -36,9 +36,9 @@ describe("Predictor", () => {
   // Helper to create a grounded player
   const createGroundedPlayer = (id: string, x: number = 0): PlatformerPlayer =>
     createTestPlayer(id, {
-      position: { x, y: DEFAULT_FLOOR_Y - 10 },
-      isGrounded: true,
-    });
+    position: { x, y: DEFAULT_FLOOR_Y - 10 },
+    isGrounded: true,
+  });
 
   // Helper to create world with single player
   const createWorld = (player: PlatformerPlayer): PlatformerWorld =>
@@ -128,25 +128,25 @@ describe("Predictor", () => {
   });
 
   describe("other players in world state", () => {
-    test("should only extract local player from world with multiple players", () => {
+    test("should extract all players for collision detection", () => {
       const localPlayer = createGroundedPlayer(playerId, 0);
       const otherPlayer = createGroundedPlayer("other-player", 100);
-
+      
       const world = createPlayingWorld([localPlayer, otherPlayer]);
 
       predictor.setBaseState(world, playerId);
-
+      
       const state = predictor.getState();
-      // Should only have the local player
-      expect(state?.players?.size).toBe(1);
+      // Should have ALL players for collision detection
+      expect(state?.players?.size).toBe(2);
       expect(state?.players?.has(playerId)).toBe(true);
-      expect(state?.players?.has("other-player")).toBe(false);
+      expect(state?.players?.has("other-player")).toBe(true);
     });
 
     test("inputs should only affect local player prediction", () => {
       const localPlayer = createGroundedPlayer(playerId, 0);
       const otherPlayer = createGroundedPlayer("other-player", 100);
-
+      
       const world = createPlayingWorld([localPlayer, otherPlayer]);
 
       predictor.setBaseState(world, playerId);
@@ -155,15 +155,17 @@ describe("Predictor", () => {
       const state = predictor.getState();
       // Local player should have moved
       expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
-      // Other player should not be in prediction state
-      expect(state?.players?.has("other-player")).toBe(false);
+      // Other player should be in prediction state (for collision) but not moved
+      // (they get idle input during prediction)
+      expect(state?.players?.has("other-player")).toBe(true);
+      expect(state?.players?.get("other-player")?.position.x).toBe(100);
     });
   });
 
   describe("mergeWithServer", () => {
     test("should merge predicted local player with server world", () => {
       const otherPlayer = createGroundedPlayer("other-player", 500);
-
+      
       // Setup server world with both players
       const serverLocalPlayer = createTestPlayer(playerId, {
         position: { x: 10, y: DEFAULT_FLOOR_Y - 10 },

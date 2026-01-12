@@ -104,6 +104,7 @@ export class ServerAuthoritativeClient<
 
   setLocalPlayerId(playerId: string): void {
     this.playerId = playerId;
+    this.predictor.setLocalPlayerId(playerId);
     this.reconciler = new Reconciler<TWorld, TInput>(
       this.inputBuffer,
       this.predictor,

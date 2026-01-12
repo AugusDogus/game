@@ -3,38 +3,38 @@
  */
 
 import {
-  DEFAULT_PLAYER_SPEED,
-  DEFAULT_GRAVITY,
-  DEFAULT_JUMP_VELOCITY,
-  DEFAULT_FLOOR_Y,
+    DEFAULT_FLOOR_Y,
+    DEFAULT_GRAVITY,
+    DEFAULT_JUMP_VELOCITY,
+    DEFAULT_PLAYER_SPEED,
 } from "../../constants.js";
-import type { SimulateFunction, InputMerger } from "../../core/types.js";
+import type { InputMerger, SimulateFunction } from "../../core/types.js";
 import type {
-  PlatformerWorld,
-  PlatformerInput,
-  PlatformerPlayer,
-  Vector2,
-  Platform,
-  Hazard,
-  SpawnPoint,
-  Projectile,
+    Hazard,
+    Platform,
+    PlatformerInput,
+    PlatformerPlayer,
+    PlatformerWorld,
+    Projectile,
+    SpawnPoint,
+    Vector2,
 } from "./types.js";
 import {
-  createPlatformerPlayer,
-  createIdleInput,
-  PLAYER_WIDTH,
-  PLAYER_HEIGHT,
-  RESPAWN_TIMER_TICKS,
-  clampHealth,
-  isPlayerAlive,
-  canPlayerTakeDamage,
-  getPlayerWithMostKills,
-  hasPlayerReachedKillTarget,
-  DEFAULT_MAX_HEALTH,
-  PROJECTILE_RADIUS,
-  PROJECTILE_SPEED,
-  PROJECTILE_DAMAGE,
-  PROJECTILE_LIFETIME_TICKS,
+    canPlayerTakeDamage,
+    clampHealth,
+    createIdleInput,
+    createPlatformerPlayer,
+    DEFAULT_MAX_HEALTH,
+    getPlayerWithMostKills,
+    hasPlayerReachedKillTarget,
+    isPlayerAlive,
+    PLAYER_HEIGHT,
+    PLAYER_WIDTH,
+    PROJECTILE_DAMAGE,
+    PROJECTILE_LIFETIME_TICKS,
+    PROJECTILE_RADIUS,
+    PROJECTILE_SPEED,
+    RESPAWN_TIMER_TICKS,
 } from "./types.js";
 
 // =============================================================================
@@ -191,35 +191,44 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
   // If no inputs provided, simulate ALL players with idle input (legacy behavior)
   const simulateAll = inputs.size === 0;
 
-  // Step 1: Simulate physics for each player
+  // Step 1: Check which players are supported (standing on floor or another player)
+  // This must happen BEFORE physics so we don't apply gravity to supported players
+  const supportedPlayers = new Set<string>();
+  for (const [playerId, player] of worldAfterStateUpdate.players) {
+    if (isPlayerSupported(player, worldAfterStateUpdate.players, playerId)) {
+      supportedPlayers.add(playerId);
+    }
+  }
+
+  // Step 2: Simulate physics for each player
+  // We pass all OTHER players so we can check for collisions during movement
   let newPlayers = new Map<string, PlatformerPlayer>();
   for (const [playerId, player] of worldAfterStateUpdate.players) {
-    if (simulateAll) {
-      const input = createIdleInput();
-      const newPlayer = simulatePlayer(
+    const isSupported = supportedPlayers.has(playerId);
+    const input = simulateAll ? createIdleInput() : (inputs.get(playerId) ?? null);
+    
+    // Get other players for collision checking during movement
+    const otherPlayers = new Map(worldAfterStateUpdate.players);
+    otherPlayers.delete(playerId);
+    
+    if (input) {
+      const newPlayer = simulatePlayerWithSupport(
         player,
         input,
         deltaSeconds,
         worldAfterStateUpdate.platforms,
+        isSupported,
+        otherPlayers,
       );
       newPlayers.set(playerId, newPlayer);
     } else {
-      const input = inputs.get(playerId);
-      if (input) {
-        const newPlayer = simulatePlayer(
-          player,
-          input,
-          deltaSeconds,
-          worldAfterStateUpdate.platforms,
-        );
-        newPlayers.set(playerId, newPlayer);
-      } else {
-        newPlayers.set(playerId, player);
-      }
+      newPlayers.set(playerId, player);
     }
   }
 
-  // Step 2: Handle player-player collisions
+  // Step 3: Handle player-player collisions (resolve any new overlaps from movement)
+  // We pass the original positions so we can detect if a player was pushed back
+  // and prevent them from moving into the collision again
   newPlayers = resolvePlayerCollisions(newPlayers);
 
   // Step 3: Handle hazard damage
@@ -270,12 +279,16 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
 
 /**
  * Simulate a single player with platformer physics
+ * @param isSupported - Whether player is standing on floor or another player (skip gravity if true)
+ * @param otherPlayers - Other players to check for collision during movement
  */
-function simulatePlayer(
+function simulatePlayerWithSupport(
   player: PlatformerPlayer,
   input: PlatformerInput,
   deltaSeconds: number,
   platforms: Platform[],
+  isSupported: boolean,
+  otherPlayers: Map<string, PlatformerPlayer>,
 ): PlatformerPlayer {
   // If player is respawning, they can't act - just decrement timer
   if (player.respawnTimer !== null) {
@@ -290,21 +303,48 @@ function simulatePlayer(
   // Start with current velocity
   let velocityX = input.moveX * DEFAULT_PLAYER_SPEED;
   let velocityY = player.velocity.y;
+  let jumping = false;
 
-  // Apply gravity (Y increases downward)
-  velocityY += DEFAULT_GRAVITY * deltaSeconds;
-
-  // Handle jumping - only if grounded and jump pressed
-  if (input.jump && player.isGrounded) {
+  // Handle jumping - only if grounded/supported and jump pressed
+  if (input.jump && (player.isGrounded || isSupported)) {
     velocityY = DEFAULT_JUMP_VELOCITY;
+    jumping = true;
+  } else if (isSupported && velocityY >= 0) {
+    // If supported and not jumping, don't apply gravity - stay put
+    velocityY = 0;
+  } else {
+    // Apply gravity (Y increases downward) - only when not supported
+    velocityY += DEFAULT_GRAVITY * deltaSeconds;
   }
 
   // Calculate new position
   let newX = player.position.x + velocityX * deltaSeconds;
   let newY = player.position.y + velocityY * deltaSeconds;
+  
+  // If supported (and not jumping), snap to the support surface to fix floating-point gaps
+  // This ensures the player is exactly on top of what's supporting them
+  if (isSupported && !jumping) {
+    // Find what's supporting us and snap to it
+    for (const [, other] of otherPlayers) {
+      if (!isPlayerAlive(other)) continue;
+      const aBottom = newY + PLAYER_HEIGHT / 2;
+      const bTop = other.position.y - PLAYER_HEIGHT / 2;
+      const aLeft = newX - PLAYER_WIDTH / 2;
+      const aRight = newX + PLAYER_WIDTH / 2;
+      const bLeft = other.position.x - PLAYER_WIDTH / 2;
+      const bRight = other.position.x + PLAYER_WIDTH / 2;
+      const horizontalOverlap = aLeft < bRight && aRight > bLeft;
+      // If we're within snapping distance and horizontally overlapping, snap to top
+      if (horizontalOverlap && Math.abs(aBottom - bTop) < 2) {
+        newY = other.position.y - PLAYER_HEIGHT;
+        break;
+      }
+    }
+  }
 
   // Check floor collision
-  let isGrounded = false;
+  // If jumping, we're not grounded even if we were supported
+  let isGrounded = jumping ? false : isSupported;
 
   if (newY + PLAYER_HEIGHT / 2 >= DEFAULT_FLOOR_Y) {
     newY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
@@ -313,7 +353,7 @@ function simulatePlayer(
   }
 
   // Check platform collisions
-  const playerAABB = getPlayerAABB({
+  let playerAABB = getPlayerAABB({
     ...player,
     position: { x: newX, y: newY },
   });
@@ -340,6 +380,63 @@ function simulatePlayer(
     }
   }
 
+  // Check player-player collisions DURING movement (prevents moving into other players)
+  playerAABB = getPlayerAABB({
+    ...player,
+    position: { x: newX, y: newY },
+  });
+
+  for (const [, other] of otherPlayers) {
+    if (!isPlayerAlive(other)) continue;
+
+    const otherAABB = getPlayerAABB(other);
+    // Use >= for collision check to catch players that are exactly touching
+    // (standard AABB uses strict < which misses exact edge contact)
+    const touching = 
+      playerAABB.x <= otherAABB.x + otherAABB.width &&
+      playerAABB.x + playerAABB.width >= otherAABB.x &&
+      playerAABB.y <= otherAABB.y + otherAABB.height &&
+      playerAABB.y + playerAABB.height >= otherAABB.y;
+    
+    if (!touching) continue;
+
+    // Calculate overlap on each axis
+    const overlapX = Math.min(
+      playerAABB.x + playerAABB.width - otherAABB.x,
+      otherAABB.x + otherAABB.width - playerAABB.x,
+    );
+    const overlapY = Math.min(
+      playerAABB.y + playerAABB.height - otherAABB.y,
+      otherAABB.y + otherAABB.height - playerAABB.y,
+    );
+
+    if (overlapX < overlapY) {
+      // Horizontal collision - push this player back and stop horizontal velocity
+      const pushDir = newX < other.position.x ? -1 : 1;
+      // Push by full overlap plus tiny buffer for floating point precision
+      newX += pushDir * (overlapX + 0.1);
+      velocityX = 0;
+    } else {
+      // Vertical collision
+      if (newY < other.position.y) {
+        // This player is on top - land on the other player
+        newY = other.position.y - PLAYER_HEIGHT;
+        velocityY = 0;
+        isGrounded = true;
+      } else {
+        // This player is below - get pushed down
+        newY = other.position.y + PLAYER_HEIGHT;
+        velocityY = Math.max(0, velocityY);
+      }
+    }
+
+    // Update AABB for next collision check
+    playerAABB = getPlayerAABB({
+      ...player,
+      position: { x: newX, y: newY },
+    });
+  }
+
   return {
     ...player,
     position: { x: newX, y: newY },
@@ -353,11 +450,55 @@ function simulatePlayer(
 // =============================================================================
 
 /**
+ * Check if player A is standing on player B (A's bottom touches B's top)
+ */
+function isStandingOn(playerA: PlatformerPlayer, playerB: PlatformerPlayer): boolean {
+  const aBottom = playerA.position.y + PLAYER_HEIGHT / 2;
+  const bTop = playerB.position.y - PLAYER_HEIGHT / 2;
+  
+  // Check vertical alignment (A's bottom near B's top)
+  const verticallyAligned = Math.abs(aBottom - bTop) < 2;
+  
+  // Check horizontal overlap
+  const aLeft = playerA.position.x - PLAYER_WIDTH / 2;
+  const aRight = playerA.position.x + PLAYER_WIDTH / 2;
+  const bLeft = playerB.position.x - PLAYER_WIDTH / 2;
+  const bRight = playerB.position.x + PLAYER_WIDTH / 2;
+  const horizontalOverlap = aLeft < bRight && aRight > bLeft;
+  
+  return verticallyAligned && horizontalOverlap;
+}
+
+/**
+ * Check if a player is supported (standing on floor or another player)
+ */
+function isPlayerSupported(
+  player: PlatformerPlayer,
+  allPlayers: Map<string, PlatformerPlayer>,
+  playerId: string,
+): boolean {
+  // Check floor
+  const playerBottom = player.position.y + PLAYER_HEIGHT / 2;
+  if (playerBottom >= DEFAULT_FLOOR_Y - 1) {
+    return true;
+  }
+  
+  // Check other players
+  for (const [otherId, other] of allPlayers) {
+    if (otherId === playerId) continue;
+    if (!isPlayerAlive(other)) continue;
+    if (isStandingOn(player, other)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Resolve collisions between all players using proper AABB collision.
- * Uses minimum translation vector (MTV) to push players apart along the
- * axis of least penetration. This allows:
- * - Standing on top of other players
- * - Solid horizontal blocking (no overlap/jitter)
+ * - Horizontal collisions: push players apart equally
+ * - Vertical collisions: top player lands on bottom player
  */
 function resolvePlayerCollisions(
   players: Map<string, PlatformerPlayer>,
@@ -365,89 +506,78 @@ function resolvePlayerCollisions(
   const playerIds = Array.from(players.keys());
   const newPlayers = new Map(players);
 
-  // Multiple iterations to resolve stacked collisions
-  const iterations = 3;
-  
-  for (let iter = 0; iter < iterations; iter++) {
-    for (let i = 0; i < playerIds.length; i++) {
-      for (let j = i + 1; j < playerIds.length; j++) {
-        const idA = playerIds[i] as string;
-        const idB = playerIds[j] as string;
+  // Resolve collisions
+  for (let i = 0; i < playerIds.length; i++) {
+    for (let j = i + 1; j < playerIds.length; j++) {
+      const idA = playerIds[i] as string;
+      const idB = playerIds[j] as string;
 
-        const playerA = newPlayers.get(idA);
-        const playerB = newPlayers.get(idB);
+      const playerA = newPlayers.get(idA);
+      const playerB = newPlayers.get(idB);
 
-        if (!playerA || !playerB) continue;
+      if (!playerA || !playerB) continue;
+      if (!isPlayerAlive(playerA) || !isPlayerAlive(playerB)) continue;
 
-        // Skip dead or respawning players
-        if (!isPlayerAlive(playerA) || !isPlayerAlive(playerB)) {
-          continue;
-        }
+      const aabbA = getPlayerAABB(playerA);
+      const aabbB = getPlayerAABB(playerB);
 
-        const aabbA = getPlayerAABB(playerA);
-        const aabbB = getPlayerAABB(playerB);
+      if (!aabbOverlap(aabbA, aabbB)) continue;
 
-        if (!aabbOverlap(aabbA, aabbB)) continue;
+      // Calculate overlap on each axis
+      const overlapX = Math.min(
+        aabbA.x + aabbA.width - aabbB.x,
+        aabbB.x + aabbB.width - aabbA.x,
+      );
+      const overlapY = Math.min(
+        aabbA.y + aabbA.height - aabbB.y,
+        aabbB.y + aabbB.height - aabbA.y,
+      );
 
-        // Calculate overlap on each axis
-        const overlapX = Math.min(
-          aabbA.x + aabbA.width - aabbB.x,
-          aabbB.x + aabbB.width - aabbA.x,
-        );
-        const overlapY = Math.min(
-          aabbA.y + aabbA.height - aabbB.y,
-          aabbB.y + aabbB.height - aabbA.y,
-        );
+      if (overlapX < overlapY) {
+        // Horizontal collision - push apart equally and stop horizontal velocity
+        const pushDir = playerA.position.x < playerB.position.x ? -1 : 1;
+        const halfPush = overlapX / 2 + 0.1; // Tiny buffer for floating point precision
 
-        // Resolve along axis of minimum penetration
-        if (overlapX < overlapY) {
-          // Horizontal collision - push apart equally
-          const pushDir = playerA.position.x < playerB.position.x ? -1 : 1;
-          const halfPush = overlapX / 2;
+        // Stop horizontal velocity for both players to prevent jitter
+        // (they can't move through each other)
+        newPlayers.set(idA, {
+          ...playerA,
+          position: {
+            x: playerA.position.x + pushDir * halfPush,
+            y: playerA.position.y,
+          },
+          velocity: { x: 0, y: playerA.velocity.y },
+        });
+        newPlayers.set(idB, {
+          ...playerB,
+          position: {
+            x: playerB.position.x - pushDir * halfPush,
+            y: playerB.position.y,
+          },
+          velocity: { x: 0, y: playerB.velocity.y },
+        });
+      } else {
+        // Vertical collision - top player lands on bottom player
+        const aOnTop = playerA.position.y < playerB.position.y;
+        const topId = aOnTop ? idA : idB;
+        const bottomId = aOnTop ? idB : idA;
+        const topPlayer = newPlayers.get(topId) as PlatformerPlayer;
+        const bottomPlayer = newPlayers.get(bottomId) as PlatformerPlayer;
 
-          newPlayers.set(idA, {
-            ...playerA,
-            position: {
-              x: playerA.position.x + pushDir * halfPush,
-              y: playerA.position.y,
-            },
-          });
-          newPlayers.set(idB, {
-            ...playerB,
-            position: {
-              x: playerB.position.x - pushDir * halfPush,
-              y: playerB.position.y,
-            },
-          });
-        } else {
-          // Vertical collision - determine who's on top
-          const aOnTop = playerA.position.y < playerB.position.y;
-          const topPlayer = aOnTop ? playerA : playerB;
-          const bottomPlayer = aOnTop ? playerB : playerA;
-          const topId = aOnTop ? idA : idB;
-          const bottomId = aOnTop ? idB : idA;
+        // Position top player exactly on bottom player's head
+        const newTopY = bottomPlayer.position.y - PLAYER_HEIGHT;
 
-          // Push the top player up, bottom player stays (they're probably on floor)
-          // Top player lands on bottom player's head
-          const topAABB = getPlayerAABB(topPlayer);
-          const bottomAABB = getPlayerAABB(bottomPlayer);
-          const newTopY = bottomAABB.y - topAABB.height / 2 - PLAYER_HEIGHT / 2;
-
-          newPlayers.set(topId, {
-            ...topPlayer,
-            position: { x: topPlayer.position.x, y: newTopY },
-            velocity: { x: topPlayer.velocity.x, y: 0 },
-            isGrounded: true, // Standing on another player counts as grounded
-          });
-          
-          // Bottom player unchanged (or slightly pushed down if needed)
-          newPlayers.set(bottomId, bottomPlayer);
-        }
+        newPlayers.set(topId, {
+          ...topPlayer,
+          position: { x: topPlayer.position.x, y: newTopY },
+          velocity: { x: topPlayer.velocity.x, y: 0 },
+          isGrounded: true,
+        });
       }
     }
   }
 
-  // Final pass: ensure no one is below the floor
+  // Final pass: clamp to floor
   for (const [playerId, player] of newPlayers) {
     const maxY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
     if (player.position.y > maxY) {

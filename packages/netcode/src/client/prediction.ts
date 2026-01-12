@@ -9,9 +9,17 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
   private predictedState: Partial<TWorld> | null = null;
   private predictionScope: PredictionScope<TWorld, TInput>;
   private lastInputTimestamp: number | null = null;
+  private localPlayerId: string | null = null;
 
   constructor(predictionScope: PredictionScope<TWorld, TInput>) {
     this.predictionScope = predictionScope;
+  }
+
+  /**
+   * Set the local player ID for simulation
+   */
+  setLocalPlayerId(playerId: string): void {
+    this.localPlayerId = playerId;
   }
 
   /**
@@ -19,6 +27,7 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
    * Extracts the predictable portion using the prediction scope.
    */
   setBaseState(world: TWorld, localPlayerId: string): void {
+    this.localPlayerId = localPlayerId;
     this.predictedState = this.predictionScope.extractPredictable(world, localPlayerId);
   }
 
@@ -62,6 +71,7 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
       this.predictedState,
       input,
       deltaTime,
+      this.localPlayerId ?? undefined,
     );
   }
 
@@ -76,6 +86,7 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
       this.predictedState,
       input,
       deltaTime,
+      this.localPlayerId ?? undefined,
     );
   }
 
@@ -86,7 +97,11 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
     if (!this.predictedState) {
       return serverWorld;
     }
-    return this.predictionScope.mergePrediction(serverWorld, this.predictedState);
+    return this.predictionScope.mergePrediction(
+      serverWorld,
+      this.predictedState,
+      this.localPlayerId ?? undefined,
+    );
   }
 
   /**
