@@ -231,10 +231,10 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
   // and prevent them from moving into the collision again
   newPlayers = resolvePlayerCollisions(newPlayers);
 
-  // Step 3: Handle hazard damage
+  // Step 4: Handle hazard damage
   newPlayers = processHazardDamage(newPlayers, worldAfterStateUpdate.hazards);
 
-  // Step 4: Process shooting inputs and spawn projectiles
+  // Step 5: Process shooting inputs and spawn projectiles
   let newProjectiles = [...worldAfterStateUpdate.projectiles];
   for (const [playerId, input] of inputs) {
     if (input.shoot) {
@@ -246,15 +246,21 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
           input.shootTargetX,
           input.shootTargetY,
           worldAfterStateUpdate.tick,
+          player.projectileSeq,
         );
         if (projectile) {
           newProjectiles.push(projectile);
+          // Increment the player's projectile sequence counter
+          newPlayers.set(playerId, {
+            ...player,
+            projectileSeq: player.projectileSeq + 1,
+          });
         }
       }
     }
   }
 
-  // Step 5: Simulate projectiles and handle projectile-player collisions
+  // Step 6: Simulate projectiles and handle projectile-player collisions
   const projectileResult = simulateProjectiles(
     newProjectiles,
     newPlayers,
@@ -263,10 +269,10 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
   newPlayers = projectileResult.players;
   newProjectiles = projectileResult.projectiles;
 
-  // Step 6: Process respawn timers and deaths
-  newPlayers = processRespawns(newPlayers, worldAfterStateUpdate.spawnPoints);
+  // Step 7: Process respawn timers and deaths
+  newPlayers = processRespawns(newPlayers, worldAfterStateUpdate.spawnPoints, worldAfterStateUpdate.tick);
 
-  // Step 7: Check win conditions
+  // Step 8: Check win conditions
   const worldWithPlayers: PlatformerWorld = {
     ...worldAfterStateUpdate,
     players: newPlayers,
@@ -737,7 +743,8 @@ function simulateProjectiles(
 }
 
 /**
- * Create a projectile from player input
+ * Create a projectile from player input.
+ * Uses a deterministic ID based on ownerId, tick, and sequence number.
  */
 function createProjectileFromInput(
   ownerId: string,
@@ -745,6 +752,7 @@ function createProjectileFromInput(
   targetX: number,
   targetY: number,
   tick: number,
+  projectileSeq: number,
 ): Projectile | null {
   // Calculate direction to target
   const dx = targetX - ownerPosition.x;
@@ -762,8 +770,8 @@ function createProjectileFromInput(
     y: (dy / distance) * PROJECTILE_SPEED,
   };
 
-  // Generate unique projectile ID
-  const projectileId = `proj-${ownerId}-${tick}-${Math.random().toString(36).substring(2, 7)}`;
+  // Generate deterministic projectile ID from ownerId, tick, and sequence
+  const projectileId = `proj-${ownerId}-${tick}-${projectileSeq}`;
 
   return {
     id: projectileId,
@@ -789,14 +797,29 @@ export function spawnProjectile(
     return null;
   }
 
-  const projectile = createProjectileFromInput(ownerId, owner.position, targetX, targetY, world.tick);
+  const projectile = createProjectileFromInput(
+    ownerId,
+    owner.position,
+    targetX,
+    targetY,
+    world.tick,
+    owner.projectileSeq,
+  );
   if (!projectile) {
     return null;
   }
 
+  // Update the player's projectile sequence counter
+  const updatedPlayers = new Map(world.players);
+  updatedPlayers.set(ownerId, {
+    ...owner,
+    projectileSeq: owner.projectileSeq + 1,
+  });
+
   return {
     world: {
       ...world,
+      players: updatedPlayers,
       projectiles: [...world.projectiles, projectile],
     },
     projectileId: projectile.id,
@@ -808,16 +831,31 @@ export function spawnProjectile(
 // =============================================================================
 
 /**
- * Get a random spawn point
+ * Get a deterministic spawn point based on a seed value.
+ * Uses the seed to select a spawn point index, ensuring client and server
+ * derive the same spawn point for the same seed.
  */
-const getRandomSpawnPoint = (spawnPoints: SpawnPoint[]): Vector2 => {
+const getDeterministicSpawnPoint = (spawnPoints: SpawnPoint[], seed: number): Vector2 => {
   if (spawnPoints.length === 0) {
     return { x: 0, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 };
   }
-  const index = Math.floor(Math.random() * spawnPoints.length);
+  // Use absolute value and modulo to get a deterministic index
+  const index = Math.abs(seed) % spawnPoints.length;
   const spawnPoint = spawnPoints[index];
   return spawnPoint ? spawnPoint.position : { x: 0, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 };
 };
+
+/**
+ * Simple hash function to combine playerId string with tick for deterministic spawn selection.
+ * Returns a positive integer suitable for modulo operations.
+ */
+function hashPlayerIdWithTick(playerId: string, tick: number): number {
+  let hash = tick;
+  for (let i = 0; i < playerId.length; i++) {
+    hash = ((hash << 5) - hash + playerId.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
 
 /**
  * Process respawn timers and handle deaths
@@ -825,6 +863,7 @@ const getRandomSpawnPoint = (spawnPoints: SpawnPoint[]): Vector2 => {
 function processRespawns(
   players: Map<string, PlatformerPlayer>,
   spawnPoints: SpawnPoint[],
+  tick: number,
 ): Map<string, PlatformerPlayer> {
   const newPlayers = new Map<string, PlatformerPlayer>();
 
@@ -853,8 +892,10 @@ function processRespawns(
       const newTimer = player.respawnTimer - 1;
 
       if (newTimer <= 0) {
-        // Respawn complete - reset player
-        const spawnPos = getRandomSpawnPoint(spawnPoints);
+        // Respawn complete - reset player using deterministic spawn selection
+        // Seed is derived from playerId and tick to ensure client/server sync
+        const spawnSeed = hashPlayerIdWithTick(playerId, tick);
+        const spawnPos = getDeterministicSpawnPoint(spawnPoints, spawnSeed);
         newPlayers.set(playerId, {
           ...player,
           position: spawnPos,
