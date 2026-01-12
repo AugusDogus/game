@@ -302,23 +302,16 @@ export class GameClient {
       const serverSnapshot = this.netcodeClient.getLastServerSnapshot();
       const serverWorld = serverSnapshot?.state as PlatformerWorld | null;
 
-      // Render with full game state (includes projectiles, platforms, game state overlay)
+      // Render the game state
       if (world) {
-        this.renderer.renderWithGameState(world, localPlayerId, {
-          debugData: this.buildDebugData(),
-          serverSnapshot: serverWorld ?? null,
-          showTrails: this.debugOptions.showTrails,
-          showServerPositions: this.debugOptions.showServerPositions,
-        });
-      } else {
-        // Fallback to basic render if no world state yet
-        this.renderer.render([], localPlayerId, {
+        this.renderer.render(world, localPlayerId, {
           debugData: this.buildDebugData(),
           serverSnapshot: serverWorld ?? null,
           showTrails: this.debugOptions.showTrails,
           showServerPositions: this.debugOptions.showServerPositions,
         });
       }
+      // If no world state yet, just clear and wait
 
       // Continue loop
       this.animationFrameId = requestAnimationFrame(render);

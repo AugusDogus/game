@@ -401,32 +401,6 @@ export class CanvasRenderer {
     }
   }
 
-  /**
-   * Render a frame
-   */
-  render(players: PlatformerPlayer[], localPlayerId: string | null, options?: RenderOptions): void {
-    this.clear();
-    this.drawGrid();
-    this.drawFloor();
-
-    // Draw debug visualization first (behind players)
-    if (options?.debugData && (options.showTrails || options.showServerPositions)) {
-      this.drawDebug(
-        options.debugData,
-        options.serverSnapshot,
-        localPlayerId,
-        options.showTrails,
-        options.showServerPositions,
-      );
-    }
-
-    this.drawPlayers(players, localPlayerId);
-
-    // Draw legend if debug mode is active
-    if (options?.showTrails || options?.showServerPositions) {
-      this.drawDebugLegend(options.showTrails, options.showServerPositions);
-    }
-  }
 
   /**
    * Draw debug legend
@@ -698,7 +672,7 @@ export class CanvasRenderer {
   /**
    * Render a frame with full game state
    */
-  renderWithGameState(
+  render(
     world: PlatformerWorld,
     localPlayerId: string | null,
     options?: RenderOptions,
