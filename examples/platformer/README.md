@@ -1,0 +1,279 @@
+# Platformer Example
+
+A complete 2D multiplayer platformer demonstrating all features of `@game/netcode`.
+
+## Overview
+
+This example implements:
+- 2D physics with gravity, jumping, and collision
+- Player-vs-player combat with melee attacks and projectiles
+- Multiple level configurations
+- Health, respawning, and scoring
+- Full client-side prediction and interpolation
+
+## Package
+
+```bash
+# This is a workspace package
+@game/example-platformer
+```
+
+## Usage
+
+Import from the example package to use in your own game or as a reference:
+
+```typescript
+import {
+  // Simulation
+  simulatePlatformer,
+  interpolatePlatformer,
+  platformerPredictionScope,
+  
+  // World management
+  createPlatformerWorld,
+  addPlayerToWorld,
+  removePlayerFromWorld,
+  
+  // Types
+  type PlatformerWorld,
+  type PlatformerInput,
+  type PlatformerPlayer,
+} from "@game/example-platformer";
+```
+
+## Structure
+
+```
+examples/platformer/
+├── types.ts           # Type definitions and constants
+├── simulation.ts      # Core game physics and simulation
+├── interpolation.ts   # Interpolation for smooth rendering
+├── prediction.ts      # Client-side prediction scope
+├── action-validator.ts # Lag-compensated hit detection
+├── levels.ts          # Level configurations
+├── test-utils.ts      # Test helpers
+└── index.ts           # Public exports
+```
+
+## Types
+
+### PlatformerWorld
+
+```typescript
+interface PlatformerWorld {
+  tick: number;
+  players: Map<string, PlatformerPlayer>;
+  projectiles: Map<string, Projectile>;
+  level: LevelConfig;
+  gameState: GameState;
+  matchConfig: MatchConfig;
+}
+```
+
+### PlatformerPlayer
+
+```typescript
+interface PlatformerPlayer {
+  id: string;
+  position: Vector2;
+  velocity: Vector2;
+  isGrounded: boolean;
+  health: number;
+  maxHealth: number;
+  kills: number;
+  deaths: number;
+  respawnTimer: number;
+  invulnerabilityTimer: number;
+  facingDirection: 1 | -1;
+}
+```
+
+### PlatformerInput
+
+```typescript
+interface PlatformerInput {
+  moveX: number;      // -1 to 1 horizontal movement
+  moveY: number;      // Reserved for climbing, etc.
+  jump: boolean;      // Jump pressed
+  attack: boolean;    // Melee attack
+  shoot: boolean;     // Ranged attack
+  aimX: number;       // Aim direction X
+  aimY: number;       // Aim direction Y
+  timestamp: number;  // Required by netcode
+}
+```
+
+## Simulation
+
+The simulation handles:
+
+### Physics
+- Gravity acceleration
+- Ground collision with floor
+- Platform collision (solid platforms)
+- Player-player collision (push apart)
+
+### Movement
+- Horizontal movement based on `moveX` input
+- Jump velocity when grounded and `jump` pressed
+- Clamping to world bounds
+
+### Combat
+- Melee attacks with radius-based hit detection
+- Projectile spawning and movement
+- Damage, knockback, and death
+- Respawn timers and invulnerability frames
+
+```typescript
+import { simulatePlatformer } from "@game/example-platformer";
+
+// Simulate one tick
+const nextWorld = simulatePlatformer(world, inputs, deltaTimeMs);
+```
+
+## Prediction
+
+The prediction scope extracts only the local player for client-side prediction:
+
+```typescript
+import { platformerPredictionScope } from "@game/example-platformer";
+
+// Use with createClient
+const client = createClient({
+  socket,
+  predictionScope: platformerPredictionScope,
+  interpolate: interpolatePlatformer,
+});
+```
+
+The scope:
+1. Extracts the local player's state
+2. Simulates movement locally for instant feedback
+3. Merges prediction with server state during reconciliation
+
+## Interpolation
+
+Smoothly interpolates remote players between server snapshots:
+
+```typescript
+import { interpolatePlatformer } from "@game/example-platformer";
+
+// Lerps position, preserves discrete states (isGrounded)
+const rendered = interpolatePlatformer(fromWorld, toWorld, alpha);
+```
+
+## Levels
+
+Built-in level configurations:
+
+```typescript
+import {
+  LEVEL_BASIC_ARENA,
+  LEVEL_PLATFORMS,
+  LEVEL_DANGER_ZONE,
+  LEVEL_TOWER,
+  getLevel,
+  getLevelIds,
+} from "@game/example-platformer";
+
+// Get all available levels
+const levelIds = getLevelIds(); // ["basic-arena", "platforms", ...]
+
+// Get specific level
+const level = getLevel("platforms");
+```
+
+### Level Structure
+
+```typescript
+interface LevelConfig {
+  id: string;
+  name: string;
+  platforms: Platform[];
+  spawnPoints: SpawnPoint[];
+  hazards?: Hazard[];
+  bounds?: { minX: number; maxX: number; minY: number; maxY: number };
+}
+```
+
+## Action Validation
+
+Lag-compensated hit detection for attacks:
+
+```typescript
+import { validatePlatformerAction } from "@game/example-platformer";
+
+// Use with createServer for lag compensation
+const server = createServer({
+  io,
+  initialWorld,
+  game: platformerGame,
+  validateAction: validatePlatformerAction,
+});
+```
+
+## Constants
+
+Key gameplay constants (all can be imported):
+
+```typescript
+// Player dimensions
+PLAYER_WIDTH = 32
+PLAYER_HEIGHT = 48
+
+// Combat
+ATTACK_RADIUS = 50
+ATTACK_DAMAGE = 20
+PROJECTILE_SPEED = 400
+PROJECTILE_DAMAGE = 15
+
+// Physics (use with @game/netcode constants)
+DEFAULT_PLAYER_SPEED = 200    // from @game/netcode
+DEFAULT_GRAVITY = 980         // from @game/netcode
+DEFAULT_JUMP_VELOCITY = -400  // from @game/netcode
+DEFAULT_FLOOR_Y = 250         // from @game/netcode
+```
+
+## Creating a GameDefinition
+
+Combine everything into a `GameDefinition` for easy setup:
+
+```typescript
+import type { GameDefinition } from "@game/netcode/types";
+import {
+  simulatePlatformer,
+  interpolatePlatformer,
+  platformerPredictionScope,
+  addPlayerToWorld,
+  removePlayerFromWorld,
+  createIdleInput,
+  mergePlatformerInputs,
+  type PlatformerWorld,
+  type PlatformerInput,
+} from "@game/example-platformer";
+
+const platformerGame: GameDefinition<PlatformerWorld, PlatformerInput> = {
+  simulate: simulatePlatformer,
+  interpolate: interpolatePlatformer,
+  addPlayer: addPlayerToWorld,
+  removePlayer: removePlayerFromWorld,
+  createIdleInput,
+  mergeInputs: mergePlatformerInputs,
+  createPredictionScope: () => platformerPredictionScope,
+};
+
+// Then use it
+const server = createServer({ io, initialWorld, game: platformerGame });
+const client = createClient({ socket, game: platformerGame });
+```
+
+## Running the Example
+
+The `packages/app` workspace uses this platformer example:
+
+```bash
+# From repository root
+bun start
+```
+
+This starts both the server and client for local testing.
