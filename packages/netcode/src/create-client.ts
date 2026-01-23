@@ -121,6 +121,11 @@ export interface ClientHandle<
   reset(): void;
   /** Get the interpolation delay used by this client (for calculating action timestamps) */
   getInterpolationDelayMs(): number;
+  /**
+   * Clean up all socket event listeners.
+   * Call this when unmounting the game or destroying the client to prevent memory leaks.
+   */
+  destroy(): void;
 }
 
 /**
@@ -350,6 +355,21 @@ export function createClient<
 
     getInterpolationDelayMs() {
       return interpolationDelayMs;
+    },
+
+    destroy() {
+      // Remove all socket event listeners to prevent memory leaks
+      config.socket.off("connect", handleConnect);
+      config.socket.off("netcode:snapshot", handleSnapshot);
+      config.socket.off("netcode:join", handleJoin);
+      config.socket.off("netcode:leave", handleLeave);
+      config.socket.off("netcode:action_result", handleActionResult);
+      config.socket.off("netcode:clock_sync", handleClockSync);
+      config.socket.off("disconnect", handleDisconnect);
+
+      // Reset internal state
+      strategy.reset();
+      actionSeq = 0;
     },
   };
 }

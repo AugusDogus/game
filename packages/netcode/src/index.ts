@@ -3,9 +3,9 @@
  *
  * Provides a game-agnostic netcode engine supporting:
  * - Server-authoritative architecture with client-side prediction
- * - Rollback netcode (GGPO-style)
  * - Entity interpolation and lag compensation
  * - Custom world states and simulation logic
+ * - GGPO-style rollback netcode (experimental, under active development)
  */
 
 // =============================================================================
@@ -76,6 +76,11 @@ export {
   ServerAuthoritativeServer,
 } from "./strategies/server-authoritative.js";
 export type { ServerAuthoritativeServerConfig } from "./strategies/server-authoritative.js";
+
+/**
+ * GGPO-style rollback netcode.
+ * @experimental Under active development - missing input prediction, desync detection, delay negotiation.
+ */
 export { RollbackClient } from "./strategies/rollback.js";
 
 // =============================================================================

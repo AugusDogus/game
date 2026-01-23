@@ -1,11 +1,15 @@
 /**
- * Rollback netcode strategy (GGPO-style).
- * All clients simulate the full game state; late inputs trigger rollback and resimulation.
+ * GGPO-style rollback netcode strategy.
  *
- * Note: This is a basic implementation. Production rollback netcode would need:
+ * All clients simulate the full game state locally, and late inputs trigger
+ * rollback and resimulation. This enables responsive gameplay even with
+ * network latency.
+ *
+ * @experimental Under active development. Currently missing:
  * - Input prediction for remote players
  * - Checksum validation for desync detection
- * - More sophisticated input delay management
+ * - Input delay negotiation based on network conditions
+ * - Spectator support
  */
 
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
@@ -14,8 +18,10 @@ import { getOrSet } from "../core/utils.js";
 import type { ClientStrategy } from "./types.js";
 
 /**
- * Rollback client strategy.
+ * GGPO-style rollback client strategy.
  * Simulates the full game state locally and rolls back when late inputs arrive.
+ *
+ * @experimental Under active development - see module docs for current limitations.
  */
 export class RollbackClient<TWorld, TInput extends { timestamp: number }> implements ClientStrategy<
   TWorld,

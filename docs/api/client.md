@@ -34,8 +34,20 @@ interface ClientConfig<TWorld, TInput, TActionResult> {
   /** Callback when interpolated world state updates (call your render here) */
   onWorldUpdate?: (world: TWorld) => void;
 
+  /** Callback when another player joins */
+  onPlayerJoin?: (playerId: string) => void;
+
+  /** Callback when another player leaves */
+  onPlayerLeave?: (playerId: string) => void;
+
   /** Callback when an action result is received from server */
   onActionResult?: (result: ActionResult<TActionResult>) => void;
+
+  /** Interpolation delay in ms (default: 100). Higher = smoother but more delay */
+  interpolationDelayMs?: number;
+
+  /** Artificial latency for testing (default: 0) */
+  simulatedLatency?: number;
 
   // Option 1: Pass a GameDefinition
   game?: GameDefinition<TWorld, TInput>;
@@ -50,22 +62,34 @@ interface ClientConfig<TWorld, TInput, TActionResult> {
 
 ```typescript
 interface ClientHandle<TWorld, TInput, TAction> {
-  /** Get current interpolated world state (for rendering) */
-  getWorld(): TWorld | null;
+  /** Send player input to the server. Timestamp is added automatically. */
+  sendInput(input: Omit<TInput, "timestamp">): void;
 
-  /** Get current predicted world state (includes local prediction) */
-  getPredictedWorld(): TWorld | null;
+  /** Send a discrete action for lag-compensated validation. Returns sequence number. */
+  sendAction(action: TAction): number;
 
-  /** Get local player ID (assigned by server on connect) */
+  /** Get the current world state for rendering (predicted local + interpolated remote). */
+  getStateForRendering(): TWorld | null;
+
+  /** Get the last raw server snapshot (useful for debug visualization). */
+  getLastServerSnapshot(): Snapshot<TWorld> | null;
+
+  /** Get local player ID (assigned by server on connect). */
   getPlayerId(): string | null;
 
-  /** Send input to server (also applies local prediction) */
-  sendInput(input: TInput): void;
+  /** Set artificial latency in milliseconds for testing. */
+  setSimulatedLatency(latencyMs: number): void;
 
-  /** Send an action to server for lag-compensated validation */
-  sendAction(action: TAction): void;
+  /** Get current artificial latency setting. */
+  getSimulatedLatency(): number;
 
-  /** Clean up and disconnect */
+  /** Reset all client state (prediction, interpolation, input buffer). */
+  reset(): void;
+
+  /** Get the interpolation delay used by this client. */
+  getInterpolationDelayMs(): number;
+
+  /** Clean up socket listeners. Call when unmounting/destroying the client. */
   destroy(): void;
 }
 ```
@@ -83,7 +107,7 @@ const client = createClient({
   socket,
   game: myGame,
   onWorldUpdate: (world) => {
-    // Called ~60fps with interpolated world state
+    // Called when new snapshot arrives and is processed
     renderer.draw(world);
   },
   onActionResult: (result) => {
@@ -93,13 +117,16 @@ const client = createClient({
   },
 });
 
-// Game loop
+// Game loop - note: timestamp is added automatically, don't pass it
 function update() {
-  const input = gatherInput();
+  const input = gatherInput(); // Returns { moveX, moveY, jump } without timestamp
   client.sendInput(input);
   requestAnimationFrame(update);
 }
 update();
+
+// When done (e.g., component unmount)
+client.destroy();
 ```
 
 ---
@@ -111,21 +138,38 @@ Convenience helper for running a client-side game loop with separate render and 
 ### Signature
 
 ```typescript
-function createGameLoop(config: GameLoopConfig): GameLoopHandle;
+function createGameLoop<TWorld, TInput>(
+  config: GameLoopConfig<TWorld, TInput>
+): GameLoopHandle;
 ```
 
 ### Config Options
 
 ```typescript
-interface GameLoopConfig {
-  /** Called every frame for rendering (uses requestAnimationFrame) */
-  onRender: (deltaMs: number) => void;
+interface GameLoopConfig<TWorld, TInput> {
+  /** The netcode client handle */
+  client: ClientHandle<TWorld, TInput, unknown>;
 
-  /** Called at fixed rate for sending input */
-  onInput?: () => void;
+  /**
+   * Function that returns current input state (WITHOUT timestamp).
+   * Called at the configured input rate.
+   */
+  getInput: () => Omit<TInput, "timestamp">;
 
-  /** Input send rate in milliseconds (default: 50ms = 20Hz) */
-  inputRateMs?: number;
+  /**
+   * Function to render the world state.
+   * Called every animation frame with interpolated world.
+   */
+  render: (world: TWorld, deltaMs: number) => void;
+
+  /**
+   * Rate at which to send inputs in Hz (default: 60).
+   * 60 = 60 times per second, 20 = 20 times per second.
+   */
+  inputRate?: number;
+
+  /** Called when render is invoked but no world state is available yet. */
+  onNoWorld?: (deltaMs: number) => void;
 }
 ```
 
@@ -151,18 +195,36 @@ import { createClient, createGameLoop } from "@game/netcode/client";
 
 const client = createClient({ ... });
 
+// Track input state
+const keys = new Set<string>();
+window.addEventListener("keydown", (e) => keys.add(e.key));
+window.addEventListener("keyup", (e) => keys.delete(e.key));
+
 const loop = createGameLoop({
-  onRender: (dt) => {
-    const world = client.getWorld();
-    if (world) renderer.draw(world);
+  client,
+  getInput: () => ({
+    // Don't include timestamp - it's added automatically
+    moveX: keys.has("d") ? 1 : keys.has("a") ? -1 : 0,
+    moveY: 0,
+    jump: keys.has(" "),
+  }),
+  render: (world, deltaMs) => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const player of world.players.values()) {
+      ctx.fillRect(player.x, player.y, 20, 20);
+    }
   },
-  onInput: () => {
-    client.sendInput(gatherInput());
+  inputRate: 60, // 60 Hz (60 times per second)
+  onNoWorld: () => {
+    // Show loading state
+    ctx.fillText("Connecting...", 100, 100);
   },
-  inputRateMs: 50, // Send input at 20Hz
 });
 
 loop.start();
+
+// Later, to stop:
+loop.stop();
 ```
 
 ---

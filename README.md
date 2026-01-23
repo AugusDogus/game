@@ -36,7 +36,7 @@ interface MyWorld {
 interface MyInput {
   moveX: number;
   moveY: number;
-  timestamp: number;
+  timestamp: number; // Required in type, but added automatically by sendInput()
 }
 
 const myGame: GameDefinition<MyWorld, MyInput> = {
@@ -80,6 +80,7 @@ const myGame: GameDefinition<MyWorld, MyInput> = {
     return { ...world, players };
   },
 
+  // timestamp: 0 is a placeholder - the engine replaces it with actual timestamps
   createIdleInput: () => ({ moveX: 0, moveY: 0, timestamp: 0 }),
 };
 ```
@@ -196,7 +197,8 @@ function update() {
   const moveX = keys.right ? 1 : keys.left ? -1 : pad.leftStick.x;
   const moveY = keys.down ? 1 : keys.up ? -1 : pad.leftStick.y;
 
-  client.sendInput({ moveX, moveY, timestamp: Date.now() });
+  // Note: timestamp is added automatically by sendInput
+  client.sendInput({ moveX, moveY });
 
   pointer.clearJustPressed();
 }
