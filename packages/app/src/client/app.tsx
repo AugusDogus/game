@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { GameClient } from "../game/game-client.js";
@@ -6,7 +6,29 @@ import { socket } from "./socket";
 
 const queryClient = new QueryClient();
 
+interface LevelInfo {
+  id: string;
+  name: string;
+  description: string;
+  platformCount: number;
+  hazardCount: number;
+  spawnPointCount: number;
+}
+
+interface LevelsResponse {
+  levels: LevelInfo[];
+  currentLevelId: string;
+}
+
+interface GameStatusResponse {
+  gameState: "lobby" | "countdown" | "playing" | "gameover";
+  playerCount: number;
+  winner: string | null;
+  tick: number;
+}
+
 function App() {
+  const qc = useQueryClient();
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [latency, setLatency] = useState<number | null>(null);
   const [simulatedLatency, setSimulatedLatency] = useState(0);
@@ -15,6 +37,57 @@ function App() {
   const [showServerPositions, setShowServerPositions] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameClientRef = useRef<GameClient | null>(null);
+
+  // Fetch available levels
+  const { data: levelsData } = useQuery<LevelsResponse>({
+    queryKey: ["levels"],
+    queryFn: () => fetch("/api/levels").then((r) => r.json()),
+    refetchInterval: 10000, // Refresh periodically
+  });
+
+  // Mutation to change level
+  const changeLevelMutation = useMutation({
+    mutationFn: async (levelId: string) => {
+      const res = await fetch(`/api/levels/${levelId}`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to change level");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["levels"] });
+      qc.invalidateQueries({ queryKey: ["gameStatus"] });
+    },
+  });
+
+  // Fetch game status
+  const { data: gameStatus } = useQuery<GameStatusResponse>({
+    queryKey: ["gameStatus"],
+    queryFn: () => fetch("/api/game/status").then((r) => r.json()),
+    refetchInterval: 1000, // Refresh every second
+  });
+
+  // Mutation to force start game
+  const forceStartMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/game/force-start", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to force start");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["gameStatus"] });
+    },
+  });
+
+  // Mutation to reset game
+  const resetGameMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/game/reset", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to reset game");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["gameStatus"] });
+    },
+  });
 
   const handleSimulatedLatencyChange = useCallback((value: number) => {
     setSimulatedLatency(value);
@@ -188,6 +261,72 @@ function App() {
                 <span>500ms</span>
               </div>
             </div>
+
+            {/* Game controls */}
+            {gameStatus && (
+              <div className="border-t border-slate-700 pt-3">
+                <label className="block text-xs text-slate-400 mb-2">Game Controls</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-slate-300">State:</span>
+                  <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                    gameStatus.gameState === "lobby" ? "bg-slate-600 text-slate-300" :
+                    gameStatus.gameState === "countdown" ? "bg-amber-600 text-amber-100" :
+                    gameStatus.gameState === "playing" ? "bg-emerald-600 text-emerald-100" :
+                    "bg-red-600 text-red-100"
+                  }`}>
+                    {gameStatus.gameState}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    ({gameStatus.playerCount} player{gameStatus.playerCount !== 1 ? "s" : ""})
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {(gameStatus.gameState === "lobby" || gameStatus.gameState === "countdown") && (
+                    <button
+                      onClick={() => forceStartMutation.mutate()}
+                      disabled={forceStartMutation.isPending}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white text-xs px-2 py-1.5 rounded font-medium"
+                    >
+                      {forceStartMutation.isPending ? "Starting..." : "Force Start"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => resetGameMutation.mutate()}
+                    disabled={resetGameMutation.isPending}
+                    className="flex-1 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 text-white text-xs px-2 py-1.5 rounded font-medium"
+                  >
+                    {resetGameMutation.isPending ? "Resetting..." : "Reset Game"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Level selector */}
+            {levelsData && (
+              <div className="border-t border-slate-700 pt-3">
+                <label className="block text-xs text-slate-400 mb-2">Level</label>
+                <select
+                  value={levelsData.currentLevelId}
+                  onChange={(e) => changeLevelMutation.mutate(e.target.value)}
+                  disabled={changeLevelMutation.isPending}
+                  className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {levelsData.levels.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.name}
+                    </option>
+                  ))}
+                </select>
+                {levelsData.levels.find(l => l.id === levelsData.currentLevelId)?.description && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    {levelsData.levels.find(l => l.id === levelsData.currentLevelId)?.description}
+                  </p>
+                )}
+                {changeLevelMutation.isPending && (
+                  <p className="text-xs text-amber-400 mt-1">Changing level...</p>
+                )}
+              </div>
+            )}
 
             {/* Visualization toggles */}
             <div className="border-t border-slate-700 pt-3 space-y-2">

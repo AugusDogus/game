@@ -97,6 +97,17 @@ export interface Hazard {
  * Level configuration loaded from JSON
  */
 export interface LevelConfig {
+  /** Unique identifier for the level */
+  id: string;
+  /** Display name for the level */
+  name: string;
+  /** Optional description */
+  description?: string;
+  /** Level bounds (for camera/rendering) */
+  bounds?: {
+    width: number;
+    height: number;
+  };
   /** Platforms in the level */
   platforms: Platform[];
   /** Spawn points for players */

@@ -665,6 +665,50 @@ export class CanvasRenderer {
   }
 
   /**
+   * Draw hazards (spikes, etc.)
+   */
+  drawHazards(hazards: Array<{ position: { x: number; y: number }; width: number; height: number }>): void {
+    this.ctx.save();
+
+    for (const hazard of hazards) {
+      // Hazard fill (red-ish)
+      this.ctx.fillStyle = "#7f1d1d";
+      this.ctx.fillRect(
+        hazard.position.x,
+        hazard.position.y,
+        hazard.width,
+        hazard.height,
+      );
+
+      // Draw spike pattern
+      this.ctx.fillStyle = "#dc2626";
+      const spikeWidth = 10;
+      const numSpikes = Math.floor(hazard.width / spikeWidth);
+      for (let i = 0; i < numSpikes; i++) {
+        const x = hazard.position.x + i * spikeWidth + spikeWidth / 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x - spikeWidth / 2, hazard.position.y + hazard.height);
+        this.ctx.lineTo(x, hazard.position.y);
+        this.ctx.lineTo(x + spikeWidth / 2, hazard.position.y + hazard.height);
+        this.ctx.closePath();
+        this.ctx.fill();
+      }
+
+      // Border
+      this.ctx.strokeStyle = "#991b1b";
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(
+        hazard.position.x,
+        hazard.position.y,
+        hazard.width,
+        hazard.height,
+      );
+    }
+
+    this.ctx.restore();
+  }
+
+  /**
    * Render a frame with full game state
    */
   render(
@@ -679,6 +723,11 @@ export class CanvasRenderer {
     // Draw platforms
     if (world.platforms.length > 0) {
       this.drawPlatforms(world.platforms);
+    }
+
+    // Draw hazards
+    if (world.hazards.length > 0) {
+      this.drawHazards(world.hazards);
     }
 
     // Draw debug visualization first (behind players)

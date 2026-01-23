@@ -156,6 +156,24 @@ export { platformerPredictionScope } from "./examples/platformer/prediction.js";
 
 export { validatePlatformerAction, isInAttackRange } from "./examples/platformer/action-validator.js";
 
+// Level system
+export type { LevelValidationResult } from "./examples/platformer/levels.js";
+export {
+  // Built-in levels
+  LEVEL_BASIC_ARENA,
+  LEVEL_PLATFORMS,
+  LEVEL_DANGER_ZONE,
+  LEVEL_TOWER,
+  DEFAULT_LEVEL,
+  LEVELS,
+  // Level functions
+  getLevel,
+  getLevelIds,
+  getAllLevels,
+  validateLevel,
+  parseLevelFromJson,
+} from "./examples/platformer/levels.js";
+
 export { platformerGame } from "./examples/platformer/index.js";
 
 // =============================================================================

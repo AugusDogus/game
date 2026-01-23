@@ -103,6 +103,14 @@ export interface NetcodeServerHandle<TWorld> {
   isRunning(): boolean;
   /** Get the current authoritative world state. */
   getWorldState(): TWorld;
+  /**
+   * Replace the entire world state.
+   * Useful for level changes, game resets, or loading saved states.
+   * The new world is immediately broadcast to all clients.
+   *
+   * @param world - The new world state
+   */
+  setWorld(world: TWorld): void;
   /** Get the current server tick number. */
   getTick(): number;
   /** Get the number of currently connected clients. */
@@ -401,6 +409,13 @@ export function createNetcodeServer<
 
     getWorldState() {
       return strategy.getWorldState();
+    },
+
+    setWorld(world: TWorld) {
+      strategy.setWorldState(world);
+      // Immediately broadcast the new world to all clients
+      const snapshot = strategy.createSnapshot();
+      config.io.emit("netcode:snapshot", snapshot);
     },
 
     getTick() {

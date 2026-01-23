@@ -278,6 +278,28 @@ export class ServerAuthoritativeServer<
     return this.worldManager.getState();
   }
 
+  setWorldState(world: TWorld): void {
+    this.worldManager.setState(world);
+    // Clear snapshot buffer since world state changed drastically
+    this.snapshotBuffer.clear();
+    // Clear input queues since old inputs are no longer valid
+    this.inputQueue.clear();
+  }
+
+  createSnapshot(): Snapshot<TWorld> {
+    const inputAcks = new Map<string, number>();
+    for (const clientId of this.connectedClients) {
+      inputAcks.set(clientId, this.inputQueue.getLastSeq(clientId));
+    }
+
+    return {
+      tick: this.worldManager.getTick(),
+      timestamp: Date.now(),
+      state: this.worldManager.getState(),
+      inputAcks,
+    };
+  }
+
   getTick(): number {
     return this.worldManager.getTick();
   }

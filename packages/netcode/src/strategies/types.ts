@@ -74,9 +74,24 @@ export interface ServerStrategy<TWorld, TInput> {
   getWorldState(): TWorld;
 
   /**
+   * Replace the entire world state (for level changes, resets, etc.).
+   */
+  setWorldState(world: TWorld): void;
+
+  /**
+   * Create a snapshot of the current world state without advancing the tick.
+   */
+  createSnapshot(): Snapshot<TWorld>;
+
+  /**
    * Get the current tick number.
    */
   getTick(): number;
+
+  /**
+   * Get list of connected client IDs.
+   */
+  getConnectedClients(): string[];
 }
 
 /**

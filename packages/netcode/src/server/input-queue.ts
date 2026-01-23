@@ -114,4 +114,24 @@ export class InputQueue<TInput> {
     }
     return result;
   }
+
+  /**
+   * Get the highest sequence number received for a client.
+   * Returns -1 if no inputs received.
+   */
+  getLastSeq(clientId: string): number {
+    const queue = this.queues.get(clientId);
+    if (!queue || queue.length === 0) {
+      return -1;
+    }
+    // Queue is sorted by seq, so last element has highest seq
+    return getLast(queue, "input queue").seq;
+  }
+
+  /**
+   * Clear all input queues.
+   */
+  clear(): void {
+    this.queues.clear();
+  }
 }
