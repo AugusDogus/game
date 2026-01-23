@@ -2,8 +2,8 @@ import { describe, test, expect } from "bun:test";
 import { platformerPredictionScope } from "./prediction.js";
 import { createIdleInput } from "./types.js";
 import type { PlatformerWorld, PlatformerPlayer, PlatformerInput } from "./types.js";
-import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED } from "../../constants.js";
-import { createTestPlayer, createTestWorld } from "../../test-utils.js";
+import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED } from "@game/netcode";
+import { createTestPlayer, createTestWorld } from "./test-utils.js";
 
 /** Helper to create test input with all required fields */
 const createInput = (

@@ -1,9 +1,10 @@
-import type { NetcodeClientHandle, PlatformerInput, PlatformerWorld } from "@game/netcode";
+import { createClient, type ClientHandle } from "@game/netcode/client";
 import {
-  createNetcodeClient,
   interpolatePlatformer,
   platformerPredictionScope,
-} from "@game/netcode";
+  type PlatformerInput,
+  type PlatformerWorld,
+} from "@game/example-platformer";
 import type { Socket } from "socket.io-client";
 import { CanvasRenderer, type DebugData, type PositionHistoryEntry } from "../client/renderer/canvas-renderer.js";
 
@@ -25,7 +26,7 @@ const INPUT_RATE_MS = 1000 / 60;
  * Game client that integrates NetcodeClient with rendering
  */
 export class GameClient {
-  private netcodeClient: NetcodeClientHandle<PlatformerWorld, PlatformerInput>;
+  private netcodeClient: ClientHandle<PlatformerWorld, PlatformerInput>;
   private renderer: CanvasRenderer;
   private canvas: HTMLCanvasElement;
   private animationFrameId: number | null = null;
@@ -55,7 +56,7 @@ export class GameClient {
     this.renderer = new CanvasRenderer(canvas);
 
     // Create netcode client
-    this.netcodeClient = createNetcodeClient<PlatformerWorld, PlatformerInput>({
+    this.netcodeClient = createClient<PlatformerWorld, PlatformerInput>({
       socket,
       predictionScope: platformerPredictionScope,
       interpolate: interpolatePlatformer,

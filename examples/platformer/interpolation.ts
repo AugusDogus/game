@@ -2,7 +2,7 @@
  * Platformer game interpolation logic
  */
 
-import type { InterpolateFunction } from "../../core/types.js";
+import type { InterpolateFunction } from "@game/netcode";
 import type { PlatformerPlayer, PlatformerWorld, Projectile } from "./types.js";
 
 /**

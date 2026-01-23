@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { interpolatePlatformer } from "./interpolation.js";
 import type { PlatformerWorld, PlatformerPlayer } from "./types.js";
-import { createTestPlayer, createTestWorld } from "../../test-utils.js";
+import { createTestPlayer, createTestWorld } from "./test-utils.js";
 
 // Create a player with the given ID and optional overrides
 const createPlayer = (

@@ -25,10 +25,18 @@
         "typescript": "^5",
       },
     },
+    "examples/platformer": {
+      "name": "@game/example-platformer",
+      "version": "0.1.0",
+      "dependencies": {
+        "@game/netcode": "workspace:*",
+      },
+    },
     "packages/app": {
       "name": "@game/app",
       "version": "0.1.0",
       "dependencies": {
+        "@game/example-platformer": "workspace:*",
         "@game/netcode": "workspace:*",
         "@socket.io/bun-engine": "^0.1.0",
         "@tanstack/react-query": "^5.90.16",
@@ -56,6 +64,7 @@
         "superjson": "^2.2.2",
       },
       "devDependencies": {
+        "@game/example-platformer": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^5",
       },
@@ -63,6 +72,8 @@
   },
   "packages": {
     "@game/app": ["@game/app@workspace:packages/app"],
+
+    "@game/example-platformer": ["@game/example-platformer@workspace:examples/platformer"],
 
     "@game/netcode": ["@game/netcode@workspace:packages/netcode"],
 
@@ -209,5 +220,13 @@
     "ws": ["ws@8.18.3", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg=="],
 
     "xmlhttprequest-ssl": ["xmlhttprequest-ssl@2.1.2", "", {}, "sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ=="],
+
+    "@game/app/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
+
+    "@game/netcode/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
+
+    "@game/app/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
+
+    "@game/netcode/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
   }
 }

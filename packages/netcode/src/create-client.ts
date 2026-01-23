@@ -7,27 +7,19 @@
 import type { Socket } from "socket.io-client";
 import type { PredictionScope } from "./client/prediction-scope.js";
 import { DEFAULT_INTERPOLATION_DELAY_MS } from "./constants.js";
-import type { ActionResult, InterpolateFunction, Snapshot } from "./core/types.js";
+import type { ActionResult, GameDefinition, InterpolateFunction, Snapshot } from "./core/types.js";
 import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js";
 
 /**
- * Configuration for creating a netcode client.
- *
- * @typeParam TWorld - The type of your game's world state
- * @typeParam TInput - The type of player input (must include timestamp)
- * @typeParam TActionResult - The type of action results (optional)
+ * Base configuration shared by all client config variants.
  */
-export interface CreateClientConfig<
+interface ClientConfigBase<
   TWorld,
   TInput extends { timestamp: number },
   TActionResult = unknown,
 > {
   /** Socket.IO client socket instance */
   socket: Socket;
-  /** Defines how to predict and merge local player state. See {@link PredictionScope}. */
-  predictionScope: PredictionScope<TWorld, TInput>;
-  /** Function to interpolate between two world states for smooth rendering of other players */
-  interpolate: InterpolateFunction<TWorld>;
   /** How far behind real-time to render other players (default: 100ms). Higher = smoother but more delay. */
   interpolationDelayMs?: number;
   /** Artificial latency for testing netcode behavior (default: 0) */
@@ -43,13 +35,63 @@ export interface CreateClientConfig<
 }
 
 /**
- * Handle returned by {@link createNetcodeClient} to interact with the netcode system.
+ * Client config using explicit function properties.
+ */
+interface ClientConfigExplicit<
+  TWorld,
+  TInput extends { timestamp: number },
+  TActionResult = unknown,
+> extends ClientConfigBase<TWorld, TInput, TActionResult> {
+  /** Defines how to predict and merge local player state. See {@link PredictionScope}. */
+  predictionScope: PredictionScope<TWorld, TInput>;
+  /** Function to interpolate between two world states for smooth rendering of other players */
+  interpolate: InterpolateFunction<TWorld>;
+  /** Do not provide when using explicit config */
+  game?: undefined;
+}
+
+/**
+ * Client config using a GameDefinition object.
+ */
+interface ClientConfigWithGame<
+  TWorld,
+  TInput extends { timestamp: number },
+  TActionResult = unknown,
+> extends ClientConfigBase<TWorld, TInput, TActionResult> {
+  /** Complete game definition providing interpolation and prediction scope */
+  game: GameDefinition<TWorld, TInput>;
+  /** Do not provide when using game definition */
+  predictionScope?: undefined;
+  /** Do not provide when using game definition */
+  interpolate?: undefined;
+}
+
+/**
+ * Configuration for creating a netcode client.
+ *
+ * You can either provide individual functions (predictionScope, interpolate) or
+ * a complete GameDefinition via the `game` property.
+ *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TActionResult - The type of action results (optional)
+ */
+export type ClientConfig<
+  TWorld,
+  TInput extends { timestamp: number },
+  TActionResult = unknown,
+> =
+  | ClientConfigExplicit<TWorld, TInput, TActionResult>
+  | ClientConfigWithGame<TWorld, TInput, TActionResult>;
+
+/**
+ * Handle returned by {@link createClient} to interact with the netcode system.
  *
  * @typeParam TWorld - The type of your game's world state
  * @typeParam TInput - The type of player input (must include timestamp)
  * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
  */
-export interface NetcodeClientHandle<
+export interface ClientHandle<
   TWorld,
   TInput extends { timestamp: number },
   TAction = unknown,
@@ -102,11 +144,12 @@ export interface NetcodeClientHandle<
  * @example
  * ```ts
  * import { io } from "socket.io-client";
- * import { createNetcodeClient, superjsonParser } from "@game/netcode";
+ * import { createClient } from "@game/netcode/client";
+ * import { superjsonParser } from "@game/netcode/parser";
  *
  * const socket = io("http://localhost:3000", { parser: superjsonParser });
  *
- * const client = createNetcodeClient({
+ * const client = createClient({
  *   socket,
  *   predictionScope: myPredictionScope,
  *   interpolate: (from, to, alpha) => { ... },
@@ -124,22 +167,33 @@ export interface NetcodeClientHandle<
  * client.sendAction({ type: 'attack', targetX: 100, targetY: 50 });
  * ```
  */
-export function createNetcodeClient<
+export function createClient<
   TWorld,
   TInput extends { timestamp: number },
   TAction = unknown,
   TActionResult = unknown,
 >(
-  config: CreateClientConfig<TWorld, TInput, TActionResult>,
-): NetcodeClientHandle<TWorld, TInput, TAction> {
+  config: ClientConfig<TWorld, TInput, TActionResult>,
+): ClientHandle<TWorld, TInput, TAction> {
+  // Extract client logic from either explicit config or GameDefinition
+  const predictionScope = config.game?.createPredictionScope?.() ?? config.predictionScope;
+  const interpolate = config.game?.interpolate ?? config.interpolate;
+
+  if (!predictionScope) {
+    throw new Error("[NetcodeClient] predictionScope is required (provide via config or game.createPredictionScope)");
+  }
+  if (!interpolate) {
+    throw new Error("[NetcodeClient] interpolate function is required (provide via config or game definition)");
+  }
+
   const interpolationDelayMs = config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
   let simulatedLatency = config.simulatedLatency ?? 0;
   let actionSeq = 0;
 
   // Create client strategy
   const strategy = new ServerAuthoritativeClient<TWorld, TInput>(
-    config.predictionScope,
-    config.interpolate,
+    predictionScope,
+    interpolate,
     interpolationDelayMs,
   );
 
@@ -299,3 +353,21 @@ export function createNetcodeClient<
     },
   };
 }
+
+// Backwards-compatible aliases
+/** @deprecated Use `ClientConfig` instead */
+export type CreateClientConfig<
+  TWorld,
+  TInput extends { timestamp: number },
+  TActionResult = unknown,
+> = ClientConfig<TWorld, TInput, TActionResult>;
+
+/** @deprecated Use `ClientHandle` instead */
+export type NetcodeClientHandle<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+> = ClientHandle<TWorld, TInput, TAction>;
+
+/** @deprecated Use `createClient` instead */
+export const createNetcodeClient = createClient;

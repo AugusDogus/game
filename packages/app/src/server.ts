@@ -1,25 +1,23 @@
 import { Server } from "socket.io";
 import { Server as Engine } from "@socket.io/bun-engine";
+import { createServer } from "@game/netcode/server";
+import { superjsonParser } from "@game/netcode/parser";
 import {
-  createNetcodeServer,
   createPlatformerWorld,
   simulatePlatformer,
   addPlayerToWorld,
   removePlayerFromWorld,
   mergePlatformerInputs,
   createIdleInput,
-  superjsonParser,
   setLevelConfig,
   forceStartGame,
-  resetGame,
-  // Level system
   LEVELS,
   getLevelIds,
   getLevel,
   DEFAULT_MATCH_CONFIG,
   type LevelConfig,
   type PlatformerWorld,
-} from "@game/netcode";
+} from "@game/example-platformer";
 import homepage from "./client/index.html";
 
 const startTime = Date.now();
@@ -60,7 +58,7 @@ const initialWorld = createWorldWithLevel(currentLevel);
 console.log(`📍 Loaded level: ${currentLevel.name}`);
 
 // Create and start netcode server with platformer game
-const netcodeServer = createNetcodeServer({
+const netcodeServer = createServer({
   io,
   initialWorld,
   simulate: simulatePlatformer,

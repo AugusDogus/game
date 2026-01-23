@@ -1,9 +1,16 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-import type { PlatformerWorld, PlatformerInput } from "../examples/platformer/types.js";
-import { createPlatformerWorld, createIdleInput } from "../examples/platformer/types.js";
-import { simulatePlatformer, addPlayerToWorld, forceStartGame } from "../examples/platformer/simulation.js";
+import {
+  type PlatformerWorld,
+  type PlatformerInput,
+  createPlatformerWorld,
+  createIdleInput,
+  simulatePlatformer,
+  addPlayerToWorld,
+  forceStartGame,
+  getPlayer,
+} from "@game/example-platformer";
 import { RollbackClient } from "./rollback.js";
-import { assertDefined, getPlayer } from "../test-utils.js";
+import { assertDefined } from "../test-utils.js";
 
 /** Helper to create test input with all required fields */
 const createInput = (

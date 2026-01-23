@@ -7,7 +7,7 @@
  * @module examples/platformer/levels
  */
 
-import { DEFAULT_FLOOR_Y } from "../../constants.js";
+import { DEFAULT_FLOOR_Y } from "@game/netcode";
 import type { Hazard, LevelConfig, Platform, SpawnPoint } from "./types.js";
 import { PLAYER_HEIGHT } from "./types.js";
 

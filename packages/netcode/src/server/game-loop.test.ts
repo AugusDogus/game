@@ -7,10 +7,11 @@ import {
   forceStartGame,
   mergePlatformerInputs,
   simulatePlatformer,
-} from "../examples/platformer/simulation.js";
-import type { PlatformerInput, PlatformerWorld } from "../examples/platformer/types.js";
-import { createPlatformerWorld } from "../examples/platformer/types.js";
-import { getPlayer } from "../test-utils.js";
+  type PlatformerInput,
+  type PlatformerWorld,
+  createPlatformerWorld,
+  getPlayer,
+} from "@game/example-platformer";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
 

@@ -9,18 +9,19 @@ import { Predictor } from "./client/prediction.js";
 import { Reconciler } from "./client/reconciliation.js";
 import { DEFAULT_FRAME_DELTA_MS, MAX_DELTA_MS, MIN_DELTA_MS } from "./constants.js";
 import type { Snapshot } from "./core/types.js";
+import { getAt, getFromMap, getLast } from "./core/utils.js";
 import {
   platformerPredictionScope,
-} from "./examples/platformer/prediction.js";
-import {
   addPlayerToWorld,
   forceStartGame,
   simulatePlatformer,
-} from "./examples/platformer/simulation.js";
-import type { PlatformerInput, PlatformerWorld } from "./examples/platformer/types.js";
-import { createIdleInput, createPlatformerWorld } from "./examples/platformer/types.js";
+  createIdleInput,
+  createPlatformerWorld,
+  getPlayer,
+  type PlatformerInput,
+  type PlatformerWorld,
+} from "@game/example-platformer";
 import { InputQueue } from "./server/input-queue.js";
-import { getAt, getFromMap, getLast, getPlayer } from "./test-utils.js";
 
 /**
  * Helper to create a world in "playing" state for tests

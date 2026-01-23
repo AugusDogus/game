@@ -6,7 +6,7 @@
 
 import type { Server, Socket } from "socket.io";
 import { DEFAULT_INTERPOLATION_DELAY_MS, DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE } from "./constants.js";
-import type { ActionMessage, ActionResult, ActionValidator, InputMerger, SimulateFunction } from "./core/types.js";
+import type { ActionMessage, ActionResult, ActionValidator, GameDefinition, InputMerger, SimulateFunction } from "./core/types.js";
 import { DefaultWorldManager } from "./core/world.js";
 import { ActionQueue } from "./server/action-queue.js";
 import { LagCompensator } from "./server/lag-compensator.js";
@@ -19,14 +19,9 @@ import {
 const DEFAULT_CLOCK_SYNC_INTERVAL_MS = 5000;
 
 /**
- * Configuration for creating a netcode server.
- *
- * @typeParam TWorld - The type of your game's world state
- * @typeParam TInput - The type of player input (must include timestamp)
- * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
- * @typeParam TActionResult - The type of action results (optional)
+ * Base configuration shared by all server config variants.
  */
-export interface CreateServerConfig<
+interface ServerConfigBase<
   TWorld,
   TInput extends { timestamp: number },
   TAction = unknown,
@@ -36,20 +31,10 @@ export interface CreateServerConfig<
   io: Server;
   /** Initial world state before any players join */
   initialWorld: TWorld;
-  /** Function that simulates one tick of the game world. Must be deterministic. */
-  simulate: SimulateFunction<TWorld, TInput>;
-  /** Function to add a new player to the world state */
-  addPlayer: (world: TWorld, playerId: string) => TWorld;
-  /** Function to remove a player from the world state */
-  removePlayer: (world: TWorld, playerId: string) => TWorld;
   /** Server tick rate in Hz (default: DEFAULT_TICK_RATE). Higher = more responsive but more bandwidth. */
   tickRate?: number;
   /** Number of snapshots to keep for lag compensation (default: DEFAULT_SNAPSHOT_HISTORY_SIZE) */
   snapshotHistorySize?: number;
-  /** Function to merge multiple inputs that arrive in one tick (default: use last input) */
-  mergeInputs?: InputMerger<TInput>;
-  /** Function to create an idle/neutral input for players who sent no input this tick */
-  createIdleInput: () => TInput;
   /** Called when a player connects */
   onPlayerJoin?: (playerId: string) => void;
   /** Called when a player disconnects */
@@ -90,11 +75,77 @@ export interface CreateServerConfig<
 }
 
 /**
- * Handle returned by {@link createNetcodeServer} to control the game loop.
+ * Server config using explicit function properties.
+ */
+interface ServerConfigExplicit<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+> extends ServerConfigBase<TWorld, TInput, TAction, TActionResult> {
+  /** Function that simulates one tick of the game world. Must be deterministic. */
+  simulate: SimulateFunction<TWorld, TInput>;
+  /** Function to add a new player to the world state */
+  addPlayer: (world: TWorld, playerId: string) => TWorld;
+  /** Function to remove a player from the world state */
+  removePlayer: (world: TWorld, playerId: string) => TWorld;
+  /** Function to create an idle/neutral input for players who sent no input this tick */
+  createIdleInput: () => TInput;
+  /** Function to merge multiple inputs that arrive in one tick (default: use last input) */
+  mergeInputs?: InputMerger<TInput>;
+  /** Do not provide when using explicit config */
+  game?: undefined;
+}
+
+/**
+ * Server config using a GameDefinition object.
+ */
+interface ServerConfigWithGame<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+> extends ServerConfigBase<TWorld, TInput, TAction, TActionResult> {
+  /** Complete game definition providing simulation and player management */
+  game: GameDefinition<TWorld, TInput>;
+  /** Do not provide when using game definition */
+  simulate?: undefined;
+  /** Do not provide when using game definition */
+  addPlayer?: undefined;
+  /** Do not provide when using game definition */
+  removePlayer?: undefined;
+  /** Do not provide when using game definition */
+  createIdleInput?: undefined;
+  /** Do not provide when using game definition */
+  mergeInputs?: undefined;
+}
+
+/**
+ * Configuration for creating a netcode server.
+ *
+ * You can either provide individual functions (simulate, addPlayer, etc.) or
+ * a complete GameDefinition via the `game` property.
+ *
+ * @typeParam TWorld - The type of your game's world state
+ * @typeParam TInput - The type of player input (must include timestamp)
+ * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
+ * @typeParam TActionResult - The type of action results (optional)
+ */
+export type ServerConfig<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+> =
+  | ServerConfigExplicit<TWorld, TInput, TAction, TActionResult>
+  | ServerConfigWithGame<TWorld, TInput, TAction, TActionResult>;
+
+/**
+ * Handle returned by {@link createServer} to control the game loop.
  *
  * @typeParam TWorld - The type of your game's world state
  */
-export interface NetcodeServerHandle<TWorld> {
+export interface ServerHandle<TWorld> {
   /** Start the server game loop. Begins processing inputs and broadcasting snapshots. */
   start(): void;
   /** Stop the server game loop. */
@@ -149,11 +200,12 @@ export interface NetcodeServerHandle<TWorld> {
  * @example
  * ```ts
  * import { Server } from "socket.io";
- * import { createNetcodeServer, superjsonParser } from "@game/netcode";
+ * import { createServer } from "@game/netcode/server";
+ * import { superjsonParser } from "@game/netcode/parser";
  *
  * const io = new Server({ parser: superjsonParser });
  *
- * const server = createNetcodeServer({
+ * const server = createServer({
  *   io,
  *   initialWorld: { players: new Map(), tick: 0 },
  *   simulate: (world, inputs, dt) => { ... },
@@ -171,14 +223,34 @@ export interface NetcodeServerHandle<TWorld> {
  * io.listen(3000);
  * ```
  */
-export function createNetcodeServer<
+export function createServer<
   TWorld,
   TInput extends { timestamp: number },
   TAction = unknown,
   TActionResult = unknown,
 >(
-  config: CreateServerConfig<TWorld, TInput, TAction, TActionResult>,
-): NetcodeServerHandle<TWorld> {
+  config: ServerConfig<TWorld, TInput, TAction, TActionResult>,
+): ServerHandle<TWorld> {
+  // Extract game logic from either explicit config or GameDefinition
+  const simulate = config.game?.simulate ?? config.simulate;
+  const addPlayer = config.game?.addPlayer ?? config.addPlayer;
+  const removePlayer = config.game?.removePlayer ?? config.removePlayer;
+  const createIdleInput = config.game?.createIdleInput ?? config.createIdleInput;
+  const mergeInputs = config.game?.mergeInputs ?? config.mergeInputs;
+
+  if (!simulate) {
+    throw new Error("[NetcodeServer] simulate function is required (provide via config or game definition)");
+  }
+  if (!addPlayer) {
+    throw new Error("[NetcodeServer] addPlayer function is required (provide via config or game definition)");
+  }
+  if (!removePlayer) {
+    throw new Error("[NetcodeServer] removePlayer function is required (provide via config or game definition)");
+  }
+  if (!createIdleInput) {
+    throw new Error("[NetcodeServer] createIdleInput function is required (provide via config or game definition)");
+  }
+
   const tickRate = config.tickRate ?? DEFAULT_TICK_RATE;
   if (!Number.isFinite(tickRate) || tickRate <= 0) {
     throw new Error(`[NetcodeServer] tickRate must be a positive finite number. Got: ${tickRate}`);
@@ -196,13 +268,13 @@ export function createNetcodeServer<
 
   // Create server strategy
   const serverConfig: ServerAuthoritativeServerConfig<TWorld, TInput> = {
-    simulate: config.simulate,
-    addPlayerToWorld: config.addPlayer,
-    removePlayerFromWorld: config.removePlayer,
+    simulate,
+    addPlayerToWorld: addPlayer,
+    removePlayerFromWorld: removePlayer,
     tickIntervalMs,
     snapshotHistorySize,
-    mergeInputs: config.mergeInputs,
-    createIdleInput: config.createIdleInput,
+    mergeInputs,
+    createIdleInput,
   };
 
   const strategy = new ServerAuthoritativeServer<TWorld, TInput>(worldManager, serverConfig);
@@ -435,3 +507,18 @@ export function createNetcodeServer<
     },
   };
 }
+
+// Backwards-compatible aliases
+/** @deprecated Use `ServerConfig` instead */
+export type CreateServerConfig<
+  TWorld,
+  TInput extends { timestamp: number },
+  TAction = unknown,
+  TActionResult = unknown,
+> = ServerConfig<TWorld, TInput, TAction, TActionResult>;
+
+/** @deprecated Use `ServerHandle` instead */
+export type NetcodeServerHandle<TWorld> = ServerHandle<TWorld>;
+
+/** @deprecated Use `createServer` instead */
+export const createNetcodeServer = createServer;

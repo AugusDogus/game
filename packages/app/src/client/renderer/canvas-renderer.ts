@@ -1,5 +1,6 @@
-import type { PlatformerPlayer, PlatformerWorld, Platform, GameState, Projectile } from "@game/netcode";
-import { DEFAULT_FLOOR_Y, isPlayerAlive, PROJECTILE_RADIUS } from "@game/netcode";
+import type { PlatformerPlayer, PlatformerWorld, Platform, GameState, Projectile } from "@game/example-platformer";
+import { isPlayerAlive, PROJECTILE_RADIUS } from "@game/example-platformer";
+import { DEFAULT_FLOOR_Y } from "@game/netcode";
 
 /** Safely get an element from an array, throwing if out of bounds */
 function getAt<T>(array: T[], index: number): T {

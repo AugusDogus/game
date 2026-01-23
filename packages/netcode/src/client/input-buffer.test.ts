@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { InputBuffer } from "./input-buffer.js";
-import type { PlatformerInput } from "../examples/platformer/types.js";
+import type { PlatformerInput } from "@game/example-platformer";
 
 /** Helper to create test input with all required fields */
 const createInput = (

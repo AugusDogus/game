@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Snapshot } from "../core/types.js";
-import { platformerPredictionScope } from "../examples/platformer/prediction.js";
-import type {
-  PlatformerInput,
-  PlatformerPlayer,
-  PlatformerWorld,
-} from "../examples/platformer/types.js";
+import {
+  platformerPredictionScope,
+  type PlatformerInput,
+  type PlatformerPlayer,
+  type PlatformerWorld,
+  createTestPlayer,
+  createTestWorld,
+} from "@game/example-platformer";
 import { InputBuffer } from "./input-buffer.js";
 import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
-import { createTestPlayer, createTestWorld } from "../test-utils.js";
 
 /** Helper to create test input with all required fields */
 const createInput = (

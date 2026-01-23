@@ -108,24 +108,72 @@ export type DeserializeFunction<TWorld> = (data: Uint8Array) => TWorld;
  * Complete game definition providing all simulation and rendering logic.
  *
  * This interface bundles all the functions the netcode engine needs from your game.
- * Used by lower-level APIs; the high-level `createNetcodeServer`/`createNetcodeClient`
- * accept these as separate config options.
+ * Pass a GameDefinition to `createServer` or `createClient` via the `game` config option
+ * for a cleaner setup experience.
  *
  * @typeParam TWorld - Your game's world state type
- * @typeParam TInput - Your game's input type
+ * @typeParam TInput - Your game's input type (must include timestamp)
+ *
+ * @example
+ * ```ts
+ * import type { GameDefinition } from "@game/netcode/types";
+ *
+ * const myGame: GameDefinition<MyWorld, MyInput> = {
+ *   simulate: (world, inputs, dt) => { ... },
+ *   interpolate: (from, to, alpha) => { ... },
+ *   addPlayer: (world, playerId) => { ... },
+ *   removePlayer: (world, playerId) => { ... },
+ *   createIdleInput: () => ({ moveX: 0, jump: false, timestamp: 0 }),
+ *   createPredictionScope: () => myPredictionScope,
+ * };
+ *
+ * // Then use it:
+ * const server = createServer({ io, initialWorld, game: myGame });
+ * const client = createClient({ socket, game: myGame });
+ * ```
  */
-export interface GameDefinition<TWorld, TInput> {
+export interface GameDefinition<TWorld, TInput extends { timestamp: number }> {
   /** Simulate one tick of the game world. See {@link SimulateFunction}. */
   simulate: SimulateFunction<TWorld, TInput>;
 
   /** Interpolate between two world states. See {@link InterpolateFunction}. */
   interpolate: InterpolateFunction<TWorld>;
 
+  /** Add a new player to the world state (server-side) */
+  addPlayer: (world: TWorld, playerId: string) => TWorld;
+
+  /** Remove a player from the world state (server-side) */
+  removePlayer: (world: TWorld, playerId: string) => TWorld;
+
+  /** Create an idle/neutral input for players who sent no input this tick */
+  createIdleInput: () => TInput;
+
+  /** Function to merge multiple inputs that arrive in one tick (optional) */
+  mergeInputs?: InputMerger<TInput>;
+
+  /** Factory function to create a prediction scope for client-side prediction */
+  createPredictionScope?: () => PredictionScope<TWorld, TInput>;
+
   /** Optional custom binary serialization for network efficiency */
   serialize?: SerializeFunction<TWorld>;
 
   /** Optional custom binary deserialization for network efficiency */
   deserialize?: DeserializeFunction<TWorld>;
+}
+
+/**
+ * Prediction scope interface for client-side prediction.
+ * Imported here to avoid circular dependencies.
+ */
+export interface PredictionScope<TWorld, TInput> {
+  /** Extract the portion of the world state that should be predicted */
+  extractPredictable(world: TWorld, localPlayerId: string): Partial<TWorld>;
+  /** Merge predicted state back into the full world */
+  mergePrediction(serverWorld: TWorld, predicted: Partial<TWorld>, localPlayerId?: string): TWorld;
+  /** Simulate the predicted portion of the world */
+  simulatePredicted(state: Partial<TWorld>, input: TInput, deltaTime: number, localPlayerId?: string): Partial<TWorld>;
+  /** Create an idle input (for simulating other players) */
+  createIdleInput(): TInput;
 }
 
 /**

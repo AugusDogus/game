@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Snapshot } from "../core/types.js";
-import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
-import type { PlatformerPlayer, PlatformerWorld } from "../examples/platformer/types.js";
+import {
+  interpolatePlatformer,
+  type PlatformerPlayer,
+  type PlatformerWorld,
+  createTestPlayer,
+  createTestWorld,
+} from "@game/example-platformer";
 import { Interpolator } from "./interpolation.js";
-import { assertDefined, createTestPlayer, createTestWorld } from "../test-utils.js";
+import { assertDefined } from "../test-utils.js";
 
 describe("Interpolator", () => {
   let interpolator: Interpolator<PlatformerWorld>;

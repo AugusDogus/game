@@ -5,7 +5,7 @@
  * historical world state.
  */
 
-import type { ActionValidator } from "../../core/types.js";
+import type { ActionValidator } from "@game/netcode";
 import type {
   PlatformerWorld,
   PlatformerAction,

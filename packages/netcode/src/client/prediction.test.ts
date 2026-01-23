@@ -1,13 +1,14 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { Predictor } from "./prediction.js";
 import { DEFAULT_FLOOR_Y } from "../constants.js";
-import type {
-  PlatformerWorld,
-  PlatformerInput,
-  PlatformerPlayer,
-} from "../examples/platformer/types.js";
-import { platformerPredictionScope } from "../examples/platformer/prediction.js";
-import { createTestPlayer, createPlayingWorld } from "../test-utils.js";
+import {
+  type PlatformerWorld,
+  type PlatformerInput,
+  type PlatformerPlayer,
+  platformerPredictionScope,
+  createTestPlayer,
+  createPlayingWorld,
+} from "@game/example-platformer";
 
 /** Helper to create test input with all required fields */
 const createInput = (

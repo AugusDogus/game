@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { validatePlatformerAction, isInAttackRange } from "./action-validator.js";
 import type { PlatformerWorld, PlatformerAction } from "./types.js";
 import { ATTACK_RADIUS } from "./types.js";
-import { createTestPlayer, createTestWorld } from "../../test-utils.js";
+import { createTestPlayer, createTestWorld } from "./test-utils.js";
 
 describe("validatePlatformerAction", () => {
   const createWorld = (

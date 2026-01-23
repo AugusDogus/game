@@ -5,7 +5,7 @@
  * physics match exactly. This is critical for proper client-side prediction.
  */
 
-import type { PredictionScope } from "../../client/prediction-scope.js";
+import type { PredictionScope } from "@game/netcode";
 import { simulatePlatformer } from "./simulation.js";
 import type { PlatformerInput, PlatformerPlayer, PlatformerWorld } from "./types.js";
 import { createIdleInput } from "./types.js";

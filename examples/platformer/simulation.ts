@@ -7,8 +7,8 @@ import {
     DEFAULT_GRAVITY,
     DEFAULT_JUMP_VELOCITY,
     DEFAULT_PLAYER_SPEED,
-} from "../../constants.js";
-import type { InputMerger, SimulateFunction } from "../../core/types.js";
+} from "@game/netcode";
+import type { InputMerger, SimulateFunction } from "@game/netcode";
 import type {
     Hazard,
     Platform,

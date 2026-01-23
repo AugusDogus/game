@@ -7,6 +7,7 @@
     "dev": "bun --watch run src/server.ts"
   },
   "dependencies": {
+    "@game/example-platformer": "workspace:*",
     "@game/netcode": "workspace:*",
     "@socket.io/bun-engine": "^0.1.0",
     "@tanstack/react-query": "^5.90.16",

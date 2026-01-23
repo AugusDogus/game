@@ -78,17 +78,21 @@ export { platformerPredictionScope } from "./prediction.js";
 // Action validation
 export { validatePlatformerAction, isInAttackRange } from "./action-validator.js";
 
-// Game definition for easy setup
-import type { GameDefinition } from "../../core/types.js";
-import type { PlatformerWorld, PlatformerInput } from "./types.js";
-import { simulatePlatformer } from "./simulation.js";
-import { interpolatePlatformer } from "./interpolation.js";
+// Test utilities (also useful for game implementations)
+export { getPlayer, createTestPlayer, createTestWorld, createPlayingWorld, createLobbyWorld } from "./test-utils.js";
 
-/**
- * Complete game definition for platformer.
- * Pass this to createNetcodeServer/createNetcodeClient.
- */
-export const platformerGame: GameDefinition<PlatformerWorld, PlatformerInput> = {
-  simulate: simulatePlatformer,
-  interpolate: interpolatePlatformer,
-};
+// Levels
+export type { LevelValidationResult } from "./levels.js";
+export {
+  LEVEL_BASIC_ARENA,
+  LEVEL_PLATFORMS,
+  LEVEL_DANGER_ZONE,
+  LEVEL_TOWER,
+  DEFAULT_LEVEL,
+  LEVELS,
+  getLevel,
+  getLevelIds,
+  getAllLevels,
+  validateLevel,
+  parseLevelFromJson,
+} from "./levels.js";

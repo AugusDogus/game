@@ -4,7 +4,7 @@ import {
   DEFAULT_GRAVITY,
   DEFAULT_JUMP_VELOCITY,
   DEFAULT_FLOOR_Y,
-} from "../../constants.js";
+} from "@game/netcode";
 import {
   simulatePlatformer,
   addPlayerToWorld,
@@ -13,7 +13,7 @@ import {
 } from "./simulation.js";
 import { createPlatformerWorld } from "./types.js";
 import type { PlatformerWorld, PlatformerInput } from "./types.js";
-import { createTestPlayer, createPlayingWorld } from "../../test-utils.js";
+import { createTestPlayer, createPlayingWorld } from "./test-utils.js";
 
 /** Helper to create test input with all required fields */
 const createInput = (

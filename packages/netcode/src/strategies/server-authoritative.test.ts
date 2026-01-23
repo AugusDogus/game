@@ -1,18 +1,20 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { DefaultWorldManager } from "../core/world.js";
-import type { PlatformerWorld, PlatformerInput } from "../examples/platformer/types.js";
-import { createPlatformerWorld, createIdleInput } from "../examples/platformer/types.js";
 import {
+  type PlatformerWorld,
+  type PlatformerInput,
+  createPlatformerWorld,
+  createIdleInput,
   simulatePlatformer,
   addPlayerToWorld,
   removePlayerFromWorld,
   mergePlatformerInputs,
   forceStartGame,
-} from "../examples/platformer/simulation.js";
-import { interpolatePlatformer } from "../examples/platformer/interpolation.js";
-import { platformerPredictionScope } from "../examples/platformer/prediction.js";
+  interpolatePlatformer,
+  platformerPredictionScope,
+  getPlayer,
+} from "@game/example-platformer";
 import { ServerAuthoritativeClient, ServerAuthoritativeServer } from "./server-authoritative.js";
-import { getPlayer } from "../test-utils.js";
 
 /** Helper to create test input with all required fields */
 const createInput = (

@@ -11,11 +11,11 @@
 // =============================================================================
 // High-Level API (Recommended)
 // =============================================================================
-export { createNetcodeServer } from "./create-server.js";
-export type { CreateServerConfig, NetcodeServerHandle } from "./create-server.js";
+export { createServer, createNetcodeServer } from "./create-server.js";
+export type { ServerConfig, ServerHandle, CreateServerConfig, NetcodeServerHandle } from "./create-server.js";
 
-export { createNetcodeClient } from "./create-client.js";
-export type { CreateClientConfig, NetcodeClientHandle } from "./create-client.js";
+export { createClient, createNetcodeClient } from "./create-client.js";
+export type { ClientConfig, ClientHandle, CreateClientConfig, NetcodeClientHandle } from "./create-client.js";
 
 // Socket.IO parser for proper Map/Set/Date serialization
 export { superjsonParser } from "./parser.js";
@@ -77,104 +77,6 @@ export {
 } from "./strategies/server-authoritative.js";
 export type { ServerAuthoritativeServerConfig } from "./strategies/server-authoritative.js";
 export { RollbackClient } from "./strategies/rollback.js";
-
-// =============================================================================
-// Platformer Example Game
-// =============================================================================
-export type {
-  Vector2,
-  PlatformerInput,
-  PlatformerPlayer,
-  PlatformerWorld,
-  Projectile,
-  // Level types
-  Platform,
-  SpawnPoint,
-  Hazard,
-  LevelConfig,
-  // Match types
-  MatchConfig,
-  WinConditionType,
-  GameState,
-  // Action types
-  PlatformerAttackAction,
-  PlatformerShootAction,
-  PlatformerAction,
-  PlatformerAttackResult,
-  PlatformerShootResult,
-  PlatformerActionResult,
-} from "./examples/platformer/types.js";
-
-export {
-  createPlatformerWorld,
-  createPlatformerPlayer,
-  createIdleInput,
-  // Combat constants
-  ATTACK_RADIUS,
-  ATTACK_DAMAGE,
-  DEFAULT_MAX_HEALTH,
-  RESPAWN_TIMER_TICKS,
-  KNOCKBACK_FORCE,
-  PLAYER_WIDTH,
-  PLAYER_HEIGHT,
-  DEFAULT_MATCH_CONFIG,
-  // Projectile constants
-  PROJECTILE_SPEED,
-  PROJECTILE_DAMAGE,
-  PROJECTILE_RADIUS,
-  PROJECTILE_LIFETIME_TICKS,
-  // Helper functions
-  clampHealth,
-  isPlayerAlive,
-  isPlayerInvulnerable,
-  canPlayerTakeDamage,
-  applyDamageToPlayer,
-  getAlivePlayerCount,
-  getPlayerWithMostKills,
-  hasPlayerReachedKillTarget,
-} from "./examples/platformer/types.js";
-
-export {
-  simulatePlatformer,
-  addPlayerToWorld,
-  removePlayerFromWorld,
-  mergePlatformerInputs,
-  // Game state management
-  startGame,
-  forceStartGame,
-  resetGame,
-  // Combat functions
-  applyDamage,
-  applyKnockback,
-  // Level configuration
-  setLevelConfig,
-} from "./examples/platformer/simulation.js";
-
-export { interpolatePlatformer } from "./examples/platformer/interpolation.js";
-
-export { platformerPredictionScope } from "./examples/platformer/prediction.js";
-
-export { validatePlatformerAction, isInAttackRange } from "./examples/platformer/action-validator.js";
-
-// Level system
-export type { LevelValidationResult } from "./examples/platformer/levels.js";
-export {
-  // Built-in levels
-  LEVEL_BASIC_ARENA,
-  LEVEL_PLATFORMS,
-  LEVEL_DANGER_ZONE,
-  LEVEL_TOWER,
-  DEFAULT_LEVEL,
-  LEVELS,
-  // Level functions
-  getLevel,
-  getLevelIds,
-  getAllLevels,
-  validateLevel,
-  parseLevelFromJson,
-} from "./examples/platformer/levels.js";
-
-export { platformerGame } from "./examples/platformer/index.js";
 
 // =============================================================================
 // Constants

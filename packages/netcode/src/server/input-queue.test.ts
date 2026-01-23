@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { InputQueue } from "./input-queue.js";
 import type { InputMessage } from "../core/types.js";
-import type { PlatformerInput } from "../examples/platformer/types.js";
+import type { PlatformerInput } from "@game/example-platformer";
 
 describe("InputQueue", () => {
   let inputQueue: InputQueue<PlatformerInput>;
