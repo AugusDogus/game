@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client/index.ts",
+    "./client/input": "./src/client/input/index.ts",
     "./server": "./src/server/index.ts",
     "./types": "./src/types.ts",
     "./constants": "./src/constants.ts",
