@@ -1,0 +1,35 @@
+---
+description: Use bun add instead of manually editing package.json for dependencies
+globs: **/package.json
+alwaysApply: false
+---
+
+# Adding Dependencies
+
+Always use `bun add` to install dependencies instead of manually editing package.json.
+
+## Why
+
+- Ensures correct, latest versions are used
+- Automatically updates bun.lock
+- Avoids typos and invalid version numbers
+
+## Examples
+
+```bash
+# ✅ GOOD - Use bun add
+bun add zod
+bun add -d typescript    # dev dependency
+bun add react@^18.0.0    # specific version constraint
+
+# ❌ BAD - Manual editing with made-up versions
+# Editing package.json directly and typing "zod": "^3.0.0"
+```
+
+## Removing Dependencies
+
+Use `bun remove` instead of deleting lines from package.json:
+
+```bash
+bun remove zod
+```
