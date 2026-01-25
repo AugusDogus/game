@@ -9,22 +9,22 @@ import {
 } from "./constants.js";
 
 describe("constants", () => {
-  test("DEFAULT_TICK_RATE should be 20 Hz", () => {
-    expect(DEFAULT_TICK_RATE).toBe(20);
+  test("DEFAULT_TICK_RATE should be 60 Hz", () => {
+    expect(DEFAULT_TICK_RATE).toBe(60);
   });
 
-  test("DEFAULT_TICK_INTERVAL_MS should be 50ms (1000/20)", () => {
-    expect(DEFAULT_TICK_INTERVAL_MS).toBe(50);
+  test("DEFAULT_TICK_INTERVAL_MS should be ~16.67ms (1000/60)", () => {
+    expect(DEFAULT_TICK_INTERVAL_MS).toBeCloseTo(16.67, 1);
     expect(DEFAULT_TICK_INTERVAL_MS).toBe(1000 / DEFAULT_TICK_RATE);
   });
 
-  test("DEFAULT_INTERPOLATION_DELAY_MS should be 100ms", () => {
-    expect(DEFAULT_INTERPOLATION_DELAY_MS).toBe(100);
+  test("DEFAULT_INTERPOLATION_DELAY_MS should be 50ms", () => {
+    expect(DEFAULT_INTERPOLATION_DELAY_MS).toBe(50);
   });
 
   test("DEFAULT_SNAPSHOT_HISTORY_SIZE should cover 3 seconds", () => {
-    // At 20 Hz, 60 snapshots = 3 seconds
-    expect(DEFAULT_SNAPSHOT_HISTORY_SIZE).toBe(60);
+    // At 60 Hz, 180 snapshots = 3 seconds
+    expect(DEFAULT_SNAPSHOT_HISTORY_SIZE).toBe(180);
     expect(DEFAULT_SNAPSHOT_HISTORY_SIZE / DEFAULT_TICK_RATE).toBe(3);
   });
 

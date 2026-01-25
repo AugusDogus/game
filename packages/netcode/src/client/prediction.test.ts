@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { Predictor } from "./prediction.js";
-import { DEFAULT_FLOOR_Y } from "../constants.js";
+import { DEFAULT_FLOOR_Y, DEFAULT_TICK_INTERVAL_MS } from "../constants.js";
 import {
   type PlatformerWorld,
   type PlatformerInput,
@@ -46,6 +46,19 @@ describe("Predictor", () => {
   const createWorld = (player: PlatformerPlayer): PlatformerWorld =>
     createPlayingWorld([player]);
 
+  describe("constructor", () => {
+    test("should use default tick interval", () => {
+      const p = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+      expect(p).toBeDefined();
+    });
+
+    test("should accept custom tick interval", () => {
+      const customInterval = 33; // ~30fps
+      const p = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope, customInterval);
+      expect(p).toBeDefined();
+    });
+  });
+
   describe("setBaseState", () => {
     test("should set the base state", () => {
       const player = createTestPlayer(playerId, {
@@ -76,7 +89,7 @@ describe("Predictor", () => {
   });
 
   describe("applyInput", () => {
-    test("should apply input to local state", () => {
+    test("should apply input to local state using fixed tick delta", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
@@ -92,13 +105,14 @@ describe("Predictor", () => {
       predictor.applyInput(createInput(1, 0, false, Date.now()));
     });
 
-    test("should accumulate multiple inputs", () => {
+    test("should accumulate multiple inputs with consistent delta", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
       predictor.applyInput(createInput(1, 0, false, Date.now()));
       const pos1 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
 
+      // Second input - uses same fixed delta regardless of timestamp
       predictor.applyInput(createInput(1, 0, false, Date.now() + 16));
       const pos2 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
 
@@ -115,6 +129,31 @@ describe("Predictor", () => {
       const playerState = state?.players?.get(playerId);
       expect(playerState?.velocity.y).toBeGreaterThan(0); // Y-up: positive = upward
       expect(playerState?.isGrounded).toBe(false);
+    });
+
+    test("should use fixed tick interval for deterministic prediction", () => {
+      // With fixed delta, inputs always produce the same physics regardless of timestamps
+      // This ensures client prediction matches server simulation exactly
+      const world1 = createWorld(createGroundedPlayer("player1"));
+      const predictor1 = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+      predictor1.setBaseState(world1, "player1");
+      
+      // Two inputs 16ms apart
+      predictor1.applyInput(createInput(1, 0, false, 1000));
+      predictor1.applyInput(createInput(1, 0, false, 1016));
+      const pos1 = predictor1.getState()?.players?.get("player1")?.position.x ?? 0;
+
+      const world2 = createWorld(createGroundedPlayer("player2"));
+      const predictor2 = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+      predictor2.setBaseState(world2, "player2");
+      
+      // Two inputs with large timestamp gap - but fixed delta is still used
+      predictor2.applyInput(createInput(1, 0, false, 1000));
+      predictor2.applyInput(createInput(1, 0, false, 6000)); // Large gap, but delta is fixed
+      const pos2 = predictor2.getState()?.players?.get("player2")?.position.x ?? 0;
+
+      // Both should produce same movement since fixed delta is used regardless of timestamps
+      expect(pos1).toBeCloseTo(pos2, 5);
     });
   });
 
@@ -221,104 +260,109 @@ describe("Predictor", () => {
       expect(state?.players?.get(playerId)?.position.x).toBeLessThan(15); // Upper bound
     });
 
-    test("should not update internal timestamp tracking", () => {
+    test("should allow different delta than tick interval", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
-      // First, apply a normal input
-      predictor.applyInput(createInput(1, 0, false, 1000));
-      
-      // Apply with delta (doesn't affect timestamp tracking)
+      // Apply with custom delta that differs from default tick interval
       predictor.applyInputWithDelta(
-        createInput(1, 0, false, 9999),
-        16,
+        createInput(1, 0, false, 1000),
+        100, // 100ms instead of default 50ms
       );
 
-      // Apply another normal input - should calculate delta from 1000, not 9999
-      predictor.applyInput(createInput(1, 0, false, 1016));
-
-      // Should work without issues
       const state = predictor.getState();
       expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
     });
   });
 
-  describe("timestamp management", () => {
-    test("resetTimestamp should clear last input timestamp", () => {
-      const world = createWorld(createGroundedPlayer(playerId));
-      predictor.setBaseState(world, playerId);
+  describe("fixed delta prediction behavior", () => {
+    test("different input timestamps should produce same movement (fixed delta)", () => {
+      // Player A: inputs with 16ms timestamps (60fps)
+      const predictor16ms = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+      );
+      const world16 = createWorld(createGroundedPlayer("player-16ms"));
+      predictor16ms.setBaseState(world16, "player-16ms");
 
-      // Apply input to set timestamp
-      predictor.applyInput(createInput(1, 0, false, 1000));
-      const pos1 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
+      for (let i = 0; i < 5; i++) {
+        predictor16ms.applyInput(createInput(1, 0, false, 1000 + i * 16));
+      }
+      const pos16ms = predictor16ms.getState()?.players?.get("player-16ms")?.position.x ?? 0;
 
-      predictor.resetTimestamp();
+      // Player B: inputs with 33ms timestamps (30fps)
+      const predictor33ms = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+      );
+      const world33 = createWorld(createGroundedPlayer("player-33ms"));
+      predictor33ms.setBaseState(world33, "player-33ms");
 
-      // Next input should use default delta (16.67ms) instead of calculating from 1000
-      predictor.applyInput(createInput(1, 0, false, 5000));
-      
-      // If timestamp wasn't reset, delta would be 4000ms (clamped to 100ms)
-      // With reset, delta is 16.67ms - so movement should be similar to first input
-      const pos2 = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
-      const movement = pos2 - pos1;
-      
-      // Movement should be small (16.67ms worth, not 100ms worth)
-      expect(movement).toBeLessThan(10);
+      for (let i = 0; i < 5; i++) {
+        predictor33ms.applyInput(createInput(1, 0, false, 1000 + i * 33));
+      }
+      const pos33ms = predictor33ms.getState()?.players?.get("player-33ms")?.position.x ?? 0;
+
+      // With fixed delta, both should produce the same movement
+      // (5 inputs * fixed tick delta = same total movement)
+      expect(pos16ms).toBeCloseTo(pos33ms, 5);
     });
 
-    test("setLastInputTimestamp should set custom timestamp", () => {
-      const world = createWorld(createGroundedPlayer(playerId));
-      predictor.setBaseState(world, playerId);
+    test("more inputs = more movement", () => {
+      // Player A: 3 inputs
+      const predictor3 = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+      );
+      const world3 = createWorld(createGroundedPlayer("player-3"));
+      predictor3.setBaseState(world3, "player-3");
 
-      predictor.setLastInputTimestamp(1000);
-      
-      // Apply input 50ms later
-      predictor.applyInput(createInput(1, 0, false, 1050));
+      for (let i = 0; i < 3; i++) {
+        predictor3.applyInput(createInput(1, 0, false, 1000 + i * 50));
+      }
+      const pos3 = predictor3.getState()?.players?.get("player-3")?.position.x ?? 0;
 
-      const state = predictor.getState();
-      // With smoothDamp, movement starts from 0 velocity, so won't reach full speed
-      // But should move some amount in the direction of input
-      expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
-      expect(state?.players?.get(playerId)?.position.x).toBeLessThan(15); // Upper bound
+      // Player B: 6 inputs
+      const predictor6 = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+      );
+      const world6 = createWorld(createGroundedPlayer("player-6"));
+      predictor6.setBaseState(world6, "player-6");
+
+      for (let i = 0; i < 6; i++) {
+        predictor6.applyInput(createInput(1, 0, false, 1000 + i * 50));
+      }
+      const pos6 = predictor6.getState()?.players?.get("player-6")?.position.x ?? 0;
+
+      // 6 inputs should move more than 3 inputs
+      expect(pos6).toBeGreaterThan(pos3);
+    });
+
+    test("applyInputWithDelta uses explicit delta (not timestamps)", () => {
+      // Player A: 50ms explicit delta
+      const predictor50 = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+        50,
+      );
+      const world50 = createWorld(createGroundedPlayer("player-50ms"));
+      predictor50.setBaseState(world50, "player-50ms");
+      predictor50.applyInputWithDelta(createInput(1, 0, false, 1000), 50);
+      const pos50 = predictor50.getState()?.players?.get("player-50ms")?.position.x ?? 0;
+
+      // Player B: 100ms explicit delta  
+      const predictor100 = new Predictor<PlatformerWorld, PlatformerInput>(
+        platformerPredictionScope,
+        100,
+      );
+      const world100 = createWorld(createGroundedPlayer("player-100ms"));
+      predictor100.setBaseState(world100, "player-100ms");
+      predictor100.applyInputWithDelta(createInput(1, 0, false, 1000), 100);
+      const pos100 = predictor100.getState()?.players?.get("player-100ms")?.position.x ?? 0;
+
+      // 100ms delta should produce more movement than 50ms delta
+      expect(pos100).toBeGreaterThan(pos50);
     });
   });
 
   describe("real-world scenarios", () => {
-    test("variable frame rate: 30fps and 60fps players should move similar distances over same real time", () => {
-      // Player A: 60fps (16.67ms between inputs) for 100ms = 6 inputs
-      const predictor60fps = new Predictor<PlatformerWorld, PlatformerInput>(
-        platformerPredictionScope,
-      );
-      const world60 = createWorld(createGroundedPlayer("player-60fps"));
-      predictor60fps.setBaseState(world60, "player-60fps");
-
-      const startTime = 1000;
-      for (let i = 0; i < 6; i++) {
-        predictor60fps.applyInput(createInput(1, 0, false, startTime + i * 16.67));
-      }
-      const pos60fps = predictor60fps.getState()?.players?.get("player-60fps")?.position.x ?? 0;
-
-      // Player B: 30fps (33.33ms between inputs) for 100ms = 3 inputs
-      const predictor30fps = new Predictor<PlatformerWorld, PlatformerInput>(
-        platformerPredictionScope,
-      );
-      const world30 = createWorld(createGroundedPlayer("player-30fps"));
-      predictor30fps.setBaseState(world30, "player-30fps");
-
-      for (let i = 0; i < 3; i++) {
-        predictor30fps.applyInput(createInput(1, 0, false, startTime + i * 33.33));
-      }
-      const pos30fps = predictor30fps.getState()?.players?.get("player-30fps")?.position.x ?? 0;
-
-      // Both should have moved roughly the same distance (within 25% tolerance)
-      // because total simulated time is similar (~100ms each)
-      // Small differences come from the first input using default deltaTime
-      const ratio = pos60fps / pos30fps;
-      expect(ratio).toBeGreaterThan(0.75);
-      expect(ratio).toBeLessThan(1.25);
-    });
-
-    test("tab switch: large time gap between inputs should apply correct physics", () => {
+    test("tab switch: fixed delta ensures consistent physics regardless of gaps", () => {
       const player = createTestPlayer(playerId, {
         position: { x: 0, y: 100 }, // In the air (above floor in Y-up)
         isGrounded: false,
@@ -330,41 +374,29 @@ describe("Predictor", () => {
       predictor.applyInput(createInput(0, 0, false, 1000));
       const posAfterFirst = predictor.getState()?.players?.get(playerId)?.position.y ?? 0;
 
-      // Simulate tab switch: 500ms gap (player was away)
-      predictor.applyInput(createInput(0, 0, false, 1500));
+      // Simulate tab switch: 5000ms gap - but fixed delta is used anyway
+      predictor.applyInput(createInput(0, 0, false, 6000));
       const posAfterGap = predictor.getState()?.players?.get(playerId)?.position.y ?? 0;
 
-      // Should have fallen significantly more during the 500ms gap
-      // (but clamped to 100ms max for safety)
       // Y-up: falling means Y decreases
-      const fallDuringGap = posAfterFirst - posAfterGap;
-      expect(fallDuringGap).toBeGreaterThan(0); // Fell down (Y decreased)
-    });
+      const fallDuringTabSwitch = posAfterFirst - posAfterGap;
+      
+      // Compare to normal 16ms timing
+      const normalPredictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+      const normalWorld = createWorld(createTestPlayer("normal-player", {
+        position: { x: 0, y: 100 },
+        isGrounded: false,
+      }));
+      normalPredictor.setBaseState(normalWorld, "normal-player");
+      normalPredictor.applyInput(createInput(0, 0, false, 1000));
+      const normalPosFirst = normalPredictor.getState()?.players?.get("normal-player")?.position.y ?? 0;
+      normalPredictor.applyInput(createInput(0, 0, false, 1016)); // 16ms later
+      const normalPosSecond = normalPredictor.getState()?.players?.get("normal-player")?.position.y ?? 0;
+      const normalFall = normalPosFirst - normalPosSecond;
 
-    test("rapid inputs: burst of inputs should not cause excessive movement", () => {
-      const world = createWorld(createGroundedPlayer(playerId));
-      predictor.setBaseState(world, playerId);
-
-      // Simulate a burst of 10 inputs in 10ms (unrealistic but could happen with input buffering bugs)
-      const startTime = 1000;
-      for (let i = 0; i < 10; i++) {
-        predictor.applyInput(createInput(1, 0, false, startTime + i * 1)); // 1ms apart
-      }
-      const burstPos = predictor.getState()?.players?.get(playerId)?.position.x ?? 0;
-
-      // Compare to normal 10 inputs over 166ms (60fps)
-      const normalPredictor = new Predictor<PlatformerWorld, PlatformerInput>(
-        platformerPredictionScope,
-      );
-      const normalWorld = createWorld(createGroundedPlayer("player-2"));
-      normalPredictor.setBaseState(normalWorld, "player-2");
-      for (let i = 0; i < 10; i++) {
-        normalPredictor.applyInput(createInput(1, 0, false, startTime + i * 16.67));
-      }
-      const normalPos = normalPredictor.getState()?.players?.get("player-2")?.position.x ?? 0;
-
-      // Burst movement should be much less than normal (roughly 10ms vs 166ms of movement)
-      expect(burstPos).toBeLessThan(normalPos * 0.2);
+      // With fixed delta, both should produce same fall amount
+      // This ensures determinism - the physics doesn't depend on real-world timing
+      expect(fallDuringTabSwitch).toBeCloseTo(normalFall, 5);
     });
   });
 });

@@ -23,7 +23,7 @@ describe("LagCompensator", () => {
     it("should use default values when config not provided", () => {
       const defaultCompensator = new LagCompensator(snapshotBuffer);
       expect(defaultCompensator.getMaxRewindMs()).toBe(200);
-      expect(defaultCompensator.getInterpolationDelayMs()).toBe(100);
+      expect(defaultCompensator.getInterpolationDelayMs()).toBe(50);
     });
 
     it("should use provided config values", () => {

@@ -106,6 +106,33 @@ export interface PredictionScope<TWorld, TInput> {
    * @returns An input representing "no action" (e.g., no movement, no buttons pressed)
    */
   createIdleInput(): TInput;
+
+  /**
+   * Get the local player's position from the predicted state.
+   *
+   * Optional method used by visual smoothing to track position changes during
+   * reconciliation. If not implemented, visual smoothing will be disabled.
+   *
+   * @param state - The predicted state (partial world)
+   * @param localPlayerId - The local player's ID
+   * @returns Player position as {x, y}, or null if player not found
+   */
+  getLocalPlayerPosition?(state: Partial<TWorld>, localPlayerId: string): { x: number; y: number } | null;
+
+  /**
+   * Apply a visual offset to the local player in the world state.
+   *
+   * Optional method used by visual smoothing to offset the rendered position
+   * without affecting physics state. If not implemented, visual smoothing
+   * will be disabled.
+   *
+   * @param world - The world state to modify
+   * @param localPlayerId - The local player's ID
+   * @param offsetX - X offset to apply
+   * @param offsetY - Y offset to apply
+   * @returns Modified world state with offset applied
+   */
+  applyVisualOffset?(world: TWorld, localPlayerId: string, offsetX: number, offsetY: number): TWorld;
 }
 
 /**

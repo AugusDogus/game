@@ -8,7 +8,7 @@ import {
   removePlayerFromWorld,
   mergePlatformerInputs,
 } from "./simulation.js";
-import { createPlatformerWorld } from "./types.js";
+import { createPlatformerWorld, createIdleInput } from "./types.js";
 import type { PlatformerWorld, PlatformerInput } from "./types.js";
 import { createTestPlayer, createPlayingWorld } from "./test-utils.js";
 import { DEFAULT_PLAYER_CONFIG } from "./player.js";
@@ -30,6 +30,15 @@ const createInput = (
   timestamp,
 });
 
+/** Helper to create inputs map with idle input for a player */
+const createIdleInputs = (...playerIds: string[]): Map<string, PlatformerInput> => {
+  const inputs = new Map<string, PlatformerInput>();
+  for (const id of playerIds) {
+    inputs.set(id, createIdleInput());
+  }
+  return inputs;
+};
+
 describe("simulatePlatformer", () => {
   const createWorldWithPlayer = (
     playerId: string,
@@ -43,12 +52,12 @@ describe("simulatePlatformer", () => {
 
   describe("gravity", () => {
     test("should apply gravity to falling player", () => {
-      // Setup: player at y=100, airborne, no input
+      // Setup: player at y=100, airborne, idle input
       // Physics: gravity = -800, dt = 0.05s
       // Expected: velocity.y = 0 + (-800 * 0.05) = -40
       // Expected: position.y = 100 + (-40 * 0.05) = 98
       const world = createWorldWithPlayer("player-1", { x: 0, y: 100 });
-      const inputs = new Map<string, PlatformerInput>();
+      const inputs = createIdleInputs("player-1");
 
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
@@ -58,11 +67,11 @@ describe("simulatePlatformer", () => {
     });
 
     test("should accumulate gravity over time", () => {
-      // Setup: player at y=100, airborne, no input, 3 ticks
+      // Setup: player at y=100, airborne, idle input, 3 ticks
       // Physics: gravity = -800, dt = 0.05s per tick
       // Expected after 3 ticks: velocity.y = -40 + -40 + -40 = -120
       let world = createWorldWithPlayer("player-1", { x: 0, y: 100 });
-      const inputs = new Map<string, PlatformerInput>();
+      const inputs = createIdleInputs("player-1");
 
       world = simulatePlatformer(world, inputs, 50);
       world = simulatePlatformer(world, inputs, 50);
@@ -77,7 +86,7 @@ describe("simulatePlatformer", () => {
     test("should stop player at floor", () => {
       // Y-up: Player just above floor (floor at y=0, player center should end at y=10)
       const world = createWorldWithPlayer("player-1", { x: 0, y: 15 });
-      const inputs = new Map<string, PlatformerInput>();
+      const inputs = createIdleInputs("player-1");
 
       // Simulate until player hits floor
       let newWorld = world;
@@ -140,7 +149,7 @@ describe("simulatePlatformer", () => {
     });
 
     test("should decelerate when no input", () => {
-      // Setup: grounded player moving at 200 u/s, no input, dt=50ms
+      // Setup: grounded player moving at 200 u/s, idle input, dt=50ms
       // Physics: smoothDamp from 200 to 0 with smoothTime=0.1, dt=0.05
       // Expected: velocity decreases toward 0
       const world = createWorldWithPlayer(
@@ -149,7 +158,7 @@ describe("simulatePlatformer", () => {
         { x: DEFAULT_PLAYER_CONFIG.moveSpeed, y: 0 },
         true,
       );
-      const inputs = new Map<string, PlatformerInput>();
+      const inputs = createIdleInputs("player-1");
 
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
@@ -282,8 +291,8 @@ describe("simulatePlatformer", () => {
       });
       let world = createPlayingWorld([player1, player2]);
 
-      // No input - just let collision resolve
-      const inputs = new Map<string, PlatformerInput>();
+      // Idle input for both players - just let collision resolve
+      const inputs = createIdleInputs("player-1", "player-2");
 
       // Simulate several ticks and record positions
       const p1Positions: number[] = [];
@@ -365,7 +374,7 @@ describe("simulatePlatformer", () => {
       });
       let world = createPlayingWorld([player1, player2]);
 
-      const inputs = new Map<string, PlatformerInput>();
+      const inputs = createIdleInputs("player-1", "player-2");
 
       // Simulate until player 1 lands
       for (let i = 0; i < 20; i++) {
@@ -401,7 +410,7 @@ describe("simulatePlatformer", () => {
       });
       let world = createPlayingWorld([player1, player2]);
 
-      const inputs = new Map<string, PlatformerInput>();
+      const inputs = createIdleInputs("player-1", "player-2");
 
       // Record player 1's Y position over several frames
       const p1YPositions: number[] = [];

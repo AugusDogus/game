@@ -1,82 +1,99 @@
-import { DEFAULT_FRAME_DELTA_MS, MAX_DELTA_MS, MIN_DELTA_MS } from "../constants.js";
+import { DEFAULT_TICK_INTERVAL_MS } from "../constants.js";
 import type { Snapshot } from "../core/types.js";
 import type { InputBuffer } from "./input-buffer.js";
 import type { PredictionScope } from "./prediction-scope.js";
 import type { Predictor } from "./prediction.js";
 
 /**
+ * Result of a reconciliation operation, including position delta for visual smoothing.
+ */
+export interface ReconciliationResult<TWorld> {
+  /** The merged world state for rendering */
+  world: TWorld;
+  /** Position delta (oldPos - newPos) for visual smoothing, null if position tracking unavailable */
+  positionDelta: { x: number; y: number } | null;
+}
+
+/**
  * Handles server reconciliation by syncing server state and replaying unacknowledged inputs.
  * Generic version that works with any world state and input types.
+ *
+ * Replays inputs using the fixed tick interval to match server simulation exactly.
+ * This ensures reconciliation produces the same state as the server,
+ * minimizing visible snapping and providing smooth gameplay.
  */
 export class Reconciler<TWorld, TInput extends { timestamp: number }> {
   private inputBuffer: InputBuffer<TInput>;
   private predictor: Predictor<TWorld, TInput>;
   private predictionScope: PredictionScope<TWorld, TInput>;
   private playerId: string;
+  private tickIntervalMs: number;
 
   constructor(
     inputBuffer: InputBuffer<TInput>,
     predictor: Predictor<TWorld, TInput>,
     predictionScope: PredictionScope<TWorld, TInput>,
     playerId: string,
+    tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
   ) {
     this.inputBuffer = inputBuffer;
     this.predictor = predictor;
     this.predictionScope = predictionScope;
     this.playerId = playerId;
+    this.tickIntervalMs = tickIntervalMs;
   }
 
   /**
    * Reconcile server state with local prediction.
-   * Returns the merged world state for rendering.
+   * Returns the merged world state for rendering and position delta for visual smoothing.
    */
-  reconcile(snapshot: Snapshot<TWorld>): TWorld {
+  reconcile(snapshot: Snapshot<TWorld>): ReconciliationResult<TWorld> {
     // Get the last processed sequence number for this player
     const lastProcessedSeq = snapshot.inputAcks.get(this.playerId) ?? -1;
-
-    // Get the timestamp of the last acknowledged input BEFORE we remove it
-    // This is needed to calculate the correct delta for the first unacked input
-    const lastAckedInput = lastProcessedSeq >= 0 ? this.inputBuffer.get(lastProcessedSeq) : null;
-    const lastAckedTimestamp = lastAckedInput?.timestamp ?? null;
 
     // Remove acknowledged inputs from buffer
     this.inputBuffer.acknowledge(lastProcessedSeq);
 
+    // Capture position BEFORE reconciliation (for visual smoothing)
+    let positionBefore: { x: number; y: number } | null = null;
+    const predictedState = this.predictor.getState();
+    if (predictedState && this.predictionScope.getLocalPlayerPosition) {
+      positionBefore = this.predictionScope.getLocalPlayerPosition(predictedState, this.playerId);
+    }
+
     // Set base state from server's authoritative world state
     this.predictor.setBaseState(snapshot.state, this.playerId);
 
-    // Replay all unacknowledged inputs with their actual time deltas
+    // Replay all unacknowledged inputs with their original timestamp deltas
+    // This ensures reconciliation produces the same state as prediction did
     const unacknowledged = this.inputBuffer.getUnacknowledged(lastProcessedSeq);
-    // Start with the last acked input's timestamp so the first replay uses the correct delta
-    let lastTimestamp: number | null = lastAckedTimestamp;
 
+    // Replay each unacknowledged input with the server's fixed tick delta
+    // The server processes each input with a separate simulation call
+    // using the fixed tick interval, so reconciliation must match this behavior
     for (const inputMsg of unacknowledged) {
-      // Calculate delta time from previous input
-      let deltaTime: number;
-      if (lastTimestamp !== null) {
-        deltaTime = inputMsg.input.timestamp - lastTimestamp;
-        // Clamp to reasonable bounds
-        deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, deltaTime));
-      } else {
-        // First input ever - use reasonable default (~16.67ms for 60Hz)
-        deltaTime = DEFAULT_FRAME_DELTA_MS;
+      this.predictor.applyInputWithDelta(inputMsg.input, this.tickIntervalMs);
+    }
+
+    // Capture position AFTER reconciliation
+    let positionDelta: { x: number; y: number } | null = null;
+    const newPredictedState = this.predictor.getState();
+    if (positionBefore && newPredictedState && this.predictionScope.getLocalPlayerPosition) {
+      const positionAfter = this.predictionScope.getLocalPlayerPosition(newPredictedState, this.playerId);
+      if (positionAfter) {
+        // Delta = old position - new position (vector from new back to old)
+        positionDelta = {
+          x: positionBefore.x - positionAfter.x,
+          y: positionBefore.y - positionAfter.y,
+        };
       }
-      lastTimestamp = inputMsg.input.timestamp;
-
-      this.predictor.applyInputWithDelta(inputMsg.input, deltaTime);
     }
 
-    // Set the predictor's timestamp to the last replayed input's timestamp
-    // so the next predicted input uses the correct delta (matching server behavior)
-    const lastReplayedInput = unacknowledged.at(-1);
-    if (lastReplayedInput) {
-      this.predictor.setLastInputTimestamp(lastReplayedInput.input.timestamp);
-    }
-    // If no inputs were replayed, don't reset - keep the existing timestamp
-    // so the next input calculates delta from the last input we sent
-
-    // Return merged state (server world + local predictions)
-    return this.predictor.mergeWithServer(snapshot.state);
+    // Return merged state (server world + local predictions) and position delta
+    return {
+      world: this.predictor.mergeWithServer(snapshot.state),
+      positionDelta,
+    };
   }
 
   /**

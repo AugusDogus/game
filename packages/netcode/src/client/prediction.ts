@@ -1,18 +1,26 @@
-import { DEFAULT_FRAME_DELTA_MS, MIN_DELTA_MS, MAX_DELTA_MS } from "../constants.js";
+import { DEFAULT_TICK_INTERVAL_MS, MIN_DELTA_MS, MAX_DELTA_MS } from "../constants.js";
 import type { PredictionScope } from "./prediction-scope.js";
 
 /**
  * Handles client-side prediction by applying inputs locally.
  * Generic version that works with any world state and input types.
+ *
+ * Prediction uses actual elapsed time between inputs for smooth 60fps gameplay.
+ * Reconciliation replay uses the fixed tick interval to match server simulation.
  */
 export class Predictor<TWorld, TInput extends { timestamp: number }> {
   private predictedState: Partial<TWorld> | null = null;
   private predictionScope: PredictionScope<TWorld, TInput>;
-  private lastInputTimestamp: number | null = null;
   private localPlayerId: string | null = null;
+  private tickIntervalMs: number;
+  private lastInputTimestamp: number = 0;
 
-  constructor(predictionScope: PredictionScope<TWorld, TInput>) {
+  constructor(
+    predictionScope: PredictionScope<TWorld, TInput>,
+    tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
+  ) {
     this.predictionScope = predictionScope;
+    this.tickIntervalMs = tickIntervalMs;
   }
 
   /**
@@ -25,10 +33,14 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
   /**
    * Set the base state from server snapshot.
    * Extracts the predictable portion using the prediction scope.
+   * Resets timestamp tracking since we're starting from server state.
    */
   setBaseState(world: TWorld, localPlayerId: string): void {
     this.localPlayerId = localPlayerId;
     this.predictedState = this.predictionScope.extractPredictable(world, localPlayerId);
+    // Reset timestamp since we're starting fresh from server state
+    // Reconciliation replay will use applyInputWithDelta, not applyInput
+    this.lastInputTimestamp = 0;
   }
 
   /**
@@ -47,24 +59,20 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
 
   /**
    * Apply an input to the local state (prediction).
-   * Uses the actual time delta between inputs for accurate physics.
+   * Uses the fixed tick interval to match server simulation exactly.
+   * This ensures prediction matches what the server will compute,
+   * minimizing reconciliation corrections.
    */
   applyInput(input: TInput): void {
     if (!this.predictedState) {
       return;
     }
 
-    // Calculate actual delta time from input timestamps
-    let deltaTime: number;
-    if (this.lastInputTimestamp !== null) {
-      deltaTime = input.timestamp - this.lastInputTimestamp;
-      // Clamp to reasonable bounds
-      deltaTime = Math.max(MIN_DELTA_MS, Math.min(MAX_DELTA_MS, deltaTime));
-    } else {
-      // First input - use a reasonable default (~16.67ms for 60Hz)
-      deltaTime = DEFAULT_FRAME_DELTA_MS;
-    }
-
+    // Use fixed tick interval to match server simulation
+    // The server processes each input with this fixed delta,
+    // so client prediction must use the same delta for determinism
+    const deltaTime = this.tickIntervalMs;
+    
     this.lastInputTimestamp = input.timestamp;
 
     this.predictedState = this.predictionScope.simulatePredicted(
@@ -109,20 +117,6 @@ export class Predictor<TWorld, TInput extends { timestamp: number }> {
    */
   reset(): void {
     this.predictedState = null;
-    this.lastInputTimestamp = null;
-  }
-
-  /**
-   * Reset the last input timestamp (used after reconciliation)
-   */
-  resetTimestamp(): void {
-    this.lastInputTimestamp = null;
-  }
-
-  /**
-   * Set the last input timestamp (used after reconciliation replay)
-   */
-  setLastInputTimestamp(timestamp: number): void {
-    this.lastInputTimestamp = timestamp;
+    this.lastInputTimestamp = 0;
   }
 }

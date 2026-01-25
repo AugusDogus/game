@@ -7,6 +7,7 @@ import {
   forceStartGame,
   mergePlatformerInputs,
   simulatePlatformer,
+  createIdleInput,
   type PlatformerInput,
   type PlatformerWorld,
   createPlatformerWorld,
@@ -36,6 +37,7 @@ describe("GameLoop", () => {
   let inputQueue: InputQueue<PlatformerInput>;
   let snapshotBuffer: SnapshotBuffer<PlatformerWorld>;
   let gameLoop: GameLoop<PlatformerWorld, PlatformerInput>;
+  let connectedClients: Set<string>;
 
   beforeEach(() => {
     // Create world in "playing" state so physics are applied
@@ -43,6 +45,7 @@ describe("GameLoop", () => {
     worldManager = new DefaultWorldManager(initialWorld);
     inputQueue = new InputQueue<PlatformerInput>();
     snapshotBuffer = new SnapshotBuffer<PlatformerWorld>(60);
+    connectedClients = new Set<string>();
     gameLoop = new GameLoop<PlatformerWorld, PlatformerInput>(
       worldManager,
       inputQueue,
@@ -50,6 +53,8 @@ describe("GameLoop", () => {
       simulatePlatformer,
       50, // 20 Hz
       mergePlatformerInputs, // Use platformer input merger to handle jump-in-burst
+      () => connectedClients, // getConnectedClients
+      createIdleInput, // createIdleInput
     );
   });
 
@@ -57,11 +62,17 @@ describe("GameLoop", () => {
     gameLoop.stop();
   });
 
-  // Helper to add a player to the world
+  // Helper to add a player to the world and track them as connected
   const addPlayer = (playerId: string, x: number = 0, y: number = 0) => {
     const world = worldManager.getState();
     const newWorld = addPlayerToWorld(world, playerId, { x, y });
     worldManager.setState(newWorld);
+    connectedClients.add(playerId);
+  };
+  
+  // Helper to remove a player from connected clients
+  const removePlayer = (playerId: string) => {
+    connectedClients.delete(playerId);
   };
 
   describe("start/stop", () => {
@@ -372,7 +383,8 @@ describe("GameLoop", () => {
       let world = worldManager.getState();
       const stayingY1 = world.players.get("staying")?.position.y ?? 0;
 
-      // Remove leaving player
+      // Remove leaving player from both world and connected clients
+      removePlayer("leaving");
       const newWorld = {
         ...world,
         players: new Map([...world.players].filter(([id]) => id !== "leaving")),

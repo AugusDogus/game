@@ -14,18 +14,39 @@
  * world state and inputs, it must always produce the exact same output. This is critical
  * for client-side prediction to match server simulation.
  *
+ * ## Server Tick Contract
+ *
+ * The server calls this function **exactly once per tick** with all players' inputs
+ * batched together. This follows the idiomatic approach used by real game engines
+ * (Photon Fusion, Unity Netcode).
+ *
+ * - The `inputs` map contains ALL connected players' inputs for this tick
+ * - Each player has exactly one input (merged if multiple arrived between ticks)
+ * - Players without input get an idle input from `createIdleInput()`
+ * - The `deltaTime` is the fixed tick interval (e.g., 50ms for 20Hz)
+ *
+ * This ensures shared state (projectiles, timers, world effects) is processed
+ * exactly once per tick, regardless of the number of players.
+ *
+ * ## Client Prediction
+ *
+ * For client-side prediction, the function is called once per local input with
+ * only the local player's input in the map.
+ *
  * @typeParam TWorld - Your game's world state type
  * @typeParam TInput - Your game's input type
  *
  * @param world - Current world state
- * @param inputs - Map of player ID to their input for this tick. Empty map means no inputs.
- * @param deltaTime - Time delta in milliseconds since last tick
+ * @param inputs - Map of player ID to their input for this tick
+ * @param deltaTime - Time delta in milliseconds (fixed tick interval on server)
  * @returns New world state after simulation (must be a new object, not mutated)
  *
  * @example
  * ```ts
  * const simulate: SimulateFunction<MyWorld, MyInput> = (world, inputs, dt) => {
  *   const newPlayers = new Map(world.players);
+ *   
+ *   // Process each player's input
  *   for (const [id, input] of inputs) {
  *     const player = newPlayers.get(id);
  *     if (player) {
@@ -35,7 +56,11 @@
  *       });
  *     }
  *   }
- *   return { ...world, players: newPlayers };
+ *   
+ *   // Process shared state (projectiles, etc.) - happens once per tick
+ *   const newProjectiles = simulateProjectiles(world.projectiles, dt);
+ *   
+ *   return { ...world, players: newPlayers, projectiles: newProjectiles };
  * };
  * ```
  */

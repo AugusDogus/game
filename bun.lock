@@ -59,6 +59,40 @@
         "typescript": "^5",
       },
     },
+    "examples/rounds": {
+      "name": "@game/example-rounds",
+      "version": "0.1.0",
+      "dependencies": {
+        "@game/netcode": "workspace:*",
+        "@game/physics2d": "workspace:*",
+        "@game/platformer": "workspace:*",
+      },
+    },
+    "examples/rounds/app": {
+      "name": "@game/rounds-app",
+      "version": "0.1.0",
+      "dependencies": {
+        "@game/example-rounds": "workspace:*",
+        "@game/netcode": "workspace:*",
+        "@game/renderer": "workspace:*",
+        "@socket.io/bun-engine": "^0.1.0",
+        "@tanstack/react-query": "^5.90.16",
+        "bun-plugin-tailwind": "^0.1.2",
+        "pixi-viewport": "^6.0.3",
+        "pixi.js": "^8.15.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3",
+        "socket.io": "^4.8.3",
+        "socket.io-client": "^4.8.3",
+        "tailwindcss": "^4.1.18",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "typescript": "^5",
+      },
+    },
     "packages/netcode": {
       "name": "@game/netcode",
       "version": "0.1.0",
@@ -101,6 +135,8 @@
   "packages": {
     "@game/example-platformer": ["@game/example-platformer@workspace:examples/platformer"],
 
+    "@game/example-rounds": ["@game/example-rounds@workspace:examples/rounds"],
+
     "@game/netcode": ["@game/netcode@workspace:packages/netcode"],
 
     "@game/physics2d": ["@game/physics2d@workspace:packages/physics2d"],
@@ -110,6 +146,8 @@
     "@game/platformer-app": ["@game/platformer-app@workspace:examples/platformer/app"],
 
     "@game/renderer": ["@game/renderer@workspace:packages/renderer"],
+
+    "@game/rounds-app": ["@game/rounds-app@workspace:examples/rounds/app"],
 
     "@oven/bun-darwin-aarch64": ["@oven/bun-darwin-aarch64@1.3.5", "", { "os": "darwin", "cpu": "arm64" }, "sha512-8GvNtMo0NINM7Emk9cNAviCG3teEgr3BUX9be0+GD029zIagx2Sf54jMui1Eu1IpFm7nWHODuLEefGOQNaJ0gQ=="],
 
@@ -289,10 +327,14 @@
 
     "@game/platformer-app/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
 
+    "@game/rounds-app/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
+
     "@game/netcode/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
 
     "@game/physics2d/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
 
     "@game/platformer-app/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
+
+    "@game/rounds-app/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
   }
 }

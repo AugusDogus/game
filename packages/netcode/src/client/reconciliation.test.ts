@@ -64,7 +64,7 @@ describe("Reconciler", () => {
       const snapshot = createSnapshot(serverPlayer, -1);
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
       expect(resultPlayer?.position.x).toBe(100);
       expect(resultPlayer?.position.y).toBe(200);
@@ -85,7 +85,7 @@ describe("Reconciler", () => {
       const snapshot = createSnapshot(serverPlayer, 0);
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
       // Should have replayed seq 1 and 2, so position should be > 10
       expect(resultPlayer?.position.x).toBeGreaterThan(10);
@@ -121,7 +121,7 @@ describe("Reconciler", () => {
       const result = reconciler.reconcile(snapshot);
 
       // Should return world without our player (no prediction to merge)
-      expect(result.players.has("other-player")).toBe(true);
+      expect(result.world.players.has("other-player")).toBe(true);
     });
 
     test("should handle empty acks", () => {
@@ -137,14 +137,14 @@ describe("Reconciler", () => {
       };
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
       expect(resultPlayer?.position.x).toBe(50);
     });
   });
 
   describe("real-world scenarios", () => {
-    test("network lag spike: many queued inputs should replay with correct timing", () => {
+    test("network lag spike: many queued inputs should replay with timestamp deltas", () => {
       // Player sends inputs at 60fps during a 200ms lag spike
       // Server doesn't see any of them, then they all arrive at once
       const startTime = 1000;
@@ -162,13 +162,12 @@ describe("Reconciler", () => {
       const snapshot = createSnapshot(serverPlayer, -1); // No inputs acknowledged
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
-      // All 12 inputs should be replayed with proper timing
-      // With smoothDamp acceleration, velocity ramps up from 0 to target (200 u/s)
-      // Movement is less than instant velocity would give, but still substantial
-      // Should move some meaningful distance in the direction of input
-      expect(resultPlayer?.position.x).toBeGreaterThan(15);
+      // All 12 inputs should be replayed with their ACTUAL timestamp deltas (~16ms each)
+      // Total simulated time is ~200ms (12 * ~16.67ms)
+      // With smoothDamp acceleration over 200ms, player should move some distance
+      expect(resultPlayer?.position.x).toBeGreaterThan(5);
       expect(resultPlayer?.position.x).toBeLessThan(50);
     });
 
@@ -176,24 +175,27 @@ describe("Reconciler", () => {
       // Player sends 5 inputs
       const startTime = 1000;
       for (let i = 0; i < 5; i++) {
-        inputBuffer.add(createInput(1, 0, false, startTime + i * 50)); // 50ms apart (matching server tick)
+        inputBuffer.add(createInput(1, 0, false, startTime + i * 50)); // 50ms apart
       }
 
       // Server acknowledges first 3 (seq 0, 1, 2)
-      // Server position reflects those 3 inputs
+      // Server position reflects those 3 inputs with fixed tick delta (~16.67ms each)
+      // At ~200 units/sec, 3 inputs * 16.67ms = ~10 units
       const serverPlayer = createTestPlayer(playerId, {
-        position: { x: 30, y: 190 }, // Moved 30 units from 3 inputs
+        position: { x: 10, y: 190 }, // Moved ~10 units from 3 inputs
         velocity: { x: 200, y: 0 },
         isGrounded: true,
       });
       const snapshot = createSnapshot(serverPlayer, 2); // Ack through seq 2
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
-      // Should replay seq 3 and 4 (2 more inputs, ~100ms, ~20 more units)
-      expect(resultPlayer?.position.x).toBeGreaterThan(40);
-      expect(resultPlayer?.position.x).toBeLessThan(60);
+      // Should replay seq 3 and 4 (2 more inputs with fixed delta)
+      // 2 inputs * ~16.67ms at 200 units/sec = ~6.67 units
+      // Total: 10 + 6.67 ≈ 16.67 units
+      expect(resultPlayer?.position.x).toBeGreaterThan(15);
+      expect(resultPlayer?.position.x).toBeLessThan(20);
 
       // Inputs 0-2 should be removed from buffer
       expect(inputBuffer.get(0)).toBeUndefined();
@@ -221,13 +223,13 @@ describe("Reconciler", () => {
       const snapshot = createSnapshot(serverPlayer, 0); // Only ack seq 0
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
       // Client should accept server position (x=0) and replay seq 1 and 2
-      // Since server says x=0, we replay 2 inputs (~100ms of movement)
-      // With smoothDamp, velocity builds up gradually, so less than instant
-      expect(resultPlayer?.position.x).toBeGreaterThan(5);
-      expect(resultPlayer?.position.x).toBeLessThan(30);
+      // Since server says x=0, we replay 2 inputs with timestamp deltas (~50ms each)
+      // With smoothDamp, velocity builds up gradually
+      expect(resultPlayer?.position.x).toBeGreaterThan(0.5);
+      expect(resultPlayer?.position.x).toBeLessThan(15);
     });
 
     test("jump input timing: jump pressed while falling should not double-jump", () => {
@@ -245,7 +247,7 @@ describe("Reconciler", () => {
       const snapshot = createSnapshot(serverPlayer, -1);
 
       const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.players.get(playerId);
+      const resultPlayer = result.world.players.get(playerId);
 
       // Player should continue falling, not get another jump
       // Y-up: Velocity should still be negative (falling) or more negative
@@ -292,9 +294,9 @@ describe("Reconciler", () => {
       const result = freshReconciler.reconcile(snapshot);
 
       // Should work correctly even with large tick numbers
-      expect(result.players.has(playerId)).toBe(true);
+      expect(result.world.players.has(playerId)).toBe(true);
       // Remaining inputs (6-9) should be replayed
-      expect(result.players.get(playerId)?.position.x).toBeGreaterThan(50);
+      expect(result.world.players.get(playerId)?.position.x).toBeGreaterThan(50);
     });
 
     test("stale snapshot: older tick should not corrupt state", () => {

@@ -132,4 +132,42 @@ export const platformerPredictionScope: PredictionScope<PlatformerWorld, Platfor
   createIdleInput(): PlatformerInput {
     return createIdleInput();
   },
+
+  /**
+   * Get the local player's position from the predicted state.
+   * Used for visual smoothing to track position changes during reconciliation.
+   */
+  getLocalPlayerPosition(
+    state: Partial<PlatformerWorld>,
+    localPlayerId: string,
+  ): { x: number; y: number } | null {
+    const player = state.players?.get(localPlayerId);
+    if (!player) return null;
+    return { x: player.position.x, y: player.position.y };
+  },
+
+  /**
+   * Apply a visual offset to the local player's position.
+   * Used for visual smoothing to hide small reconciliation corrections.
+   */
+  applyVisualOffset(
+    world: PlatformerWorld,
+    localPlayerId: string,
+    offsetX: number,
+    offsetY: number,
+  ): PlatformerWorld {
+    const player = world.players.get(localPlayerId);
+    if (!player) return world;
+
+    const players = new Map(world.players);
+    players.set(localPlayerId, {
+      ...player,
+      position: {
+        x: player.position.x + offsetX,
+        y: player.position.y + offsetY,
+      },
+    });
+
+    return { ...world, players };
+  },
 };

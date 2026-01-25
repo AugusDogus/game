@@ -3,27 +3,30 @@
  */
 
 /**
- * Default server tick rate: 20 Hz (50ms per tick)
- * Matches industry standards like Apex Legends and Warzone
+ * Default server tick rate: 60 Hz (~16.67ms per tick)
+ * Aligns with standard client input rate (60Hz) to minimize prediction errors.
+ * Games can override this for different requirements:
+ * - 30 TPS for turn-based or slower games
+ * - 128 TPS for competitive shooters
  */
-export const DEFAULT_TICK_RATE = 20;
+export const DEFAULT_TICK_RATE = 60;
 
 /**
  * Default tick interval in milliseconds (1000 / tickRate)
  */
-export const DEFAULT_TICK_INTERVAL_MS = 1000 / DEFAULT_TICK_RATE; // 50ms
+export const DEFAULT_TICK_INTERVAL_MS = 1000 / DEFAULT_TICK_RATE; // ~16.67ms
 
 /**
- * Default interpolation delay: 100ms (2 ticks behind)
- * This ensures smooth rendering of other entities
+ * Default interpolation delay: ~50ms (3 ticks behind at 60 TPS)
+ * This ensures smooth rendering of other entities while minimizing perceived lag.
  */
-export const DEFAULT_INTERPOLATION_DELAY_MS = 100;
+export const DEFAULT_INTERPOLATION_DELAY_MS = 50;
 
 /**
- * Default snapshot history size: 60 snapshots
- * At 20 Hz, this covers 3 seconds of history for lag compensation
+ * Default snapshot history size: 180 snapshots
+ * At 60 Hz, this covers 3 seconds of history for lag compensation
  */
-export const DEFAULT_SNAPSHOT_HISTORY_SIZE = 60;
+export const DEFAULT_SNAPSHOT_HISTORY_SIZE = 180;
 
 /**
  * Floor Y position (ground level)

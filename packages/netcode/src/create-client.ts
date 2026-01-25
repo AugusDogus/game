@@ -6,9 +6,9 @@
 
 import type { Socket } from "socket.io-client";
 import type { PredictionScope } from "./client/prediction-scope.js";
-import { DEFAULT_INTERPOLATION_DELAY_MS } from "./constants.js";
+import { DEFAULT_INTERPOLATION_DELAY_MS, DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
 import type { ActionResult, GameDefinition, InterpolateFunction, Snapshot } from "./core/types.js";
-import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js";
+import { ServerAuthoritativeClient, type VisualSmoothingConfig } from "./strategies/server-authoritative.js";
 
 /**
  * Base configuration shared by all client config variants.
@@ -20,10 +20,18 @@ interface ClientConfigBase<
 > {
   /** Socket.IO client socket instance */
   socket: Socket;
-  /** How far behind real-time to render other players (default: 100ms). Higher = smoother but more delay. */
+  /** How far behind real-time to render other players (default: 50ms at 60 TPS). Higher = smoother but more delay. */
   interpolationDelayMs?: number;
+  /** Server tick interval in milliseconds (default: ~16.67ms / 60 TPS). Must match server's tickIntervalMs for accurate prediction. */
+  tickIntervalMs?: number;
   /** Artificial latency for testing netcode behavior (default: 0) */
   simulatedLatency?: number;
+  /**
+   * Visual smoothing configuration for reconciliation corrections.
+   * Smooths small position corrections over multiple frames to prevent jitter.
+   * Requires PredictionScope to implement getLocalPlayerPosition and applyVisualOffset.
+   */
+  visualSmoothing?: VisualSmoothingConfig;
   /** Called when a new world snapshot is received and processed */
   onWorldUpdate?: (state: TWorld) => void;
   /** Called when another player joins the game */
@@ -192,14 +200,17 @@ export function createClient<
   }
 
   const interpolationDelayMs = config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
+  const tickIntervalMs = config.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS;
   let simulatedLatency = config.simulatedLatency ?? 0;
   let actionSeq = 0;
 
-  // Create client strategy
+  // Create client strategy with visual smoothing
   const strategy = new ServerAuthoritativeClient<TWorld, TInput>(
     predictionScope,
     interpolate,
     interpolationDelayMs,
+    tickIntervalMs,
+    config.visualSmoothing,
   );
 
   // Handle connection

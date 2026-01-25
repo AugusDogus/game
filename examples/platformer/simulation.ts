@@ -225,9 +225,6 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
 
   const deltaSeconds = deltaTime / 1000;
 
-  // If no inputs provided, simulate ALL players with idle input (legacy behavior)
-  const simulateAll = inputs.size === 0;
-
   // Step 1: Check which players are supported (standing on floor or another player)
   // This must happen BEFORE physics so we don't apply gravity to supported players
   const supportedPlayers = new Set<string>();
@@ -238,11 +235,11 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
   }
 
   // Step 2: Simulate physics for each player
-  // We pass all OTHER players so we can check for collisions during movement
+  // The engine provides all players' inputs (either real or idle) in the inputs map
   let newPlayers = new Map<string, PlatformerPlayer>();
   for (const [playerId, player] of worldAfterStateUpdate.players) {
     const isSupported = supportedPlayers.has(playerId);
-    const input = simulateAll ? createIdleInput() : (inputs.get(playerId) ?? null);
+    const input = inputs.get(playerId);
     
     // Get other players for collision checking during movement
     const otherPlayers = new Map(worldAfterStateUpdate.players);
@@ -259,13 +256,13 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
       );
       newPlayers.set(playerId, newPlayer);
     } else {
+      // Player not in inputs map (shouldn't happen with new engine contract,
+      // but keep for client-side prediction which only sends local player)
       newPlayers.set(playerId, player);
     }
   }
 
   // Step 3: Handle player-player collisions (resolve any new overlaps from movement)
-  // We pass the original positions so we can detect if a player was pushed back
-  // and prevent them from moving into the collision again
   newPlayers = resolvePlayerCollisions(newPlayers);
 
   // Step 4: Handle hazard damage
