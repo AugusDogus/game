@@ -323,7 +323,7 @@ export class GameClient {
       otherPlayersServerHistory: this.otherPlayersServerHistory,
     };
   }
-
+  
   /**
    * Start the render loop
    */

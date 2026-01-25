@@ -110,6 +110,101 @@ describe("ServerAuthoritativeClient", () => {
       expect(client.getInputBuffer().getUnacknowledged(-1)).toEqual([]);
     });
   });
+
+  describe("world reset detection", () => {
+    test("should auto-reset when tick goes backwards significantly (level change)", () => {
+      client.setLocalPlayerId("player-1");
+
+      // Receive initial snapshot at tick 100
+      const world1 = addPlayerToWorld(createPlatformerWorld(), "player-1");
+      client.onSnapshot({
+        tick: 100,
+        timestamp: Date.now(),
+        state: world1,
+        inputAcks: new Map([["player-1", -1]]),
+      });
+
+      // Add some inputs that would normally be replayed
+      const input1 = createInput(1, 0, false, Date.now());
+      client.onLocalInput(input1);
+      const input2 = createInput(1, 0, true, Date.now() + 16);
+      client.onLocalInput(input2);
+
+      // Verify inputs are in buffer
+      expect(client.getInputBuffer().getUnacknowledged(-1).length).toBe(2);
+
+      // Receive snapshot with tick reset to 0 (simulating level change)
+      const world2 = addPlayerToWorld(createPlatformerWorld(), "player-1");
+      client.onSnapshot({
+        tick: 0,
+        timestamp: Date.now() + 100,
+        state: world2,
+        inputAcks: new Map([["player-1", -1]]),
+      });
+
+      // Input buffer should have been cleared by auto-reset
+      expect(client.getInputBuffer().getUnacknowledged(-1).length).toBe(0);
+    });
+
+    test("should NOT reset for normal tick progression", () => {
+      client.setLocalPlayerId("player-1");
+
+      // Receive initial snapshot
+      const world1 = addPlayerToWorld(createPlatformerWorld(), "player-1");
+      client.onSnapshot({
+        tick: 100,
+        timestamp: Date.now(),
+        state: world1,
+        inputAcks: new Map([["player-1", -1]]),
+      });
+
+      // Add input
+      const input = createInput(1, 0, false, Date.now());
+      client.onLocalInput(input);
+
+      // Receive next snapshot with normal tick progression
+      const world2 = addPlayerToWorld(createPlatformerWorld(), "player-1");
+      client.onSnapshot({
+        tick: 101,
+        timestamp: Date.now() + 50,
+        state: world2,
+        inputAcks: new Map([["player-1", -1]]),
+      });
+
+      // Input should still be in buffer (not cleared)
+      expect(client.getInputBuffer().getUnacknowledged(-1).length).toBe(1);
+    });
+
+    test("should NOT reset for small tick reordering", () => {
+      client.setLocalPlayerId("player-1");
+
+      // Receive snapshot at tick 100
+      const world1 = addPlayerToWorld(createPlatformerWorld(), "player-1");
+      client.onSnapshot({
+        tick: 100,
+        timestamp: Date.now(),
+        state: world1,
+        inputAcks: new Map([["player-1", -1]]),
+      });
+
+      // Add input
+      const input = createInput(1, 0, false, Date.now());
+      client.onLocalInput(input);
+
+      // Receive out-of-order snapshot (tick 98 arrived late)
+      // This is within the threshold (100 - 98 = 2, threshold is 5)
+      const world2 = addPlayerToWorld(createPlatformerWorld(), "player-1");
+      client.onSnapshot({
+        tick: 98,
+        timestamp: Date.now() + 50,
+        state: world2,
+        inputAcks: new Map([["player-1", -1]]),
+      });
+
+      // Input should still be in buffer (not cleared for minor reordering)
+      expect(client.getInputBuffer().getUnacknowledged(-1).length).toBe(1);
+    });
+  });
 });
 
 describe("ServerAuthoritativeServer", () => {

@@ -23,6 +23,7 @@ export const platformerPredictionScope: PredictionScope<PlatformerWorld, Platfor
     // Return the full world state - we need all players for collision detection
     return {
       players: new Map(world.players),
+      levelId: world.levelId, // Critical: must include levelId for correct collision detection
       platforms: world.platforms,
       hazards: world.hazards,
       spawnPoints: world.spawnPoints,
@@ -114,6 +115,7 @@ export const platformerPredictionScope: PredictionScope<PlatformerWorld, Platfor
 
     return {
       players: newWorld.players,
+      levelId: newWorld.levelId, // Critical: preserve levelId for next tick's collision detection
       projectiles: newWorld.projectiles,
       tick: newWorld.tick,
       gameState: newWorld.gameState,

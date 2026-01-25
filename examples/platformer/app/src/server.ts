@@ -228,8 +228,16 @@ const server = Bun.serve({
       currentLevelId = levelId;
       currentLevel = level;
 
-      // Reset the game world with the new level
-      const newWorld = createWorldWithLevel(level);
+      // Reset the game world with the new level, preserving game state
+      const currentWorld = netcodeServer.getWorldState();
+      let newWorld = createWorldWithLevel(level);
+      
+      // Preserve the game state so physics continue working
+      // If game was playing, keep it playing on the new level
+      if (currentWorld.gameState === "playing") {
+        newWorld = forceStartGame(newWorld);
+      }
+      
       netcodeServer.setWorld(newWorld);
 
       console.log(`📍 Switched to level: ${level.name}`);

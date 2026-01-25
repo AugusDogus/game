@@ -34,6 +34,8 @@ export class ServerAuthoritativeClient<
   private playerId: string | null = null;
   private lastServerState: TWorld | null = null;
   private lastServerSnapshot: Snapshot<TWorld> | null = null;
+  private lastSnapshotTick: number = -1;
+  private lastLevelId: string | null = null;
 
   constructor(
     predictionScope: PredictionScope<TWorld, TInput>,
@@ -65,6 +67,28 @@ export class ServerAuthoritativeClient<
   }
 
   onSnapshot(snapshot: Snapshot<TWorld>): void {
+    
+    // Detect world reset by checking for level ID change (more reliable than tick detection)
+    const currentLevelId = typeof worldAny.levelId === 'string' ? worldAny.levelId : null;
+    const levelChanged = this.lastLevelId !== null && currentLevelId !== null && currentLevelId !== this.lastLevelId;
+    
+    // Also detect world reset by tick going backwards significantly (fallback for games without levelId)
+    const tickWentBackwards = this.lastSnapshotTick >= 0 && snapshot.tick < this.lastSnapshotTick - 5;
+    
+    
+    if (levelChanged || tickWentBackwards) {
+      // World was reset - clear prediction/interpolation state before processing
+      // This prevents replaying old inputs from the previous world onto the new world
+      this.inputBuffer.clear();
+      this.predictor.reset();
+      this.interpolator.clear();
+    }
+    
+    this.lastSnapshotTick = snapshot.tick;
+    if (currentLevelId !== null) {
+      this.lastLevelId = currentLevelId;
+    }
+
     // Store for interpolation
     this.interpolator.addSnapshot(snapshot);
     this.lastServerState = snapshot.state;
@@ -121,6 +145,8 @@ export class ServerAuthoritativeClient<
     // socket connection, not the game state. A reset (e.g., level change) should
     // clear prediction/interpolation state but keep the player's identity.
     this.lastServerState = null;
+    this.lastSnapshotTick = -1;
+    this.lastLevelId = null;
   }
 
   /**
