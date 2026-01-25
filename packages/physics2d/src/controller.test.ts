@@ -1,29 +1,7 @@
-import { describe, expect, it, beforeAll } from "bun:test";
-import { PhysicsWorld, initPhysics } from "./world.js";
+import { describe, expect, it } from "bun:test";
 import { CharacterController, createCollisionInfo, resetCollisionInfo } from "./controller.js";
 import { vec2 } from "./math.js";
-import type { Vector2, ColliderOptions } from "./types.js";
-
-// Initialize Rapier WASM once before all tests
-beforeAll(async () => {
-  await initPhysics();
-});
-
-/**
- * Helper to create a world with colliders already added and broadphase updated.
- * This is the typical pattern for level setup - add all geometry, then update broadphase once.
- */
-function createWorldWithColliders(
-  colliders: Array<{ position: Vector2; halfExtents: Vector2; options?: ColliderOptions }>,
-  gravity: Vector2 = vec2(0, -20),
-): PhysicsWorld {
-  const world = PhysicsWorld.create(gravity);
-  for (const c of colliders) {
-    world.addStaticCollider(c.position, c.halfExtents, c.options);
-  }
-  world.updateBroadphase();
-  return world;
-}
+import type { Collider } from "./types.js";
 
 describe("CollisionInfo helpers", () => {
   describe("createCollisionInfo", () => {
@@ -60,8 +38,8 @@ describe("CollisionInfo helpers", () => {
 describe("CharacterController", () => {
   describe("creation", () => {
     it("creates a controller with position and size", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -73,8 +51,8 @@ describe("CharacterController", () => {
     });
 
     it("uses default config if not provided", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -83,8 +61,8 @@ describe("CharacterController", () => {
     });
 
     it("accepts custom config", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
         config: {
@@ -102,11 +80,11 @@ describe("CharacterController", () => {
   describe("move on flat ground", () => {
     it("falls and lands on ground", () => {
       // Ground platform at y=0
-      const world = createWorldWithColliders([
+      const colliders: Collider[] = [
         { position: vec2(0, 0), halfExtents: vec2(10, 0.5) },
-      ]);
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -123,11 +101,11 @@ describe("CharacterController", () => {
 
     it("walks horizontally on ground", () => {
       // Ground platform
-      const world = createWorldWithColliders([
+      const colliders: Collider[] = [
         { position: vec2(0, 0), halfExtents: vec2(10, 0.5) },
-      ]);
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 1.5), // On ground
         halfSize: vec2(0.5, 1),
       });
@@ -144,11 +122,11 @@ describe("CharacterController", () => {
   describe("wall collision", () => {
     it("stops at a wall", () => {
       // Wall on the right
-      const world = createWorldWithColliders([
+      const colliders: Collider[] = [
         { position: vec2(5, 5), halfExtents: vec2(0.5, 5) },
-      ]);
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -164,11 +142,11 @@ describe("CharacterController", () => {
 
     it("stops at a wall on the left", () => {
       // Wall on the left
-      const world = createWorldWithColliders([
+      const colliders: Collider[] = [
         { position: vec2(-5, 5), halfExtents: vec2(0.5, 5) },
-      ]);
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -186,11 +164,11 @@ describe("CharacterController", () => {
   describe("ceiling collision", () => {
     it("stops at ceiling when moving up", () => {
       // Ceiling above
-      const world = createWorldWithColliders([
+      const colliders: Collider[] = [
         { position: vec2(0, 10), halfExtents: vec2(10, 0.5) },
-      ]);
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -208,11 +186,11 @@ describe("CharacterController", () => {
   describe("one-way platforms", () => {
     it("lands on one-way platform from above", () => {
       // One-way platform
-      const world = createWorldWithColliders([
-        { position: vec2(0, 5), halfExtents: vec2(5, 0.25), options: { oneWay: true } },
-      ]);
+      const colliders: Collider[] = [
+        { position: vec2(0, 5), halfExtents: vec2(5, 0.25), oneWay: true },
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 10),
         halfSize: vec2(0.5, 1),
       });
@@ -227,11 +205,11 @@ describe("CharacterController", () => {
 
     it("passes through one-way platform from below", () => {
       // One-way platform
-      const world = createWorldWithColliders([
-        { position: vec2(0, 5), halfExtents: vec2(5, 0.25), options: { oneWay: true } },
-      ]);
+      const colliders: Collider[] = [
+        { position: vec2(0, 5), halfExtents: vec2(5, 0.25), oneWay: true },
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 2),
         halfSize: vec2(0.5, 1),
       });
@@ -247,11 +225,11 @@ describe("CharacterController", () => {
 
     it("drops through one-way platform when pressing down", () => {
       // One-way platform
-      const world = createWorldWithColliders([
-        { position: vec2(0, 5), halfExtents: vec2(5, 0.25), options: { oneWay: true } },
-      ]);
+      const colliders: Collider[] = [
+        { position: vec2(0, 5), halfExtents: vec2(5, 0.25), oneWay: true },
+      ];
 
-      const controller = new CharacterController(world, {
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 6.25), // Standing on platform
         halfSize: vec2(0.5, 1),
       });
@@ -267,8 +245,8 @@ describe("CharacterController", () => {
 
   describe("face direction", () => {
     it("faces right when moving right", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -278,8 +256,8 @@ describe("CharacterController", () => {
     });
 
     it("faces left when moving left", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -289,8 +267,8 @@ describe("CharacterController", () => {
     });
 
     it("preserves face direction when not moving horizontally", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -304,8 +282,8 @@ describe("CharacterController", () => {
 
   describe("setPosition", () => {
     it("teleports the character", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });
@@ -319,8 +297,8 @@ describe("CharacterController", () => {
 
   describe("setHalfSize", () => {
     it("changes the character size", () => {
-      const world = PhysicsWorld.create();
-      const controller = new CharacterController(world, {
+      const colliders: Collider[] = [];
+      const controller = new CharacterController(colliders, {
         position: vec2(0, 5),
         halfSize: vec2(0.5, 1),
       });

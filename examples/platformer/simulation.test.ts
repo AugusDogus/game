@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_FLOOR_Y,
 } from "@game/netcode";
@@ -11,13 +11,7 @@ import {
 import { createPlatformerWorld } from "./types.js";
 import type { PlatformerWorld, PlatformerInput } from "./types.js";
 import { createTestPlayer, createPlayingWorld } from "./test-utils.js";
-import { initPlatformerPhysics } from "./physics-bridge.js";
 import { derivePhysics, DEFAULT_PLAYER_CONFIG } from "./player.js";
-
-// Initialize physics before any tests run
-beforeAll(async () => {
-  await initPlatformerPhysics();
-});
 
 // Derived physics for test assertions
 const derivedPhysics = derivePhysics(DEFAULT_PLAYER_CONFIG);

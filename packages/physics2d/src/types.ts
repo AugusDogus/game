@@ -2,7 +2,7 @@
  * Core types for @game/physics2d
  *
  * Uses Y-up coordinate system (0,0 at bottom-left, positive Y is up).
- * This matches physics conventions, Unity, and Rapier's default.
+ * This matches physics conventions and common game engine defaults.
  */
 
 /**
@@ -15,6 +15,21 @@ export interface Vector2 {
 }
 
 /**
+ * A static collider (AABB) for collision detection.
+ * Represents platforms, walls, floors, etc.
+ */
+export interface Collider {
+  /** Center position of the collider */
+  readonly position: Vector2;
+  /** Half-width and half-height of the collider */
+  readonly halfExtents: Vector2;
+  /** If true, this is a one-way platform (can pass through from below) */
+  readonly oneWay?: boolean;
+  /** User-defined tag for game-specific logic */
+  readonly tag?: string;
+}
+
+/**
  * Result of a successful raycast hit.
  */
 export interface RaycastHit {
@@ -24,8 +39,8 @@ export interface RaycastHit {
   readonly normal: Vector2;
   /** Distance from ray origin to hit point */
   readonly distance: number;
-  /** Handle of the collider that was hit */
-  readonly colliderHandle: number;
+  /** Index of the collider that was hit in the colliders array */
+  readonly colliderIndex: number;
 }
 
 /**
@@ -108,22 +123,3 @@ export const DEFAULT_CONTROLLER_CONFIG: ControllerConfig = {
   verticalRayCount: 4,
 };
 
-/**
- * Options for creating a collider.
- */
-export interface ColliderOptions {
-  /** If true, this is a one-way platform (can pass through from below) */
-  readonly oneWay?: boolean;
-  /** User-defined tag for game-specific logic */
-  readonly tag?: string;
-}
-
-/**
- * Stored metadata about a collider.
- */
-export interface ColliderData {
-  /** If true, this is a one-way platform */
-  readonly oneWay: boolean;
-  /** User-defined tag */
-  readonly tag: string | undefined;
-}

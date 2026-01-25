@@ -96,13 +96,3 @@ export {
   validateLevel,
   parseLevelFromJson,
 } from "./levels.js";
-
-// Physics bridge - raycast-based collision detection
-export type { PhysicsMoveResult } from "./physics-bridge.js";
-export {
-  initPlatformerPhysics,
-  isPhysicsInitialized,
-  getPhysicsWorldForLevel,
-  clearPhysicsWorldCache,
-  movePlayerWithPhysics,
-} from "./physics-bridge.js";

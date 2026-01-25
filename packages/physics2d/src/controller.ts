@@ -9,10 +9,14 @@
  *
  * This controller does NOT handle gravity, jumping, or game-specific logic.
  * Those belong in the game layer (e.g., player.ts in the platformer example).
+ *
+ * STATELESS DESIGN: The controller accepts a colliders array in its constructor.
+ * No physics world object is stored - all collision detection is done through
+ * pure raycast functions.
  */
 
-import type { PhysicsWorld } from "./world.js";
-import type { Vector2, CollisionInfo, ControllerConfig } from "./types.js";
+import { raycast, isColliderOneWay } from "./world.js";
+import type { Vector2, Collider, CollisionInfo, ControllerConfig } from "./types.js";
 import { DEFAULT_CONTROLLER_CONFIG } from "./types.js";
 import { vec2, vec2Zero, vec2Up, angleBetweenVectors, degToRad } from "./math.js";
 
@@ -101,11 +105,11 @@ function updateRaycastOrigins(
 /**
  * Raycast-based character controller.
  *
- * Uses Rapier for raycasting but implements custom collision logic
- * following Sebastian Lague's pattern for tight, responsive controls.
+ * Uses stateless raycasting for collision detection, implementing custom
+ * collision logic following Sebastian Lague's pattern for tight, responsive controls.
  */
 export class CharacterController {
-  private world: PhysicsWorld;
+  private colliders: readonly Collider[];
   private config: ControllerConfig;
 
   /** Current position (center of character) */
@@ -123,15 +127,21 @@ export class CharacterController {
   /** Spacing between vertical rays */
   private verticalRaySpacing: number = 0;
 
+  /**
+   * Create a new character controller.
+   *
+   * @param colliders Array of static colliders to test against
+   * @param options Controller options including position and size
+   */
   constructor(
-    world: PhysicsWorld,
+    colliders: readonly Collider[],
     options: {
       position: Vector2;
       halfSize: Vector2;
       config?: Partial<ControllerConfig>;
     },
   ) {
-    this.world = world;
+    this.colliders = colliders;
     this.position = options.position;
     this.halfSize = options.halfSize;
     this.config = { ...DEFAULT_CONTROLLER_CONFIG, ...options.config };
@@ -194,9 +204,10 @@ export class CharacterController {
     }
 
     // Horizontal collisions (walls and slope climbing)
-    if (moveAmount.x !== 0) {
-      this.horizontalCollisions(moveAmount);
-    }
+    // IMPORTANT: Always check horizontal collisions to detect walls even when not moving.
+    // This is critical for wall sliding to work consistently - without this check,
+    // wall contact would only be detected when there's horizontal movement.
+    this.horizontalCollisions(moveAmount);
 
     // Vertical collisions (ground and ceiling)
     if (moveAmount.y !== 0) {
@@ -213,24 +224,29 @@ export class CharacterController {
    * Handle horizontal collisions (walls and slope climbing).
    */
   private horizontalCollisions(moveAmount: { x: number; y: number }): void {
-    const directionX = this.collisions.faceDir;
-    let rayLength = Math.abs(moveAmount.x) + this.config.skinWidth;
-
-    // If barely moving, still cast a minimum ray length to detect walls
-    if (Math.abs(moveAmount.x) < this.config.skinWidth) {
-      rayLength = 2 * this.config.skinWidth;
-    }
-
+    // When moving, cast rays in movement direction
+    // When stationary, cast rays in BOTH directions to detect walls on either side
+    const isStationary = Math.abs(moveAmount.x) < this.config.skinWidth;
+    const directions: number[] = isStationary ? [-1, 1] : [this.collisions.faceDir];
+    
     const origins = updateRaycastOrigins(this.position, this.halfSize, this.config.skinWidth);
 
-    for (let i = 0; i < this.config.horizontalRayCount; i++) {
-      // Start from bottom if moving right, from bottom if moving left
-      const rayOrigin =
-        directionX === -1
-          ? vec2(origins.bottomLeft.x, origins.bottomLeft.y + i * this.horizontalRaySpacing)
-          : vec2(origins.bottomRight.x, origins.bottomRight.y + i * this.horizontalRaySpacing);
+    for (const directionX of directions) {
+      let rayLength = Math.abs(moveAmount.x) + this.config.skinWidth;
 
-      const hit = this.world.raycast(rayOrigin, vec2(directionX, 0), rayLength);
+      // If barely moving, still cast a minimum ray length to detect walls
+      if (isStationary) {
+        rayLength = 2 * this.config.skinWidth;
+      }
+
+      for (let i = 0; i < this.config.horizontalRayCount; i++) {
+        // Start from bottom if moving right, from bottom if moving left
+        const rayOrigin =
+          directionX === -1
+            ? vec2(origins.bottomLeft.x, origins.bottomLeft.y + i * this.horizontalRaySpacing)
+            : vec2(origins.bottomRight.x, origins.bottomRight.y + i * this.horizontalRaySpacing);
+
+        const hit = raycast(rayOrigin, vec2(directionX, 0), rayLength, this.colliders);
 
       if (hit) {
         // Skip if we're inside a collider (distance is 0)
@@ -275,6 +291,7 @@ export class CharacterController {
           this.collisions.right = directionX === 1;
         }
       }
+      }
     }
   }
 
@@ -295,11 +312,11 @@ export class CharacterController {
         baseOrigin.y,
       );
 
-      const hit = this.world.raycast(rayOrigin, vec2(0, directionY), rayLength);
+      const hit = raycast(rayOrigin, vec2(0, directionY), rayLength, this.colliders);
 
       if (hit) {
         // One-way platform handling
-        if (this.world.isOneWay(hit.colliderHandle)) {
+        if (isColliderOneWay(this.colliders, hit.colliderIndex)) {
           // Skip if moving up through platform
           if (directionY === 1) {
             continue;
@@ -346,7 +363,7 @@ export class CharacterController {
           ? vec2(origins.bottomLeft.x, origins.bottomLeft.y + moveAmount.y)
           : vec2(origins.bottomRight.x, origins.bottomRight.y + moveAmount.y);
 
-      const hit = this.world.raycast(rayOrigin, vec2(directionX, 0), rayLength);
+      const hit = raycast(rayOrigin, vec2(directionX, 0), rayLength, this.colliders);
 
       if (hit) {
         const slopeAngle = angleBetweenVectors(hit.normal, vec2Up);
@@ -392,8 +409,8 @@ export class CharacterController {
     const origins = updateRaycastOrigins(this.position, this.halfSize, this.config.skinWidth);
     const rayLength = Math.abs(moveAmount.y) + this.config.skinWidth;
 
-    const hitLeft = this.world.raycast(origins.bottomLeft, vec2(0, -1), rayLength);
-    const hitRight = this.world.raycast(origins.bottomRight, vec2(0, -1), rayLength);
+    const hitLeft = raycast(origins.bottomLeft, vec2(0, -1), rayLength, this.colliders);
+    const hitRight = raycast(origins.bottomRight, vec2(0, -1), rayLength, this.colliders);
 
     // Check for sliding down max slope (only one side hit = steep slope)
     if (hitLeft && !hitRight) {
@@ -410,7 +427,7 @@ export class CharacterController {
     const directionX = Math.sign(moveAmount.x);
     // When moving right and descending, check left corner; when moving left, check right
     const rayOrigin = directionX === -1 ? origins.bottomRight : origins.bottomLeft;
-    const hit = this.world.raycast(rayOrigin, vec2(0, -1), Infinity);
+    const hit = raycast(rayOrigin, vec2(0, -1), Infinity, this.colliders);
 
     if (hit) {
       const slopeAngle = angleBetweenVectors(hit.normal, vec2Up);

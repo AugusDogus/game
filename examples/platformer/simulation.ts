@@ -8,9 +8,8 @@
  * - Gravity is negative (pulls down)
  *
  * Collision Detection:
- * - Uses @game/physics2d for platform/floor collision (raycast-based) when available
- * - Falls back to AABB collision when physics not initialized
- * - Player-player collision always uses AABB (dynamic objects)
+ * - Uses @game/physics2d for platform/floor collision (raycast-based)
+ * - Player-player collision uses AABB (dynamic objects)
  */
 
 import {
@@ -18,6 +17,7 @@ import {
 } from "@game/netcode";
 import type { InputMerger, SimulateFunction } from "@game/netcode";
 import { CharacterController, vec2 } from "@game/physics2d";
+import type { Collider } from "@game/physics2d";
 import type {
     Hazard,
     LevelConfig,
@@ -47,9 +47,6 @@ import {
     RESPAWN_TIMER_TICKS,
 } from "./types.js";
 import {
-    getPhysicsWorldForLevel,
-} from "./physics-bridge.js";
-import {
     updatePlayerMovement,
     derivePhysics,
     DEFAULT_PLAYER_CONFIG,
@@ -75,6 +72,61 @@ const COUNTDOWN_DURATION_TICKS = 60;
 
 /** Minimum players required to start a match */
 const MIN_PLAYERS_TO_START = 2;
+
+// =============================================================================
+// Level Colliders
+// =============================================================================
+
+/** Cached collider arrays by level ID */
+const colliderCache = new Map<string, Collider[]>();
+
+/**
+ * Get or create a collider array for a level.
+ *
+ * The colliders are cached by level ID for efficiency.
+ * Static geometry (platforms, floor) is converted to colliders.
+ *
+ * @param level The level configuration
+ * @returns Array of colliders for this level
+ */
+function getLevelColliders(level: LevelConfig): Collider[] {
+  // Check cache
+  const cached = colliderCache.get(level.id);
+  if (cached) {
+    return cached;
+  }
+
+  const colliders: Collider[] = [];
+
+  // Add platforms as colliders
+  for (const platform of level.platforms) {
+    // Platform position is bottom-left corner, collider needs center
+    const centerX = platform.position.x + platform.width / 2;
+    const centerY = platform.position.y + platform.height / 2;
+    const halfWidth = platform.width / 2;
+    const halfHeight = platform.height / 2;
+
+    colliders.push({
+      position: vec2(centerX, centerY),
+      halfExtents: vec2(halfWidth, halfHeight),
+      tag: platform.id,
+    });
+  }
+
+  // Add floor as a large collider at y=DEFAULT_FLOOR_Y
+  // Floor spans a large width and extends below the floor level
+  const floorThickness = 100;
+  colliders.push({
+    position: vec2(0, DEFAULT_FLOOR_Y - floorThickness / 2), // Center below floor surface
+    halfExtents: vec2(10000, floorThickness / 2), // Very wide, half-thickness
+    tag: "floor",
+  });
+
+  // Cache the colliders
+  colliderCache.set(level.id, colliders);
+
+  return colliders;
+}
 
 // =============================================================================
 // AABB Collision Detection
@@ -354,8 +406,8 @@ function simulatePlayerWithSupport(
     return player;
   }
 
-  // --- Get physics world for this level ---
-  const physicsWorld = getPhysicsWorldForLevel({
+  // --- Get colliders for this level ---
+  const colliders = getLevelColliders({
     id: world.levelId,
     name: world.levelId,
     platforms: world.platforms,
@@ -364,7 +416,7 @@ function simulatePlayerWithSupport(
   });
 
   // --- Create CharacterController for this frame ---
-  const controller = new CharacterController(physicsWorld, {
+  const controller = new CharacterController(colliders, {
     position: vec2(player.position.x, player.position.y),
     halfSize: vec2(PLAYER_WIDTH / 2, PLAYER_HEIGHT / 2),
   });
@@ -377,6 +429,7 @@ function simulatePlayerWithSupport(
   // This prevents wall jump from triggering when player lands on ground near a wall
   const wasOnWallLeft = !wasGrounded && player.wallDirX === -1;
   const wasOnWallRight = !wasGrounded && player.wallDirX === 1;
+
 
   // --- Build movement state from player ---
   const movementState: PlayerMovementState = {
@@ -1163,15 +1216,22 @@ function checkMostKillsWin(world: PlatformerWorld, timeLimitMs: number): Platfor
 // =============================================================================
 
 /**
- * Add a player to the world
+ * Add a player to the world.
+ * If no position is provided, picks a spawn point from the world's spawn points.
  */
 export function addPlayerToWorld(
   world: PlatformerWorld,
   playerId: string,
-  position = { x: 0, y: 0 },
+  position?: { x: number; y: number },
 ): PlatformerWorld {
+  // If no position provided, use a spawn point from the world
+  const spawnPosition = position ?? getDeterministicSpawnPoint(
+    world.spawnPoints,
+    hashPlayerIdWithTick(playerId, world.tick)
+  );
+  
   const newPlayers = new Map(world.players);
-  newPlayers.set(playerId, createPlatformerPlayer(playerId, position));
+  newPlayers.set(playerId, createPlatformerPlayer(playerId, spawnPosition));
   return {
     ...world,
     players: newPlayers,

@@ -1,8 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { Snapshot } from "../core/types.js";
 import {
   platformerPredictionScope,
-  initPlatformerPhysics,
   type PlatformerInput,
   type PlatformerPlayer,
   type PlatformerWorld,
@@ -12,11 +11,6 @@ import {
 import { InputBuffer } from "./input-buffer.js";
 import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
-
-// Initialize physics before any tests run
-beforeAll(async () => {
-  await initPlatformerPhysics();
-});
 
 /** Helper to create test input with all required fields */
 const createInput = (

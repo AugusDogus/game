@@ -73,9 +73,6 @@
     "packages/physics2d": {
       "name": "@game/physics2d",
       "version": "0.1.0",
-      "dependencies": {
-        "@dimforge/rapier2d-compat": "^0.19.3",
-      },
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5",
@@ -83,8 +80,6 @@
     },
   },
   "packages": {
-    "@dimforge/rapier2d-compat": ["@dimforge/rapier2d-compat@0.19.3", "", {}, "sha512-5HZUgiSpu9Uba3He+4SCPVte3h2vgxcodkxWThRjd3X/zgq/Z4OyRUKpNEOsOR6AC+OfulPkkZ5asZGzRMpcwA=="],
-
     "@game/app": ["@game/app@workspace:packages/app"],
 
     "@game/example-platformer": ["@game/example-platformer@workspace:examples/platformer"],

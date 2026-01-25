@@ -15,17 +15,12 @@ import {
   getLevelIds,
   getLevel,
   DEFAULT_MATCH_CONFIG,
-  initPlatformerPhysics,
   type LevelConfig,
   type PlatformerWorld,
 } from "@game/example-platformer";
 import homepage from "./client/index.html";
 
 const startTime = Date.now();
-
-// Initialize physics engine (required before any simulation)
-await initPlatformerPhysics();
-console.log("🎮 Physics engine initialized");
 
 // Create Socket.IO server and Bun engine with superjson parser for Map/Set/Date support
 // TODO: Add "webtransport" once Bun supports HTTP/3 (https://github.com/oven-sh/bun/issues/13656)

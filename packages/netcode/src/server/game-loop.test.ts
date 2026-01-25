@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
 import type { Snapshot } from "../core/types.js";
 import { DefaultWorldManager } from "../core/world.js";
@@ -11,15 +11,9 @@ import {
   type PlatformerWorld,
   createPlatformerWorld,
   getPlayer,
-  initPlatformerPhysics,
 } from "@game/example-platformer";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
-
-// Initialize physics before any tests run
-beforeAll(async () => {
-  await initPlatformerPhysics();
-});
 
 /** Helper to create test input with all required fields */
 const createInput = (

@@ -15,8 +15,5 @@
   },
   "private": true,
   "type": "module",
-  "types": "./src/index.ts",
-  "dependencies": {
-    "@dimforge/rapier2d-compat": "^0.19.3"
-  }
+  "types": "./src/index.ts"
 }

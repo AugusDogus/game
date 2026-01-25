@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import { Predictor } from "./prediction.js";
 import { DEFAULT_FLOOR_Y } from "../constants.js";
 import {
@@ -8,13 +8,7 @@ import {
   platformerPredictionScope,
   createTestPlayer,
   createPlayingWorld,
-  initPlatformerPhysics,
 } from "@game/example-platformer";
-
-// Initialize physics before any tests run
-beforeAll(async () => {
-  await initPlatformerPhysics();
-});
 
 /** Helper to create test input with all required fields */
 const createInput = (

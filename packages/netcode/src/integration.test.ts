@@ -3,7 +3,7 @@
  * These tests simulate the full client-server flow to catch timing mismatches.
  */
 
-import { beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { InputBuffer } from "./client/input-buffer.js";
 import { Predictor } from "./client/prediction.js";
 import { Reconciler } from "./client/reconciliation.js";
@@ -18,16 +18,10 @@ import {
   createIdleInput,
   createPlatformerWorld,
   getPlayer,
-  initPlatformerPhysics,
   type PlatformerInput,
   type PlatformerWorld,
 } from "@game/example-platformer";
 import { InputQueue } from "./server/input-queue.js";
-
-// Initialize physics before any tests run
-beforeAll(async () => {
-  await initPlatformerPhysics();
-});
 
 /**
  * Helper to create a world in "playing" state for tests

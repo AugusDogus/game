@@ -314,12 +314,12 @@ export const LEVEL_WALL_TEST: LevelConfig = {
     },
   ],
   spawnPoints: [
-    // Spawn on ground platform
-    { position: { x: 0, y: 20 + PLAYER_HEIGHT / 2 } },
-    { position: { x: -40, y: 20 + PLAYER_HEIGHT / 2 } },
-    { position: { x: 40, y: 20 + PLAYER_HEIGHT / 2 } },
+    // Spawn on ground platform (add extra margin to ensure player spawns above)
+    { position: { x: 0, y: 20 + PLAYER_HEIGHT / 2 + 5 } },
+    { position: { x: -40, y: 20 + PLAYER_HEIGHT / 2 + 5 } },
+    { position: { x: 40, y: 20 + PLAYER_HEIGHT / 2 + 5 } },
     // Spawn on mid platform
-    { position: { x: 0, y: 170 + PLAYER_HEIGHT / 2 } },
+    { position: { x: 0, y: 170 + PLAYER_HEIGHT / 2 + 5 } },
   ],
   hazards: [],
 };

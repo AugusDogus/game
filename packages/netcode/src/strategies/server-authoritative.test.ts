@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, beforeEach } from "bun:test";
+import { describe, expect, test, beforeEach } from "bun:test";
 import { DefaultWorldManager } from "../core/world.js";
 import {
   type PlatformerWorld,
@@ -13,14 +13,8 @@ import {
   interpolatePlatformer,
   platformerPredictionScope,
   getPlayer,
-  initPlatformerPhysics,
 } from "@game/example-platformer";
 import { ServerAuthoritativeClient, ServerAuthoritativeServer } from "./server-authoritative.js";
-
-// Initialize physics before any tests run
-beforeAll(async () => {
-  await initPlatformerPhysics();
-});
 
 /** Helper to create test input with all required fields */
 const createInput = (

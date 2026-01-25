@@ -1,14 +1,15 @@
 # @game/physics2d
 
-2D physics layer for `@game` - a TypeScript game engine. Built on [Rapier](https://rapier.rs/) for deterministic, cross-platform physics.
+Stateless 2D physics layer for `@game` - a TypeScript game engine. Implements raycast-based collision detection for character controllers.
 
 ## Features
 
-- **Deterministic** - Identical results across browsers, Node.js, different machines
+- **Stateless** - No world object, no async initialization, perfect for netcode
+- **Deterministic** - Pure functions, identical results every time
 - **Raycast-based character controller** - Implements Sebastian Lague's collision pattern
 - **Slope handling** - Climb, descend, and slide on slopes
 - **One-way platforms** - Drop-through platforms with collision filtering
-- **Y-up coordinate system** - Matches physics conventions and Unity
+- **Y-up coordinate system** - Matches physics conventions
 
 ## Installation
 
@@ -21,33 +22,39 @@ npm install @game/physics2d
 ## Quick Start
 
 ```typescript
-import { PhysicsWorld, CharacterController } from "@game/physics2d";
+import { CharacterController, raycast, vec2 } from "@game/physics2d";
+import type { Collider } from "@game/physics2d";
 
-// Initialize physics (async due to WASM)
-const world = await PhysicsWorld.create({ x: 0, y: -20 });
-
-// Add static colliders (platforms, walls)
-world.addStaticCollider(
-  { x: 0, y: -1 },      // position (center)
-  { x: 10, y: 0.5 },    // half-extents
-);
+// Define static colliders (platforms, walls)
+const colliders: Collider[] = [
+  { position: vec2(0, 0), halfExtents: vec2(10, 0.5) }, // Ground
+  { position: vec2(5, 3), halfExtents: vec2(2, 0.25), oneWay: true }, // Platform
+];
 
 // Create a character controller
-const controller = new CharacterController(world, {
-  position: { x: 0, y: 2 },
-  halfSize: { x: 0.5, y: 1 },
+const controller = new CharacterController(colliders, {
+  position: vec2(0, 2),
+  halfSize: vec2(0.5, 1),
 });
 
 // In your game loop
-function update(deltaTime: number) {
-  const velocity = { x: input.moveX * 6, y: controller.velocity.y };
-  velocity.y += gravity * deltaTime;
-  
+function update(deltaTime: number, velocity: { x: number; y: number }) {
   controller.move(velocity, deltaTime);
   
   if (controller.collisions.below) {
     // Grounded - can jump
   }
+}
+
+// Or use raycasting directly
+const hit = raycast(
+  vec2(0, 10),     // origin
+  vec2(0, -1),     // direction (down)
+  20,              // max distance
+  colliders        // colliders to test
+);
+if (hit) {
+  console.log(`Hit at ${hit.point.y}, distance ${hit.distance}`);
 }
 ```
 
@@ -56,36 +63,42 @@ function update(deltaTime: number) {
 This package uses **Y-up** coordinates:
 - `(0, 0)` is at the bottom-left
 - Positive Y is up
-- Gravity should be negative (e.g., `{ x: 0, y: -20 }`)
+- Gravity should be negative (e.g., `velocity.y -= 20 * deltaTime`)
 
 The renderer is responsible for flipping Y when drawing to canvas (which uses Y-down).
 
-## Why Rapier?
+## Why Stateless?
 
-[Rapier](https://rapier.rs/) is a Rust physics engine compiled to WebAssembly with:
+For server-authoritative netcode, the simulation must be deterministic and stateless:
 
-- **Cross-platform determinism** - Critical for netcode (client and server must match)
-- **Battle-tested** - Handles edge cases we'd otherwise discover painfully
-- **Full-featured** - Raycasting, collision detection, rigid bodies, joints
-- **Active maintenance** - Official `@dimforge/rapier2d` package
+1. **No WASM initialization** - No async `await initPhysics()` required
+2. **Pure functions** - Same inputs always produce same outputs
+3. **Easy serialization** - Collider arrays are plain objects
+4. **Simple rollback** - No physics world state to manage
 
 ## API Reference
 
-### PhysicsWorld
-
-Wrapper around Rapier's physics world.
+### Raycasting
 
 ```typescript
-// Create a world with gravity
-const world = await PhysicsWorld.create({ x: 0, y: -20 });
+import { raycast, raycastAll, vec2 } from "@game/physics2d";
+import type { Collider } from "@game/physics2d";
 
-// Add a static collider (platform, wall, ground)
-const colliderId = world.addStaticCollider(position, halfExtents, { oneWay: true });
+const colliders: Collider[] = [
+  { position: vec2(0, 0), halfExtents: vec2(5, 0.5), tag: "ground" },
+  { position: vec2(0, 5), halfExtents: vec2(3, 0.25), oneWay: true },
+];
 
-// Cast a ray
-const hit = world.raycast(origin, direction, maxDistance);
+// Cast a ray and get the first hit
+const hit = raycast(origin, direction, maxDistance, colliders);
 if (hit) {
-  console.log(hit.point, hit.normal, hit.distance);
+  console.log(hit.point, hit.normal, hit.distance, hit.colliderIndex);
+}
+
+// Cast a ray and get all hits (sorted by distance)
+const hits = raycastAll(origin, direction, maxDistance, colliders);
+for (const hit of hits) {
+  console.log(`Hit collider ${hit.colliderIndex} at distance ${hit.distance}`);
 }
 ```
 
@@ -94,11 +107,17 @@ if (hit) {
 Raycast-based character movement with slope handling.
 
 ```typescript
-const controller = new CharacterController(world, {
-  position: { x: 0, y: 2 },
-  halfSize: { x: 0.5, y: 1 },
-  skinWidth: 0.015,
-  maxSlopeAngle: 80,
+import { CharacterController, vec2 } from "@game/physics2d";
+
+const controller = new CharacterController(colliders, {
+  position: vec2(0, 2),
+  halfSize: vec2(0.5, 1),
+  config: {
+    skinWidth: 0.015,
+    maxSlopeAngle: 80,
+    horizontalRayCount: 4,
+    verticalRayCount: 4,
+  },
 });
 
 // Move the character

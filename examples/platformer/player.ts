@@ -348,20 +348,21 @@ export function updatePlayerMovement(
     }
   }
 
-  // Update wallDirX from NEW collision results (for next frame's wall sliding check)
-  // IMPORTANT: Use newCollisions for the RETURNED wallDirX so next frame knows which wall we're touching
+  // Update wallDirX from NEW collision results
+  // This represents ACTUAL current wall contact AFTER the move
   const newWallDirX: -1 | 0 | 1 = newCollisions.left ? -1 : newCollisions.right ? 1 : 0;
   
-  // However, if we're wall sliding this frame (based on prevCollisions), we need to preserve
-  // the wall direction so the next frame can correctly handle wall jumps.
-  // This fixes a bug where wallDirX becomes 0 during wall slide even though wallSliding is true.
-  const returnedWallDirX: -1 | 0 | 1 = wallSliding ? wallDirX : newWallDirX;
+  // Compute NEW wall sliding state based on CURRENT collisions (after move)
+  // This matches Sebastian's logic: wall sliding when touching wall, not grounded, and falling
+  const newWallSliding = (newCollisions.left || newCollisions.right) && 
+                         !newCollisions.below && 
+                         velocity.y < 0;
 
   return {
     velocity,
     velocityXSmoothing,
-    wallSliding,
-    wallDirX: returnedWallDirX,
+    wallSliding: newWallSliding,
+    wallDirX: newWallDirX,  // Always return actual wall contact, no preservation
     timeToWallUnstick,
     jumpWasPressedLastFrame: input.jump,
     jumpHeld,

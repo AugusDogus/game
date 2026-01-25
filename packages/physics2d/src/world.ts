@@ -1,271 +1,294 @@
 /**
- * PhysicsWorld - Wrapper around Rapier physics world.
+ * Stateless raycasting functions for 2D collision detection.
  *
- * Handles WASM initialization and provides a clean TypeScript API
- * for creating colliders and performing raycasts.
+ * All functions are pure - they take colliders as arguments and return results
+ * without maintaining any internal state. This design is ideal for netcode
+ * where deterministic, stateless simulation is required.
+ *
+ * Uses the slab method for ray-AABB intersection.
+ * Reference: https://tavianator.com/2011/ray_box.html
  */
 
-import RAPIER from "@dimforge/rapier2d-compat";
-import type { Vector2, RaycastHit, ColliderOptions, ColliderData } from "./types.js";
-import { vec2 } from "./math.js";
+import type { Vector2, RaycastHit, Collider } from "./types.js";
+import { vec2, add, scale } from "./math.js";
 
-/** Whether Rapier WASM has been initialized */
-let rapierInitialized = false;
+// =============================================================================
+// Ray-AABB Intersection
+// =============================================================================
 
 /**
- * Initialize Rapier WASM module.
- * Must be called once before creating any PhysicsWorld.
- * Safe to call multiple times.
+ * Internal result of ray-AABB intersection calculation.
  */
-export async function initPhysics(): Promise<void> {
-  if (!rapierInitialized) {
-    await RAPIER.init();
-    rapierInitialized = true;
-  }
+interface RayAABBResult {
+  /** Distance along ray to hit point */
+  distance: number;
+  /** Surface normal at hit point */
+  normal: Vector2;
 }
 
 /**
- * Physics world that wraps Rapier.
+ * Calculate ray-AABB intersection using the slab method.
  *
- * Must call `initPhysics()` once before creating any PhysicsWorld.
+ * The slab method works by treating the AABB as the intersection of three
+ * pairs of parallel planes (slabs). For each axis, we calculate where the
+ * ray enters and exits the slab. The ray hits the box if all entry points
+ * come before all exit points.
+ *
+ * @param rayOrigin Starting point of the ray
+ * @param rayDirection Direction of the ray (should be normalized)
+ * @param boxCenter Center position of the AABB
+ * @param boxHalfExtents Half-width and half-height of the AABB
+ * @returns Hit info if ray intersects the box, null otherwise
  */
-export class PhysicsWorld {
-  private world: RAPIER.World;
-  private colliderData: Map<number, ColliderData>;
+function rayAABBIntersection(
+  rayOrigin: Vector2,
+  rayDirection: Vector2,
+  boxCenter: Vector2,
+  boxHalfExtents: Vector2,
+): RayAABBResult | null {
+  // Calculate box min/max bounds
+  const boxMin = {
+    x: boxCenter.x - boxHalfExtents.x,
+    y: boxCenter.y - boxHalfExtents.y,
+  };
+  const boxMax = {
+    x: boxCenter.x + boxHalfExtents.x,
+    y: boxCenter.y + boxHalfExtents.y,
+  };
 
-  private constructor(world: RAPIER.World) {
-    this.world = world;
-    this.colliderData = new Map();
-  }
+  // Calculate intersection distances for each axis
+  // Using the slab method: for each axis, find where ray enters and exits
 
-  /**
-   * Create a physics world.
-   *
-   * IMPORTANT: You must call `initPhysics()` once before calling this method.
-   *
-   * @param gravity Gravity vector (Y-up, so typically { x: 0, y: -20 })
-   * @returns The physics world
-   * @throws Error if initPhysics() was not called first
-   *
-   * @example
-   * ```typescript
-   * await initPhysics(); // Call once at app startup
-   * const world = PhysicsWorld.create({ x: 0, y: -20 });
-   * ```
-   */
-  static create(gravity: Vector2 = { x: 0, y: -20 }): PhysicsWorld {
-    if (!rapierInitialized) {
-      throw new Error("Rapier not initialized. Call initPhysics() first.");
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  let normalAxis: "x" | "y" = "x";
+  let normalSign = 1;
+
+  // X-axis slab
+  if (rayDirection.x !== 0) {
+    const invDirX = 1 / rayDirection.x;
+    let t1 = (boxMin.x - rayOrigin.x) * invDirX;
+    let t2 = (boxMax.x - rayOrigin.x) * invDirX;
+
+    // Ensure t1 is the near intersection
+    let nearSign = -1;
+    if (t1 > t2) {
+      [t1, t2] = [t2, t1];
+      nearSign = 1;
     }
-    const world = new RAPIER.World({ x: gravity.x, y: gravity.y });
-    return new PhysicsWorld(world);
-  }
 
-  /**
-   * Add a static (non-moving) collider to the world.
-   *
-   * Static colliders are used for platforms, walls, and ground.
-   * They don't move or respond to physics, but other objects can collide with them.
-   *
-   * @param position Center position of the collider (Y-up coordinates)
-   * @param halfExtents Half-width and half-height of the collider
-   * @param options Optional collider settings (oneWay, tag)
-   * @returns Handle that can be used to reference this collider
-   *
-   * @example
-   * ```typescript
-   * // Add multiple colliders, then update broadphase once
-   * for (const platform of level.platforms) {
-   *   world.addStaticCollider(platform.position, platform.halfSize);
-   * }
-   * world.updateBroadphase(); // Call once after adding all colliders
-   *
-   * // Or add a single collider with immediate broadphase update
-   * world.addStaticCollider(position, halfSize);
-   * world.updateBroadphase();
-   * ```
-   */
-  addStaticCollider(
-    position: Vector2,
-    halfExtents: Vector2,
-    options: ColliderOptions = {},
-  ): number {
-    // Create a fixed (static) rigid body
-    const rigidBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(position.x, position.y);
-    const rigidBody = this.world.createRigidBody(rigidBodyDesc);
-
-    // Create a cuboid collider attached to the body
-    const colliderDesc = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y);
-    const collider = this.world.createCollider(colliderDesc, rigidBody);
-
-    // Store metadata
-    const handle = collider.handle;
-    this.colliderData.set(handle, {
-      oneWay: options.oneWay ?? false,
-      tag: options.tag,
-    });
-
-    return handle;
-  }
-
-  /**
-   * Update the broadphase acceleration structure.
-   *
-   * IMPORTANT: This must be called after adding or removing colliders,
-   * otherwise raycasts won't detect them. This is a quirk of Rapier's
-   * architecture - the broadphase (BVH) is only updated during step().
-   *
-   * For character controllers that don't use physics simulation,
-   * call this once after setting up all static geometry.
-   */
-  updateBroadphase(): void {
-    // Step with zero gravity doesn't move anything, but updates the broadphase
-    this.world.step();
-  }
-
-  /**
-   * Remove a collider from the world.
-   *
-   * @param handle The collider handle returned from addStaticCollider
-   */
-  removeCollider(handle: number): void {
-    const collider = this.world.getCollider(handle);
-    if (collider) {
-      // Remove the parent rigid body (which also removes the collider)
-      const rigidBody = collider.parent();
-      if (rigidBody) {
-        this.world.removeRigidBody(rigidBody);
-      }
-      this.colliderData.delete(handle);
+    if (t1 > tMin) {
+      tMin = t1;
+      normalAxis = "x";
+      normalSign = nearSign;
     }
-  }
-
-  /**
-   * Cast a ray and return the first hit.
-   *
-   * @param origin Starting point of the ray
-   * @param direction Direction of the ray (should be normalized)
-   * @param maxDistance Maximum distance to check
-   * @param filterOneWay If true, one-way platforms are ignored when ray points up
-   * @returns RaycastHit if something was hit, null otherwise
-   *
-   * @example
-   * ```typescript
-   * // Cast a ray downward to check for ground
-   * const hit = world.raycast(
-   *   { x: playerX, y: playerY },
-   *   { x: 0, y: -1 },
-   *   2.0
-   * );
-   * if (hit) {
-   *   console.log(`Ground at distance ${hit.distance}`);
-   * }
-   * ```
-   */
-  raycast(
-    origin: Vector2,
-    direction: Vector2,
-    maxDistance: number,
-    filterOneWay = false,
-  ): RaycastHit | null {
-    const ray = new RAPIER.Ray({ x: origin.x, y: origin.y }, { x: direction.x, y: direction.y });
-
-    // Use castRayAndGetNormal to get the normal vector
-    const hit = this.world.castRayAndGetNormal(ray, maxDistance, true);
-
-    if (!hit) {
+    tMax = Math.min(tMax, t2);
+  } else {
+    // Ray is parallel to X slabs
+    if (rayOrigin.x < boxMin.x || rayOrigin.x > boxMax.x) {
       return null;
     }
+  }
 
-    const collider = hit.collider;
-    const handle = collider.handle;
+  // Y-axis slab
+  if (rayDirection.y !== 0) {
+    const invDirY = 1 / rayDirection.y;
+    let t1 = (boxMin.y - rayOrigin.y) * invDirY;
+    let t2 = (boxMax.y - rayOrigin.y) * invDirY;
 
-    // Filter one-way platforms if requested (when ray is going up)
-    if (filterOneWay && direction.y > 0) {
-      const data = this.colliderData.get(handle);
-      if (data?.oneWay) {
-        return null;
-      }
+    // Ensure t1 is the near intersection
+    let nearSign = -1;
+    if (t1 > t2) {
+      [t1, t2] = [t2, t1];
+      nearSign = 1;
     }
 
-    // Calculate hit point
-    const hitPoint = ray.pointAt(hit.timeOfImpact);
-
-    return {
-      point: vec2(hitPoint.x, hitPoint.y),
-      normal: vec2(hit.normal.x, hit.normal.y),
-      distance: hit.timeOfImpact,
-      colliderHandle: handle,
-    };
+    if (t1 > tMin) {
+      tMin = t1;
+      normalAxis = "y";
+      normalSign = nearSign;
+    }
+    tMax = Math.min(tMax, t2);
+  } else {
+    // Ray is parallel to Y slabs
+    if (rayOrigin.y < boxMin.y || rayOrigin.y > boxMax.y) {
+      return null;
+    }
   }
 
-  /**
-   * Cast a ray and return all hits (not just the first).
-   *
-   * @param origin Starting point of the ray
-   * @param direction Direction of the ray (should be normalized)
-   * @param maxDistance Maximum distance to check
-   * @returns Array of RaycastHit sorted by distance (closest first)
-   */
-  raycastAll(origin: Vector2, direction: Vector2, maxDistance: number): RaycastHit[] {
-    const ray = new RAPIER.Ray({ x: origin.x, y: origin.y }, { x: direction.x, y: direction.y });
-    const hits: RaycastHit[] = [];
+  // Check if ray misses (entry is after exit) or is behind origin
+  if (tMin > tMax || tMax < 0) {
+    return null;
+  }
 
-    this.world.intersectionsWithRay(ray, maxDistance, true, (intersection) => {
-      const hitPoint = ray.pointAt(intersection.timeOfImpact);
+  // Use tMin if it's positive (entry point), otherwise tMax (we're inside the box)
+  const t = tMin >= 0 ? tMin : tMax;
+
+  // Build normal vector (points away from the surface that was hit)
+  const normal: Vector2 =
+    normalAxis === "x" ? vec2(normalSign, 0) : vec2(0, normalSign);
+
+  return { distance: t, normal };
+}
+
+// =============================================================================
+// Public Raycast API
+// =============================================================================
+
+/**
+ * Cast a ray against a list of colliders and return the first hit.
+ *
+ * This is a pure function - no state is maintained between calls.
+ * Pass the same colliders array each frame to get consistent results.
+ *
+ * @param origin Starting point of the ray
+ * @param direction Direction of the ray (should be normalized)
+ * @param maxDistance Maximum distance to check
+ * @param colliders Array of colliders to test against
+ * @param filterOneWay If true, one-way platforms are ignored when ray points up
+ * @returns RaycastHit if something was hit, null otherwise
+ *
+ * @example
+ * ```typescript
+ * const colliders = [
+ *   { position: { x: 0, y: 0 }, halfExtents: { x: 5, y: 0.5 } },
+ *   { position: { x: 0, y: 5 }, halfExtents: { x: 5, y: 0.5 }, oneWay: true },
+ * ];
+ *
+ * // Cast a ray downward to check for ground
+ * const hit = raycast(
+ *   { x: 0, y: 10 },
+ *   { x: 0, y: -1 },
+ *   20,
+ *   colliders
+ * );
+ * if (hit) {
+ *   console.log(`Ground at distance ${hit.distance}`);
+ * }
+ * ```
+ */
+export function raycast(
+  origin: Vector2,
+  direction: Vector2,
+  maxDistance: number,
+  colliders: readonly Collider[],
+  filterOneWay = false,
+): RaycastHit | null {
+  let closestHit: RaycastHit | null = null;
+  let closestDistance = maxDistance;
+
+  for (let i = 0; i < colliders.length; i++) {
+    const collider = colliders[i]!;
+
+    // Filter one-way platforms when ray is going up
+    if (filterOneWay && direction.y > 0 && collider.oneWay) {
+      continue;
+    }
+
+    const result = rayAABBIntersection(
+      origin,
+      direction,
+      collider.position,
+      collider.halfExtents,
+    );
+
+    if (result && result.distance >= 0 && result.distance < closestDistance) {
+      closestDistance = result.distance;
+
+      // Calculate hit point
+      const hitPoint = add(origin, scale(direction, result.distance));
+
+      closestHit = {
+        point: hitPoint,
+        normal: result.normal,
+        distance: result.distance,
+        colliderIndex: i,
+      };
+    }
+  }
+
+  return closestHit;
+}
+
+/**
+ * Cast a ray against a list of colliders and return all hits.
+ *
+ * @param origin Starting point of the ray
+ * @param direction Direction of the ray (should be normalized)
+ * @param maxDistance Maximum distance to check
+ * @param colliders Array of colliders to test against
+ * @returns Array of RaycastHit sorted by distance (closest first)
+ *
+ * @example
+ * ```typescript
+ * const hits = raycastAll(origin, direction, 100, colliders);
+ * for (const hit of hits) {
+ *   console.log(`Hit collider ${hit.colliderIndex} at distance ${hit.distance}`);
+ * }
+ * ```
+ */
+export function raycastAll(
+  origin: Vector2,
+  direction: Vector2,
+  maxDistance: number,
+  colliders: readonly Collider[],
+): RaycastHit[] {
+  const hits: RaycastHit[] = [];
+
+  for (let i = 0; i < colliders.length; i++) {
+    const collider = colliders[i]!;
+
+    const result = rayAABBIntersection(
+      origin,
+      direction,
+      collider.position,
+      collider.halfExtents,
+    );
+
+    if (result && result.distance >= 0 && result.distance <= maxDistance) {
+      const hitPoint = add(origin, scale(direction, result.distance));
 
       hits.push({
-        point: vec2(hitPoint.x, hitPoint.y),
-        normal: vec2(intersection.normal.x, intersection.normal.y),
-        distance: intersection.timeOfImpact,
-        colliderHandle: intersection.collider.handle,
+        point: hitPoint,
+        normal: result.normal,
+        distance: result.distance,
+        colliderIndex: i,
       });
-
-      return true; // Continue searching
-    });
-
-    // Sort by distance
-    hits.sort((a, b) => a.distance - b.distance);
-
-    return hits;
+    }
   }
 
-  /**
-   * Check if a collider is marked as one-way.
-   *
-   * @param handle The collider handle
-   * @returns True if the collider is one-way
-   */
-  isOneWay(handle: number): boolean {
-    return this.colliderData.get(handle)?.oneWay ?? false;
-  }
+  // Sort by distance (closest first)
+  hits.sort((a, b) => a.distance - b.distance);
 
-  /**
-   * Get the tag of a collider.
-   *
-   * @param handle The collider handle
-   * @returns The tag string, or undefined if not set
-   */
-  getTag(handle: number): string | undefined {
-    return this.colliderData.get(handle)?.tag;
-  }
+  return hits;
+}
 
-  /**
-   * Step the physics simulation forward.
-   *
-   * Note: For a character controller, you typically don't need to step
-   * the simulation - we use raycasts for collision detection instead.
-   * This is provided for future use with dynamic rigid bodies.
-   */
-  step(): void {
-    this.world.step();
-  }
+/**
+ * Check if a collider at the given index is one-way.
+ *
+ * This is a convenience function that matches the old PhysicsWorld.isOneWay API.
+ *
+ * @param colliders Array of colliders
+ * @param index Index of the collider to check
+ * @returns True if the collider is one-way
+ */
+export function isColliderOneWay(
+  colliders: readonly Collider[],
+  index: number,
+): boolean {
+  return colliders[index]?.oneWay ?? false;
+}
 
-  /**
-   * Get the underlying Rapier world.
-   * Use with caution - prefer the wrapper methods when possible.
-   */
-  getRapierWorld(): RAPIER.World {
-    return this.world;
-  }
+/**
+ * Get the tag of a collider at the given index.
+ *
+ * @param colliders Array of colliders
+ * @param index Index of the collider to check
+ * @returns The tag string, or undefined if not set
+ */
+export function getColliderTag(
+  colliders: readonly Collider[],
+  index: number,
+): string | undefined {
+  return colliders[index]?.tag;
 }
