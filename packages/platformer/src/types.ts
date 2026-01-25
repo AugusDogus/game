@@ -34,6 +34,12 @@ export interface PlayerConfig {
   wallJumpOff: Vector2;
   /** Velocity when wall jumping away from wall */
   wallLeap: Vector2;
+
+  // --- Jump Forgiveness ---
+  /** Time after leaving ground where jump is still allowed (seconds) */
+  coyoteTime: number;
+  /** Time before landing where jump input is buffered (seconds) */
+  jumpBufferTime: number;
 }
 
 /**
@@ -73,6 +79,10 @@ export interface PlayerMovementState {
   jumpWasPressedLastFrame: boolean;
   /** Whether jump is currently being held */
   jumpHeld: boolean;
+  /** Time remaining where jump is still allowed after leaving ground (coyote time) */
+  coyoteTimeCounter: number;
+  /** Time remaining for buffered jump to execute */
+  jumpBufferCounter: number;
 }
 
 /**

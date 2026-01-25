@@ -390,6 +390,8 @@ function simulatePlayerWithSupport(
     timeToWallUnstick: player.timeToWallUnstick,
     jumpWasPressedLastFrame: player.jumpWasPressedLastFrame,
     jumpHeld: input.jump,
+    coyoteTimeCounter: player.coyoteTimeCounter,
+    jumpBufferCounter: player.jumpBufferCounter,
   };
 
   // --- Run player movement (handles gravity, jump, wall mechanics) ---
@@ -507,6 +509,8 @@ function simulatePlayerWithSupport(
     wallDirX: newState.wallDirX,
     timeToWallUnstick: newState.timeToWallUnstick,
     jumpWasPressedLastFrame: newState.jumpWasPressedLastFrame,
+    coyoteTimeCounter: newState.coyoteTimeCounter,
+    jumpBufferCounter: newState.jumpBufferCounter,
   };
 }
 

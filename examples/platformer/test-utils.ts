@@ -61,6 +61,8 @@ export function createTestPlayer(
     wallDirX: overrides.wallDirX ?? 0,
     timeToWallUnstick: overrides.timeToWallUnstick ?? 0,
     jumpWasPressedLastFrame: overrides.jumpWasPressedLastFrame ?? false,
+    coyoteTimeCounter: overrides.coyoteTimeCounter ?? 0,
+    jumpBufferCounter: overrides.jumpBufferCounter ?? 0,
   };
 }
 

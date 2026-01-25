@@ -14,11 +14,11 @@
 import type { CharacterController, CollisionInfo } from "@game/physics2d";
 import { smoothDamp, vec2 } from "@game/physics2d";
 import type {
-  PlayerConfig,
   DerivedPhysics,
+  PlatformerMovementInput,
+  PlayerConfig,
   PlayerMovementState,
   PreviousCollisions,
-  PlatformerMovementInput,
 } from "./types.js";
 
 /**
@@ -50,6 +50,10 @@ export const DEFAULT_PLAYER_CONFIG: PlayerConfig = {
   wallJumpClimb: { x: 200, y: 320 },
   wallJumpOff: { x: 250, y: 300 },
   wallLeap: { x: 300, y: 300 },
+
+  // Jump forgiveness - makes platforming feel more responsive
+  coyoteTime: 0.1, // 100ms grace period after leaving ground
+  jumpBufferTime: 0.1, // 100ms buffer window before landing
 };
 
 /**
@@ -98,6 +102,8 @@ export function createPlayerMovementState(): PlayerMovementState {
     timeToWallUnstick: 0,
     jumpWasPressedLastFrame: false,
     jumpHeld: false,
+    coyoteTimeCounter: 0,
+    jumpBufferCounter: 0,
   };
 }
 
@@ -135,11 +141,29 @@ export function updatePlayerMovement(
   let velocity = { ...state.velocity };
   let velocityXSmoothing = state.velocityXSmoothing;
   let timeToWallUnstick = state.timeToWallUnstick;
+  let coyoteTimeCounter = state.coyoteTimeCounter;
+  let jumpBufferCounter = state.jumpBufferCounter;
 
   // Detect jump press edge (simulates Unity's OnJumpInputDown callback)
   const jumpPressed = input.jump && !state.jumpWasPressedLastFrame;
   const jumpReleased = !input.jump && state.jumpWasPressedLastFrame;
   const jumpHeld = input.jump;
+
+  // --- Coyote Time: Track time since grounded ---
+  // Reset counter when grounded, count down when airborne
+  if (prevCollisions.below) {
+    coyoteTimeCounter = config.coyoteTime;
+  } else {
+    coyoteTimeCounter = Math.max(0, coyoteTimeCounter - deltaTime);
+  }
+
+  // --- Jump Buffer: Track time since jump pressed ---
+  // Reset counter on jump press, count down otherwise
+  if (jumpPressed) {
+    jumpBufferCounter = config.jumpBufferTime;
+  } else {
+    jumpBufferCounter = Math.max(0, jumpBufferCounter - deltaTime);
+  }
 
   // --- CalculateVelocity (matches Sebastian's CalculateVelocity method) ---
 
@@ -194,14 +218,26 @@ export function updatePlayerMovement(
   }
 
   // --- OnJumpInputDown (matches Sebastian's OnJumpInputDown method) ---
+  // Extended with coyote time and jump buffering for better game feel
 
-  if (jumpPressed) {
-    // Wall jump - MODIFIED from Sebastian's original to allow wall jump when touching wall
-    // Sebastian required wallSliding (airborne + falling + touching wall)
-    // We now allow wall jump anytime touching wall, which feels more responsive
-    const touchingWall = prevCollisions.left || prevCollisions.right;
-    
+  // Wall jump check (highest priority - walls don't use coyote time)
+  const touchingWall = prevCollisions.left || prevCollisions.right;
+
+  // Determine if we should attempt a jump this frame:
+  // - Jump was just pressed, OR
+  // - Jump buffer is active AND we just landed (buffer executes on landing)
+  const shouldAttemptJump = jumpPressed || (jumpBufferCounter > 0 && prevCollisions.below);
+
+  // Can we do a ground/coyote jump?
+  // - Must be grounded OR within coyote time
+  // - Must NOT be touching a wall (wall jump takes priority)
+  const canGroundJump = (prevCollisions.below || coyoteTimeCounter > 0) && !touchingWall;
+
+  if (shouldAttemptJump) {
     if (touchingWall && wallDirX !== 0) {
+      // Wall jump - MODIFIED from Sebastian's original to allow wall jump when touching wall
+      // Sebastian required wallSliding (airborne + falling + touching wall)
+      // We now allow wall jump anytime touching wall, which feels more responsive
       if (wallDirX === input.moveX) {
         // Climbing: jumping toward the wall
         velocity.x = -wallDirX * config.wallJumpClimb.x;
@@ -215,11 +251,17 @@ export function updatePlayerMovement(
         velocity.x = -wallDirX * config.wallLeap.x;
         velocity.y = config.wallLeap.y;
       }
-    } else if (prevCollisions.below) {
-      // Ground jump (only if NOT touching a wall - wall jump takes priority)
+      // Consume buffers on successful wall jump
+      jumpBufferCounter = 0;
+      coyoteTimeCounter = 0;
+    } else if (canGroundJump) {
+      // Ground jump (includes coyote time)
       // Note: We can't check slidingDownMaxSlope here since that's only known after move()
       // For now, just do a normal jump. Slope jumping could be added as a future enhancement.
       velocity.y = physics.maxJumpVelocity;
+      // Consume buffers on successful ground jump
+      jumpBufferCounter = 0;
+      coyoteTimeCounter = 0; // Prevent double-jump via coyote time
     }
   }
 
@@ -266,6 +308,8 @@ export function updatePlayerMovement(
     timeToWallUnstick,
     jumpWasPressedLastFrame: input.jump,
     jumpHeld,
+    coyoteTimeCounter,
+    jumpBufferCounter,
   };
 }
 

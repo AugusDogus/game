@@ -189,6 +189,10 @@ export interface PlatformerPlayer {
   timeToWallUnstick: number;
   /** Whether jump was pressed last frame (for detecting press edge) */
   jumpWasPressedLastFrame: boolean;
+  /** Time remaining where jump is still allowed after leaving ground (coyote time) */
+  coyoteTimeCounter: number;
+  /** Time remaining for buffered jump to execute */
+  jumpBufferCounter: number;
 }
 
 // =============================================================================
@@ -281,6 +285,8 @@ export function createPlatformerPlayer(
     wallDirX: 0,
     timeToWallUnstick: 0,
     jumpWasPressedLastFrame: false,
+    coyoteTimeCounter: 0,
+    jumpBufferCounter: 0,
   };
 }
 
