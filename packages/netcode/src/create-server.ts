@@ -23,7 +23,7 @@ const DEFAULT_CLOCK_SYNC_INTERVAL_MS = 5000;
  */
 interface ServerConfigBase<
   TWorld,
-  TInput extends { timestamp: number },
+  _TInput extends { timestamp: number },
   TAction = unknown,
   TActionResult = unknown,
 > {
@@ -507,18 +507,3 @@ export function createServer<
     },
   };
 }
-
-// Backwards-compatible aliases
-/** @deprecated Use `ServerConfig` instead */
-export type CreateServerConfig<
-  TWorld,
-  TInput extends { timestamp: number },
-  TAction = unknown,
-  TActionResult = unknown,
-> = ServerConfig<TWorld, TInput, TAction, TActionResult>;
-
-/** @deprecated Use `ServerHandle` instead */
-export type NetcodeServerHandle<TWorld> = ServerHandle<TWorld>;
-
-/** @deprecated Use `createServer` instead */
-export const createNetcodeServer = createServer;

@@ -62,8 +62,13 @@ examples/platformer/
 ├── prediction.ts      # Client-side prediction scope
 ├── action-validator.ts # Lag-compensated hit detection
 ├── levels.ts          # Level configurations
+├── player.ts          # Re-exports from @game/platformer
 ├── test-utils.ts      # Test helpers
-└── index.ts           # Public exports
+├── index.ts           # Public exports
+└── app/               # Runnable application
+    └── src/
+        ├── server.ts        # Game server
+        └── client/          # React client app
 ```
 
 ## Types
@@ -280,11 +285,14 @@ const client = createClient({ socket, game: platformerGame });
 
 ## Running the Example
 
-The `packages/app` workspace uses this platformer example:
-
 ```bash
 # From repository root
-bun start
+bun dev    # Development mode (auto-starts game, hot reload)
+bun start  # Production mode
+
+# Or from the app directory
+cd examples/platformer/app
+bun dev
 ```
 
-This starts both the server and client for local testing.
+This starts both the server and client for local testing. Open http://localhost:3000 in your browser.

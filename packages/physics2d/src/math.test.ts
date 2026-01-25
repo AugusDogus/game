@@ -173,7 +173,7 @@ describe("Interpolation", () => {
 
   describe("smoothDamp", () => {
     it("moves value toward target", () => {
-      const [newValue, newVelocity] = smoothDamp(0, 10, 0, 0.3, 0.016);
+      const [newValue] = smoothDamp(0, 10, 0, 0.3, 0.016);
       expect(newValue).toBeGreaterThan(0);
       expect(newValue).toBeLessThan(10);
     });
@@ -187,7 +187,7 @@ describe("Interpolation", () => {
       // Start far from target with high velocity
       const [val1, vel1] = smoothDamp(0, 10, 0, 0.3, 0.016);
       const [val2, vel2] = smoothDamp(val1, 10, vel1, 0.3, 0.016);
-      const [val3, vel3] = smoothDamp(val2, 10, vel2, 0.3, 0.016);
+      const [val3] = smoothDamp(val2, 10, vel2, 0.3, 0.016);
       
       // Should be getting closer
       expect(val1).toBeLessThan(val2);

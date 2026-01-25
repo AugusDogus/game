@@ -11,10 +11,8 @@ import {
 import { createPlatformerWorld } from "./types.js";
 import type { PlatformerWorld, PlatformerInput } from "./types.js";
 import { createTestPlayer, createPlayingWorld } from "./test-utils.js";
-import { derivePhysics, DEFAULT_PLAYER_CONFIG } from "./player.js";
+import { DEFAULT_PLAYER_CONFIG } from "./player.js";
 
-// Derived physics for test assertions
-const derivedPhysics = derivePhysics(DEFAULT_PLAYER_CONFIG);
 
 /** Helper to create test input with all required fields */
 const createInput = (

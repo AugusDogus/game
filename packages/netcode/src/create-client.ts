@@ -15,7 +15,7 @@ import { ServerAuthoritativeClient } from "./strategies/server-authoritative.js"
  */
 interface ClientConfigBase<
   TWorld,
-  TInput extends { timestamp: number },
+  _TInput extends { timestamp: number },
   TActionResult = unknown,
 > {
   /** Socket.IO client socket instance */
@@ -373,21 +373,3 @@ export function createClient<
     },
   };
 }
-
-// Backwards-compatible aliases
-/** @deprecated Use `ClientConfig` instead */
-export type CreateClientConfig<
-  TWorld,
-  TInput extends { timestamp: number },
-  TActionResult = unknown,
-> = ClientConfig<TWorld, TInput, TActionResult>;
-
-/** @deprecated Use `ClientHandle` instead */
-export type NetcodeClientHandle<
-  TWorld,
-  TInput extends { timestamp: number },
-  TAction = unknown,
-> = ClientHandle<TWorld, TInput, TAction>;
-
-/** @deprecated Use `createClient` instead */
-export const createNetcodeClient = createClient;

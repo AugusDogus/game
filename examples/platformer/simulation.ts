@@ -162,56 +162,6 @@ const aabbOverlap = (a: AABB, b: AABB): boolean =>
   a.y + a.height > b.y;
 
 /**
- * Calculate the minimum translation vector to separate two overlapping AABBs
- * Returns the vector to move 'a' so it no longer overlaps 'b'
- *
- * Y-UP coordinate system:
- * - Top of AABB = y + height (higher Y)
- * - Bottom of AABB = y (lower Y)
- */
-const calculateSeparation = (a: AABB, b: AABB): Vector2 => {
-  const overlapLeft = a.x + a.width - b.x;
-  const overlapRight = b.x + b.width - a.x;
-  // In Y-up: "top" means higher Y, "bottom" means lower Y
-  const overlapTop = a.y + a.height - b.y; // a's top overlaps into b's bottom
-  const overlapBottom = b.y + b.height - a.y; // b's top overlaps into a's bottom
-
-  const minOverlapX = overlapLeft < overlapRight ? -overlapLeft : overlapRight;
-  // Positive Y pushes up, negative Y pushes down
-  const minOverlapY = overlapTop < overlapBottom ? -overlapTop : overlapBottom;
-
-  // Push out along the axis with the smallest overlap
-  if (Math.abs(minOverlapX) < Math.abs(minOverlapY)) {
-    return { x: minOverlapX, y: 0 };
-  }
-  return { x: 0, y: minOverlapY };
-};
-
-/**
- * Check if a player AABB collides with a platform
- */
-const playerPlatformCollision = (
-  playerAABB: AABB,
-  platform: Platform,
-): { collides: boolean; separation: Vector2 } => {
-  const platformAABB: AABB = {
-    x: platform.position.x,
-    y: platform.position.y,
-    width: platform.width,
-    height: platform.height,
-  };
-
-  if (!aabbOverlap(playerAABB, platformAABB)) {
-    return { collides: false, separation: { x: 0, y: 0 } };
-  }
-
-  return {
-    collides: true,
-    separation: calculateSeparation(playerAABB, platformAABB),
-  };
-};
-
-/**
  * Check if a player AABB collides with a hazard
  */
 const playerHazardCollision = (playerAABB: AABB, hazard: Hazard): boolean => {

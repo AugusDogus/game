@@ -300,7 +300,7 @@ describe("platformerPredictionScope", () => {
       expect(player?.position.y).toBeGreaterThanOrEqual(DEFAULT_FLOOR_Y + 10 - 1);
       // When grounded, velocity.y should be 0 or near 0
       // Note: If not quite grounded, may still have negative velocity approaching floor
-      expect(player?.isGrounded || player?.velocity.y <= 0).toBe(true);
+      expect(player?.isGrounded || (player?.velocity?.y ?? 0) <= 0).toBe(true);
     });
 
     test("should return state unchanged for empty players", () => {

@@ -511,7 +511,8 @@ export class Renderer {
       this.projectilesContainer.addChild(gfx);
       this.projectileGraphics.push(gfx);
     }
-    return this.projectileGraphics[index]!;
+    // Safe: we just pushed elements to ensure the array has enough items
+    return this.projectileGraphics[index] as Graphics;
   }
 
   private drawProjectile(projectile: Projectile, isOwn: boolean, index: number): void {
@@ -538,14 +539,16 @@ export class Renderer {
     this.activeProjectileCount = projectiles.length;
     
     for (let i = 0; i < projectiles.length; i++) {
-      const projectile = projectiles[i]!;
+      const projectile = projectiles[i];
+      if (!projectile) continue;
       const isOwn = projectile.ownerId === localPlayerId;
       this.drawProjectile(projectile, isOwn, i);
     }
     
     // Hide unused projectile graphics
     for (let i = projectiles.length; i < this.projectileGraphics.length; i++) {
-      this.projectileGraphics[i]!.visible = false;
+      const gfx = this.projectileGraphics[i];
+      if (gfx) gfx.visible = false;
     }
   }
 
@@ -725,18 +728,21 @@ export class Renderer {
     
     this.trailGraphics.setStrokeStyle({ width: 2, color, alpha });
     
-    const first = history[0]!;
+    const first = history[0];
+    if (!first) return;
     this.trailGraphics.moveTo(first.x, first.y);
     
     for (let i = 1; i < history.length; i++) {
-      const point = history[i]!;
+      const point = history[i];
+      if (!point) continue;
       this.trailGraphics.lineTo(point.x, point.y);
     }
     this.trailGraphics.stroke();
     
     // Draw dots
     for (let i = 0; i < history.length; i++) {
-      const point = history[i]!;
+      const point = history[i];
+      if (!point) continue;
       const pointAlpha = (i / history.length) * alpha;
       this.trailGraphics.circle(point.x, point.y, 3);
       this.trailGraphics.fill({ color, alpha: pointAlpha });

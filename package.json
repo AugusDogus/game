@@ -3,12 +3,13 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/*",
+    "examples/*/app"
   ],
   "type": "module",
   "scripts": {
-    "start": "bun run packages/app/src/server.ts",
-    "dev": "DEV_MODE=true bun --watch run packages/app/src/server.ts",
+    "start": "bun run examples/platformer/app/src/server.ts",
+    "dev": "DEV_MODE=true bun --watch run examples/platformer/app/src/server.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",

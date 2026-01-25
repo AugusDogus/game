@@ -7,7 +7,9 @@ A TypeScript game engine for building fast-paced multiplayer games. Built with a
 | Package | Description |
 |---------|-------------|
 | [@game/netcode](packages/netcode/) | Networking layer - client/server sync, prediction, reconciliation, interpolation, lag compensation |
-| [@game/physics2d](packages/physics2d/) | 2D physics primitives - raycast-based character controller using Rapier |
+| [@game/physics2d](packages/physics2d/) | 2D physics primitives - stateless raycast-based character controller |
+| [@game/platformer](packages/platformer/) | Platformer genre helpers - movement system with variable jump, wall slide, wall jump |
+| [@game/renderer](packages/renderer/) | Rendering infrastructure - PixiJS initialization, debug visualization types |
 
 ## Coordinate System
 
@@ -39,7 +41,8 @@ The renderer flips Y when drawing to the canvas (which uses Y-down), so game log
 Run the platformer example:
 
 ```bash
-bun start
+bun dev    # Development mode (auto-starts game, hot reload)
+bun start  # Production mode
 ```
 
 ## Documentation
@@ -58,11 +61,12 @@ The `docs/concepts/` folder contains Gabriel Gambetta's articles explaining the 
 ## Development
 
 ```bash
-bun install      # Install dependencies
-bun start        # Run example app
-bun test         # Run tests
-bun run tsc      # Type checking
-bun lint         # Linting
+bun install       # Install dependencies
+bun dev           # Run example app (dev mode)
+bun start         # Run example app (production mode)
+bun test          # Run tests
+bun run typecheck # Type checking
+bun lint          # Linting
 ```
 
 ## License

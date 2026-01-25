@@ -178,7 +178,8 @@ export function raycast(
   let closestDistance = maxDistance;
 
   for (let i = 0; i < colliders.length; i++) {
-    const collider = colliders[i]!;
+    const collider = colliders[i];
+    if (!collider) continue;
 
     // Filter one-way platforms when ray is going up
     if (filterOneWay && direction.y > 0 && collider.oneWay) {
@@ -236,7 +237,8 @@ export function raycastAll(
   const hits: RaycastHit[] = [];
 
   for (let i = 0; i < colliders.length; i++) {
-    const collider = colliders[i]!;
+    const collider = colliders[i];
+    if (!collider) continue;
 
     const result = rayAABBIntersection(
       origin,

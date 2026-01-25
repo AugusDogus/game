@@ -2,13 +2,10 @@
  * Platformer game type definitions
  */
 
-/**
- * 2D vector representing position or velocity
- */
-export interface Vector2 {
-  x: number;
-  y: number;
-}
+import type { Vector2 } from "@game/physics2d";
+
+// Re-export Vector2 from physics2d to avoid duplication
+export type { Vector2 };
 
 /**
  * Player input for platformer game

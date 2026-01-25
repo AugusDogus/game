@@ -11,11 +11,11 @@
 // =============================================================================
 // High-Level API (Recommended)
 // =============================================================================
-export { createServer, createNetcodeServer } from "./create-server.js";
-export type { ServerConfig, ServerHandle, CreateServerConfig, NetcodeServerHandle } from "./create-server.js";
+export { createServer } from "./create-server.js";
+export type { ServerConfig, ServerHandle } from "./create-server.js";
 
-export { createClient, createNetcodeClient } from "./create-client.js";
-export type { ClientConfig, ClientHandle, CreateClientConfig, NetcodeClientHandle } from "./create-client.js";
+export { createClient } from "./create-client.js";
+export type { ClientConfig, ClientHandle } from "./create-client.js";
 
 // Socket.IO parser for proper Map/Set/Date serialization
 export { superjsonParser } from "./parser.js";

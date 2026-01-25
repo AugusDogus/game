@@ -42,7 +42,7 @@ io.bind(engine);
 
 // Current level state
 let currentLevelId = "platforms";
-let currentLevel = getLevel(currentLevelId) ?? LEVELS["platforms"]!;
+let currentLevel: LevelConfig = getLevel(currentLevelId) ?? LEVELS["platforms"] ?? LEVELS["basic-arena"] as LevelConfig;
 
 /**
  * Create a fresh world with the specified level loaded

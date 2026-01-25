@@ -31,14 +31,16 @@
       "dependencies": {
         "@game/netcode": "workspace:*",
         "@game/physics2d": "workspace:*",
+        "@game/platformer": "workspace:*",
       },
     },
-    "packages/app": {
-      "name": "@game/app",
+    "examples/platformer/app": {
+      "name": "@game/platformer-app",
       "version": "0.1.0",
       "dependencies": {
         "@game/example-platformer": "workspace:*",
         "@game/netcode": "workspace:*",
+        "@game/renderer": "workspace:*",
         "@socket.io/bun-engine": "^0.1.0",
         "@tanstack/react-query": "^5.90.16",
         "bun-plugin-tailwind": "^0.1.2",
@@ -80,15 +82,34 @@
         "typescript": "^5",
       },
     },
+    "packages/platformer": {
+      "name": "@game/platformer",
+      "version": "0.1.0",
+      "dependencies": {
+        "@game/physics2d": "workspace:*",
+      },
+    },
+    "packages/renderer": {
+      "name": "@game/renderer",
+      "version": "0.1.0",
+      "dependencies": {
+        "pixi-viewport": "^6.0.3",
+        "pixi.js": "^8.15.0",
+      },
+    },
   },
   "packages": {
-    "@game/app": ["@game/app@workspace:packages/app"],
-
     "@game/example-platformer": ["@game/example-platformer@workspace:examples/platformer"],
 
     "@game/netcode": ["@game/netcode@workspace:packages/netcode"],
 
     "@game/physics2d": ["@game/physics2d@workspace:packages/physics2d"],
+
+    "@game/platformer": ["@game/platformer@workspace:packages/platformer"],
+
+    "@game/platformer-app": ["@game/platformer-app@workspace:examples/platformer/app"],
+
+    "@game/renderer": ["@game/renderer@workspace:packages/renderer"],
 
     "@oven/bun-darwin-aarch64": ["@oven/bun-darwin-aarch64@1.3.5", "", { "os": "darwin", "cpu": "arm64" }, "sha512-8GvNtMo0NINM7Emk9cNAviCG3teEgr3BUX9be0+GD029zIagx2Sf54jMui1Eu1IpFm7nWHODuLEefGOQNaJ0gQ=="],
 
@@ -262,16 +283,16 @@
 
     "xmlhttprequest-ssl": ["xmlhttprequest-ssl@2.1.2", "", {}, "sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ=="],
 
-    "@game/app/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
-
     "@game/netcode/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
 
     "@game/physics2d/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
 
-    "@game/app/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
+    "@game/platformer-app/@types/bun": ["@types/bun@1.3.6", "", { "dependencies": { "bun-types": "1.3.6" } }, "sha512-uWCv6FO/8LcpREhenN1d1b6fcspAB+cefwD7uti8C8VffIv0Um08TKMn98FynpTiU38+y2dUO55T11NgDt8VAA=="],
 
     "@game/netcode/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
 
     "@game/physics2d/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
+
+    "@game/platformer-app/@types/bun/bun-types": ["bun-types@1.3.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-OlFwHcnNV99r//9v5IIOgQ9Uk37gZqrNMCcqEaExdkVq3Avwqok1bJFmvGMCkCE0FqzdY8VMOZpfpR3lwI+CsQ=="],
   }
 }

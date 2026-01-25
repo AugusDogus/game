@@ -114,7 +114,7 @@ describe("validateLevel", () => {
   it("should warn about single spawn point", () => {
     const singleSpawn = {
       ...LEVEL_BASIC_ARENA,
-      spawnPoints: [LEVEL_BASIC_ARENA.spawnPoints[0]!],
+      spawnPoints: LEVEL_BASIC_ARENA.spawnPoints.slice(0, 1),
     };
     const result = validateLevel(singleSpawn);
     expect(result.valid).toBe(true);
