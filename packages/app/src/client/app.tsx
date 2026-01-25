@@ -187,56 +187,82 @@ function App() {
       return;
     }
 
-    // Create fresh GameClient on connect
-    if (gameClientRef.current) {
-      gameClientRef.current.stop();
-    }
-    gameClientRef.current = new GameClient(socket, canvasRef.current);
+    // Create fresh GameClient on connect (async)
+    const canvas = canvasRef.current;
+    let cancelled = false;
+    
+    (async () => {
+      // Stop existing client if any
+      if (gameClientRef.current) {
+        gameClientRef.current.stop();
+        gameClientRef.current = null;
+      }
+      
+      // Create new client asynchronously
+      const client = await GameClient.create(socket, canvas);
+      
+      // Check if effect was cleaned up while we were initializing
+      if (cancelled) {
+        client.stop();
+        return;
+      }
+      
+      gameClientRef.current = client;
+    })();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [isConnected]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-      <div className="mb-4 text-center space-y-2">
-        <h1 className="text-2xl font-bold text-slate-100">Game WebTransport</h1>
-        <p className="text-sm text-slate-400">A/D or Arrow Keys to move • Space/W/Up to jump</p>
+    <div className="h-screen flex flex-col bg-slate-900 p-4 gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-shrink-0">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-slate-100">Game WebTransport</h1>
+          <p className="text-sm text-slate-400">A/D or Arrow Keys to move • Space/W/Up to jump</p>
+        </div>
+        <div className="flex gap-4">
+          <div className="bg-slate-800 rounded-lg p-4 space-y-2">
+            <h2 className="text-sm text-slate-400 uppercase tracking-wide">HTTP Status</h2>
+            {healthData && !isError ? (
+              <>
+                <p className="text-green-500">● Connected</p>
+                <p className="text-slate-400 text-sm">
+                  Uptime: {Math.floor(healthData.uptime / 1000)}s
+                </p>
+              </>
+            ) : (
+              <p className="text-red-500">● Disconnected</p>
+            )}
+          </div>
+
+          <div className="bg-slate-800 rounded-lg p-4 space-y-2">
+            <h2 className="text-sm text-slate-400 uppercase tracking-wide">Socket.IO</h2>
+            {isConnected ? (
+              <>
+                <p className="text-green-500">● Connected</p>
+                <p className="text-slate-400 text-sm">
+                  {latency !== null ? `Latency: ${latency}ms` : "Measuring..."}
+                </p>
+                <p className="text-slate-500 text-xs">ID: {socket.id}</p>
+              </>
+            ) : (
+              <p className="text-red-500">● Disconnected</p>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="mb-4 flex gap-4">
-        <div className="bg-slate-800 rounded-lg p-4 space-y-2">
-          <h2 className="text-sm text-slate-400 uppercase tracking-wide">HTTP Status</h2>
-          {healthData && !isError ? (
-            <>
-              <p className="text-green-500">● Connected</p>
-              <p className="text-slate-400 text-sm">
-                Uptime: {Math.floor(healthData.uptime / 1000)}s
-              </p>
-            </>
-          ) : (
-            <p className="text-red-500">● Disconnected</p>
-          )}
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4 space-y-2">
-          <h2 className="text-sm text-slate-400 uppercase tracking-wide">Socket.IO</h2>
-          {isConnected ? (
-            <>
-              <p className="text-green-500">● Connected</p>
-              <p className="text-slate-400 text-sm">
-                {latency !== null ? `Latency: ${latency}ms` : "Measuring..."}
-              </p>
-              <p className="text-slate-500 text-xs">ID: {socket.id}</p>
-            </>
-          ) : (
-            <p className="text-red-500">● Disconnected</p>
-          )}
-        </div>
+      {/* Game canvas container - fills available space */}
+      <div className="flex-1 min-h-0 border border-slate-700 rounded-lg bg-slate-950 overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full"
+          style={{ display: "block" }}
+        />
       </div>
-
-      <canvas
-        ref={canvasRef}
-        className="border border-slate-700 rounded-lg bg-slate-950"
-        style={{ display: "block" }}
-      />
 
       {/* Debug toggle button */}
       <button

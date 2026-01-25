@@ -6,7 +6,7 @@ import {
   type PlatformerWorld,
 } from "@game/example-platformer";
 import type { Socket } from "socket.io-client";
-import { CanvasRenderer, type DebugData, type PositionHistoryEntry } from "../client/renderer/canvas-renderer.js";
+import { Renderer, type DebugData, type PositionHistoryEntry } from "../client/renderer/renderer.js";
 
 /** Maximum number of position history entries to keep */
 const MAX_HISTORY_SIZE = 60;
@@ -23,11 +23,13 @@ export interface DebugOptions {
 const INPUT_RATE_MS = 1000 / 60;
 
 /**
- * Game client that integrates NetcodeClient with rendering
+ * Game client that integrates NetcodeClient with rendering.
+ * 
+ * Use the static `create()` method to instantiate.
  */
 export class GameClient {
   private netcodeClient: ClientHandle<PlatformerWorld, PlatformerInput>;
-  private renderer: CanvasRenderer;
+  private renderer: Renderer;
   private canvas: HTMLCanvasElement;
   private animationFrameId: number | null = null;
   private inputIntervalId: number | null = null;
@@ -37,6 +39,7 @@ export class GameClient {
   private mousedownHandler: (e: MouseEvent) => void;
   private mouseupHandler: (e: MouseEvent) => void;
   private mousemoveHandler: (e: MouseEvent) => void;
+  private resizeHandler: () => void;
   private debugOptions: DebugOptions = { showTrails: false, showServerPositions: false };
 
   // Mouse state for shooting
@@ -51,9 +54,16 @@ export class GameClient {
   private otherPlayersHistory: Map<string, PositionHistoryEntry[]> = new Map();
   private otherPlayersServerHistory: Map<string, PositionHistoryEntry[]> = new Map();
 
-  constructor(socket: Socket, canvas: HTMLCanvasElement) {
-    // Create renderer
-    this.renderer = new CanvasRenderer(canvas);
+  /**
+   * Create a new GameClient. Use this instead of calling constructor directly.
+   */
+  static async create(socket: Socket, canvas: HTMLCanvasElement): Promise<GameClient> {
+    const renderer = await Renderer.create(canvas);
+    return new GameClient(socket, canvas, renderer);
+  }
+
+  private constructor(socket: Socket, canvas: HTMLCanvasElement, renderer: Renderer) {
+    this.renderer = renderer;
 
     // Create netcode client
     this.netcodeClient = createClient<PlatformerWorld, PlatformerInput>({
@@ -101,15 +111,41 @@ export class GameClient {
     this.mousemoveHandler = (e: MouseEvent) => {
       this.updateMousePosition(e);
     };
+    this.resizeHandler = () => {
+      this.handleResize();
+    };
 
     // Set up input handling
     this.setupInputHandling();
+    
+    // Set up resize handling
+    window.addEventListener("resize", this.resizeHandler);
+    // Initial resize to match container
+    this.handleResize();
 
     // Start render loop
     this.startRenderLoop();
 
     // Start input loop (separate from render for consistent input rate)
     this.startInputLoop();
+  }
+
+  /**
+   * Handle window resize - update canvas and renderer dimensions
+   */
+  private handleResize(): void {
+    const parent = this.canvas.parentElement;
+    if (parent) {
+      const rect = parent.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      
+      if (width > 0 && height > 0) {
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.renderer.resize(width, height);
+      }
+    }
   }
 
   /**
@@ -338,9 +374,13 @@ export class GameClient {
     }
     window.removeEventListener("keydown", this.keydownHandler);
     window.removeEventListener("keyup", this.keyupHandler);
+    window.removeEventListener("resize", this.resizeHandler);
     this.canvas.removeEventListener("mousedown", this.mousedownHandler);
     this.canvas.removeEventListener("mouseup", this.mouseupHandler);
     this.canvas.removeEventListener("mousemove", this.mousemoveHandler);
+    
+    // Destroy the renderer
+    this.renderer.destroy();
   }
 
   /**
