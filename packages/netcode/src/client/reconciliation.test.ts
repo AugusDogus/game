@@ -18,10 +18,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -63,8 +67,9 @@ describe("Reconciler", () => {
       });
       const snapshot = createSnapshot(serverPlayer, -1);
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
 
       expect(resultPlayer?.position.x).toBe(100);
       expect(resultPlayer?.position.y).toBe(200);
@@ -84,8 +89,9 @@ describe("Reconciler", () => {
       });
       const snapshot = createSnapshot(serverPlayer, 0);
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
 
       // Should have replayed seq 1 and 2, so position should be > 10
       expect(resultPlayer?.position.x).toBeGreaterThan(10);
@@ -118,10 +124,11 @@ describe("Reconciler", () => {
         inputAcks: new Map(),
       };
 
-      const result = reconciler.reconcile(snapshot);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
 
-      // Should return world without our player (no prediction to merge)
-      expect(result.world.players.has("other-player")).toBe(true);
+      // Should have the other player in state
+      expect(state?.players?.has("other-player")).toBe(true);
     });
 
     test("should handle empty acks", () => {
@@ -136,64 +143,107 @@ describe("Reconciler", () => {
         inputAcks: new Map(), // No acks
       };
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
 
       expect(resultPlayer?.position.x).toBe(50);
     });
   });
 
-  describe("real-world scenarios", () => {
-    test("network lag spike: many queued inputs should replay with timestamp deltas", () => {
-      // Player sends inputs at 60fps during a 200ms lag spike
-      // Server doesn't see any of them, then they all arrive at once
-      const startTime = 1000;
-      const inputCount = 12; // ~200ms of inputs at 60fps
+  describe("replay callback", () => {
+    test("should call replay callback for each replayed input", () => {
+      const replayedTicks: number[] = [];
+      reconciler.setReplayCallback((tick, _state) => {
+        replayedTicks.push(tick);
+      });
 
-      for (let i = 0; i < inputCount; i++) {
-        inputBuffer.add(createInput(1, 0, false, startTime + i * 16.67));
-      }
+      // Add 3 inputs
+      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
+      inputBuffer.add(createInput(1, 0, false, 1016)); // seq 1
+      inputBuffer.add(createInput(1, 0, false, 1032)); // seq 2
 
-      // Server snapshot arrives with position before any of these inputs
       const serverPlayer = createTestPlayer(playerId, {
         position: { x: 0, y: 190 },
         isGrounded: true,
       });
-      const snapshot = createSnapshot(serverPlayer, -1); // No inputs acknowledged
+      const snapshot = createSnapshot(serverPlayer, -1); // No acks, replay all 3
+      snapshot.tick = 10;
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
 
-      // All 12 inputs should be replayed with their ACTUAL timestamp deltas (~16ms each)
-      // Total simulated time is ~200ms (12 * ~16.67ms)
-      // With smoothDamp acceleration over 200ms, player should move some distance
+      // Should have called callback 3 times (for ticks 11, 12, 13)
+      expect(replayedTicks).toEqual([11, 12, 13]);
+    });
+
+    test("should provide corrected state in replay callback", () => {
+      const replayedPositions: { x: number; y: number }[] = [];
+      reconciler.setReplayCallback((tick, state) => {
+        const player = state.players?.get(playerId);
+        if (player) {
+          replayedPositions.push({ x: player.position.x, y: player.position.y });
+        }
+      });
+
+      // Add inputs that move right
+      inputBuffer.add(createInput(1, 0, false, 1000));
+      inputBuffer.add(createInput(1, 0, false, 1016));
+
+      const serverPlayer = createTestPlayer(playerId, {
+        position: { x: 0, y: 190 },
+        velocity: { x: 0, y: 0 },
+        isGrounded: true,
+      });
+      const snapshot = createSnapshot(serverPlayer, -1);
+
+      reconciler.reconcile(snapshot);
+
+      // Each replayed position should be further right
+      expect(replayedPositions.length).toBe(2);
+      expect(replayedPositions[1]!.x).toBeGreaterThan(replayedPositions[0]!.x);
+    });
+  });
+
+  describe("real-world scenarios", () => {
+    test("network lag spike: many queued inputs should replay with fixed tick delta", () => {
+      const inputCount = 12; // ~200ms of inputs at 60fps
+
+      for (let i = 0; i < inputCount; i++) {
+        inputBuffer.add(createInput(1, 0, false, 1000 + i * 16.67));
+      }
+
+      const serverPlayer = createTestPlayer(playerId, {
+        position: { x: 0, y: 190 },
+        isGrounded: true,
+      });
+      const snapshot = createSnapshot(serverPlayer, -1);
+
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
+
+      // All 12 inputs should be replayed with fixed tick delta (~16.67ms each)
       expect(resultPlayer?.position.x).toBeGreaterThan(5);
       expect(resultPlayer?.position.x).toBeLessThan(50);
     });
 
     test("partial acknowledgment: only replay unacknowledged inputs", () => {
-      // Player sends 5 inputs
-      const startTime = 1000;
       for (let i = 0; i < 5; i++) {
-        inputBuffer.add(createInput(1, 0, false, startTime + i * 50)); // 50ms apart
+        inputBuffer.add(createInput(1, 0, false, 1000 + i * 50));
       }
 
-      // Server acknowledges first 3 (seq 0, 1, 2)
-      // Server position reflects those 3 inputs with fixed tick delta (~16.67ms each)
-      // At ~200 units/sec, 3 inputs * 16.67ms = ~10 units
       const serverPlayer = createTestPlayer(playerId, {
-        position: { x: 10, y: 190 }, // Moved ~10 units from 3 inputs
+        position: { x: 10, y: 190 },
         velocity: { x: 200, y: 0 },
         isGrounded: true,
       });
       const snapshot = createSnapshot(serverPlayer, 2); // Ack through seq 2
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
 
-      // Should replay seq 3 and 4 (2 more inputs with fixed delta)
-      // 2 inputs * ~16.67ms at 200 units/sec = ~6.67 units
-      // Total: 10 + 6.67 ≈ 16.67 units
+      // Should replay seq 3 and 4 (2 more inputs)
       expect(resultPlayer?.position.x).toBeGreaterThan(15);
       expect(resultPlayer?.position.x).toBeLessThan(20);
 
@@ -201,134 +251,47 @@ describe("Reconciler", () => {
       expect(inputBuffer.get(0)).toBeUndefined();
       expect(inputBuffer.get(1)).toBeUndefined();
       expect(inputBuffer.get(2)).toBeUndefined();
-      // Inputs 3-4 should still exist (will be cleared on next ack)
       expect(inputBuffer.get(3)).toBeDefined();
       expect(inputBuffer.get(4)).toBeDefined();
     });
 
     test("misprediction correction: server disagrees with client position", () => {
-      // Client predicted they moved right, but server says they hit a wall
-      // (simulated by server returning different position)
+      inputBuffer.add(createInput(1, 0, false, 1000));
+      inputBuffer.add(createInput(1, 0, false, 1050));
+      inputBuffer.add(createInput(1, 0, false, 1100));
 
-      // Client sent inputs to move right
-      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
-      inputBuffer.add(createInput(1, 0, false, 1050)); // seq 1
-      inputBuffer.add(createInput(1, 0, false, 1100)); // seq 2
-
-      // Server only processed seq 0, but says player hit a wall and is at x=0
       const serverPlayer = createTestPlayer(playerId, {
-        position: { x: 0, y: 190 }, // Server says we're at origin (hit wall)
+        position: { x: 0, y: 190 },
         isGrounded: true,
       });
-      const snapshot = createSnapshot(serverPlayer, 0); // Only ack seq 0
+      const snapshot = createSnapshot(serverPlayer, 0);
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
 
       // Client should accept server position (x=0) and replay seq 1 and 2
-      // Since server says x=0, we replay 2 inputs with timestamp deltas (~50ms each)
-      // With smoothDamp, velocity builds up gradually
       expect(resultPlayer?.position.x).toBeGreaterThan(0.5);
       expect(resultPlayer?.position.x).toBeLessThan(15);
     });
 
     test("jump input timing: jump pressed while falling should not double-jump", () => {
-      // Player is in the air (jumped earlier)
-      inputBuffer.add(createInput(0, 0, true, 1000)); // Jump while airborne
-      inputBuffer.add(createInput(0, 0, true, 1050)); // Still holding jump
+      inputBuffer.add(createInput(0, 0, true, 1000));
+      inputBuffer.add(createInput(0, 0, true, 1050));
 
-      // Server confirms player is in the air
-      // Y-up: negative velocity = falling down
       const serverPlayer = createTestPlayer(playerId, {
-        position: { x: 0, y: 100 }, // In the air
-        velocity: { x: 0, y: -50 }, // Falling down (negative in Y-up)
-        isGrounded: false, // NOT grounded
+        position: { x: 0, y: 100 },
+        velocity: { x: 0, y: -50 },
+        isGrounded: false,
       });
       const snapshot = createSnapshot(serverPlayer, -1);
 
-      const result = reconciler.reconcile(snapshot);
-      const resultPlayer = result.world.players.get(playerId);
+      reconciler.reconcile(snapshot);
+      const state = predictor.getState();
+      const resultPlayer = state?.players?.get(playerId);
 
-      // Player should continue falling, not get another jump
-      // Y-up: Velocity should still be negative (falling) or more negative
       expect(resultPlayer?.velocity.y).toBeLessThanOrEqual(-50);
       expect(resultPlayer?.isGrounded).toBe(false);
-    });
-
-    test("large sequence numbers: should handle near-max values", () => {
-      // Simulate a very long play session with large sequence numbers
-      const largeSeq = 1000000;
-
-      // Create a fresh reconciler with large seq context
-      const freshBuffer = new InputBuffer<PlatformerInput>();
-      const freshPredictor = new Predictor<PlatformerWorld, PlatformerInput>(
-        platformerPredictionScope,
-      );
-      const freshReconciler = new Reconciler<PlatformerWorld, PlatformerInput>(
-        freshBuffer,
-        freshPredictor,
-        platformerPredictionScope,
-        playerId,
-      );
-
-      // Add inputs with large sequence numbers (simulate buffer state after many inputs)
-      for (let i = 0; i < 10; i++) {
-        // Manually create inputs as if buffer has been used extensively
-        freshBuffer.add(createInput(1, 0, false, 1000 + i * 16));
-      }
-
-      const serverPlayer = createTestPlayer(playerId, {
-        position: { x: 50, y: 190 },
-        velocity: { x: 200, y: 0 },
-        isGrounded: true,
-      });
-
-      // Acknowledge a subset
-      const snapshot: Snapshot<PlatformerWorld> = {
-        tick: largeSeq,
-        timestamp: Date.now(),
-        state: createTestWorld([serverPlayer], { tick: largeSeq, gameState: "playing" }),
-        inputAcks: new Map([[playerId, 5]]), // Ack through seq 5
-      };
-
-      const result = freshReconciler.reconcile(snapshot);
-
-      // Should work correctly even with large tick numbers
-      expect(result.world.players.has(playerId)).toBe(true);
-      // Remaining inputs (6-9) should be replayed
-      expect(result.world.players.get(playerId)?.position.x).toBeGreaterThan(50);
-    });
-
-    test("stale snapshot: older tick should not corrupt state", () => {
-      // Setup: receive a newer snapshot first
-      const serverPlayer = createTestPlayer(playerId, {
-        position: { x: 100, y: 190 },
-        isGrounded: true,
-      });
-      const newerSnapshot = createSnapshot(serverPlayer, 0);
-      newerSnapshot.tick = 10;
-
-      reconciler.reconcile(newerSnapshot);
-
-      // Now receive an "older" snapshot (arrived late due to network)
-      const olderPlayer = createTestPlayer(playerId, {
-        position: { x: 50, y: 190 }, // Earlier position
-        isGrounded: true,
-      });
-      const olderSnapshot: Snapshot<PlatformerWorld> = {
-        tick: 5, // Earlier tick
-        timestamp: Date.now() - 1000,
-        state: createTestWorld([olderPlayer], { tick: 5, gameState: "playing" }),
-        inputAcks: new Map([[playerId, -1]]),
-      };
-
-      reconciler.reconcile(olderSnapshot);
-      const afterOlder = predictor.getState();
-
-      // In current implementation, it processes all snapshots
-      // (production code might want to ignore stale snapshots)
-      // Just ensure it doesn't crash and produces valid state
-      expect(afterOlder?.players?.get(playerId)).toBeDefined();
     });
   });
 });

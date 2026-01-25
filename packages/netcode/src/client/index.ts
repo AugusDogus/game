@@ -4,7 +4,7 @@
  * High-level API for creating multiplayer game clients with:
  * - Client-side prediction for responsive gameplay
  * - Server reconciliation to correct mispredictions
- * - Entity interpolation for smooth remote player rendering
+ * - FishNet-style tick smoothing for smooth graphical rendering
  * - Input helpers for keyboard, mouse/touch, and gamepad
  */
 
@@ -47,11 +47,8 @@ export type {
 export { InputBuffer } from "./input-buffer.js";
 export { Predictor } from "./prediction.js";
 export { Reconciler } from "./reconciliation.js";
-export type { ReconciliationResult } from "./reconciliation.js";
-export { Interpolator } from "./interpolation.js";
+export type { ReconciliationReplayCallback } from "./reconciliation.js";
+export { TickSmoother, DEFAULT_TICK_SMOOTHER_CONFIG } from "./tick-smoother.js";
+export type { TickSmootherConfig, TickPosition } from "./tick-smoother.js";
 export type { PredictionScope } from "./prediction-scope.js";
 export { NoPredictionScope } from "./prediction-scope.js";
-
-// Visual smoothing
-export { VisualSmoother, DEFAULT_VISUAL_SMOOTHER_CONFIG } from "./visual-smoother.js";
-export type { VisualSmootherConfig, VisualOffset } from "./visual-smoother.js";

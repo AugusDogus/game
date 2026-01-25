@@ -100,7 +100,6 @@ export function createPlayerMovementState(): PlayerMovementState {
     wallSliding: false,
     wallDirX: 0,
     timeToWallUnstick: 0,
-    jumpWasPressedLastFrame: false,
     jumpHeld: false,
     coyoteTimeCounter: 0,
     jumpBufferCounter: 0,
@@ -144,9 +143,10 @@ export function updatePlayerMovement(
   let coyoteTimeCounter = state.coyoteTimeCounter;
   let jumpBufferCounter = state.jumpBufferCounter;
 
-  // Detect jump press edge (simulates Unity's OnJumpInputDown callback)
-  const jumpPressed = input.jump && !state.jumpWasPressedLastFrame;
-  const jumpReleased = !input.jump && state.jumpWasPressedLastFrame;
+  // Read edge detection from input - edges are computed client-side at input sampling time
+  // This makes the simulation fully deterministic and replayable
+  const jumpPressed = input.jumpPressed;
+  const jumpReleased = input.jumpReleased;
   const jumpHeld = input.jump;
 
   // --- Coyote Time: Track time since grounded ---
@@ -219,6 +219,10 @@ export function updatePlayerMovement(
 
   // --- OnJumpInputDown (matches Sebastian's OnJumpInputDown method) ---
   // Extended with coyote time and jump buffering for better game feel
+  //
+  // NOTE: jumpPressed and jumpReleased come directly from the input, computed client-side.
+  // The client is the source of truth for edge detection - it only sends jumpPressed: true
+  // once per actual key press. This makes the simulation fully deterministic and replayable.
 
   // Wall jump check (highest priority - walls don't use coyote time)
   const touchingWall = prevCollisions.left || prevCollisions.right;
@@ -306,7 +310,6 @@ export function updatePlayerMovement(
     wallSliding: newWallSliding,
     wallDirX: newWallDirX,
     timeToWallUnstick,
-    jumpWasPressedLastFrame: input.jump,
     jumpHeld,
     coyoteTimeCounter,
     jumpBufferCounter,

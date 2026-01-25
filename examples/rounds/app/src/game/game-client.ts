@@ -38,6 +38,9 @@ export class GameClient {
   private onCardSelectCallback: ((index: 1 | 2 | 3) => void) | null = null;
   private pendingCardSelect: 0 | 1 | 2 | 3 = 0;
 
+  // Client-side input edge detection state
+  private lastSentJumpState: boolean = false;
+
   static async create(socket: Socket, canvas: HTMLCanvasElement): Promise<GameClient> {
     const renderer = await Renderer.create(canvas);
     return new GameClient(socket, canvas, renderer);
@@ -151,9 +154,16 @@ export class GameClient {
     const cardSelect = this.pendingCardSelect;
     this.pendingCardSelect = 0;
 
+    // Client-side edge detection - the client is the source of truth for press/release
+    const jumpPressed = jump && !this.lastSentJumpState;
+    const jumpReleased = !jump && this.lastSentJumpState;
+    this.lastSentJumpState = jump;
+
     this.netcodeClient.sendInput({
       moveX,
       jump,
+      jumpPressed,
+      jumpReleased,
       shoot,
       aimX: this.mouseX,
       aimY: this.mouseY,

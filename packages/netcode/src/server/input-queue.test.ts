@@ -16,6 +16,8 @@ describe("InputQueue", () => {
       moveX: 1,
       moveY: 0,
       jump: false,
+      jumpPressed: false,
+      jumpReleased: false,
       shoot: false,
       shootTargetX: 0,
       shootTargetY: 0,
@@ -202,12 +204,12 @@ describe("InputQueue", () => {
       const now = Date.now();
       inputQueue.enqueue("client-1", { 
         seq: 0, 
-        input: { moveX: 1, moveY: 0, jump: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: now }, 
+        input: { moveX: 1, moveY: 0, jump: false, jumpPressed: false, jumpReleased: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: now }, 
         timestamp: now 
       });
       inputQueue.enqueue("client-1", { 
         seq: 1, 
-        input: { moveX: -1, moveY: 0, jump: true, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: now + 16 }, 
+        input: { moveX: -1, moveY: 0, jump: true, jumpPressed: false, jumpReleased: false, shoot: false, shootTargetX: 0, shootTargetY: 0, timestamp: now + 16 }, 
         timestamp: now + 16 
       });
 

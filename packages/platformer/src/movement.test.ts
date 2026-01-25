@@ -16,7 +16,7 @@ function createTestConfig(overrides: Partial<PlayerConfig> = {}): PlayerConfig {
 }
 
 function createTestInput(overrides: Partial<PlatformerMovementInput> = {}): PlatformerMovementInput {
-  return { moveX: 0, moveY: 0, jump: false, ...overrides };
+  return { moveX: 0, moveY: 0, jump: false, jumpPressed: false, jumpReleased: false, ...overrides };
 }
 
 function createGroundedCollisions(): PreviousCollisions {
@@ -52,7 +52,6 @@ describe("createPlayerMovementState", () => {
     expect(state.wallSliding).toBe(false);
     expect(state.wallDirX).toBe(0);
     expect(state.timeToWallUnstick).toBe(0);
-    expect(state.jumpWasPressedLastFrame).toBe(false);
     expect(state.jumpHeld).toBe(false);
     expect(state.coyoteTimeCounter).toBe(0);
     expect(state.jumpBufferCounter).toBe(0);
@@ -103,7 +102,7 @@ describe("Coyote Time", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -160,7 +159,7 @@ describe("Coyote Time", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -194,7 +193,7 @@ describe("Coyote Time", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -208,12 +207,14 @@ describe("Coyote Time", () => {
 
     // Now airborne, try to jump again immediately
     prevCollisions = createAirborneCollisions();
-    state = { ...state, jumpWasPressedLastFrame: false }; // Reset to allow new press detection
 
+    // Since edge detection is now in the input (not state), we can simply pass jumpPressed: true
+    // The simulation will process it, but since we're airborne with no coyote time or wall,
+    // the jump won't trigger (no double-jump without extra jumps)
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -272,7 +273,7 @@ describe("Jump Buffering", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -327,7 +328,7 @@ describe("Jump Buffering", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -381,7 +382,7 @@ describe("Jump Buffering", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -418,7 +419,7 @@ describe("Jump Buffering", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -469,7 +470,7 @@ describe("Coyote Time and Jump Buffer together", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,
@@ -507,7 +508,7 @@ describe("Coyote Time and Jump Buffer together", () => {
     state = updatePlayerMovement(
       controller,
       state,
-      createTestInput({ jump: true }),
+      createTestInput({ jump: true, jumpPressed: true }),
       config,
       physics,
       deltaTime,

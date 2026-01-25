@@ -11,10 +11,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -240,7 +244,7 @@ describe("platformerPredictionScope", () => {
         ]),
         gameState: "playing",
       };
-      const input: PlatformerInput = createInput(0, 0, true, 1000);
+      const input: PlatformerInput = createInput(0, 0, true, 1000, true); // jumpPressed: true
       const deltaTime = 50; // 50ms
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
@@ -266,7 +270,7 @@ describe("platformerPredictionScope", () => {
         ]),
         gameState: "playing",
       };
-      const input: PlatformerInput = createInput(0, 0, true, 1000);
+      const input: PlatformerInput = createInput(0, 0, true, 1000, true); // jumpPressed: true
       const deltaTime = 50; // 50ms
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");

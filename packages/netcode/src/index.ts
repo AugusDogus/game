@@ -3,8 +3,8 @@
  *
  * Provides a game-agnostic netcode engine supporting:
  * - Server-authoritative architecture with client-side prediction
- * - Entity interpolation and lag compensation
- * - Custom world states and simulation logic
+ * - FishNet-style tick smoothing for smooth graphical rendering
+ * - Lag compensation for action validation
  * - GGPO-style rollback netcode (experimental, under active development)
  */
 
@@ -49,7 +49,9 @@ export { SnapshotBuffer } from "./core/snapshot-buffer.js";
 export { InputBuffer } from "./client/input-buffer.js";
 export { Predictor } from "./client/prediction.js";
 export { Reconciler } from "./client/reconciliation.js";
-export { Interpolator } from "./client/interpolation.js";
+export type { ReconciliationReplayCallback } from "./client/reconciliation.js";
+export { TickSmoother, DEFAULT_TICK_SMOOTHER_CONFIG } from "./client/tick-smoother.js";
+export type { TickSmootherConfig, TickPosition } from "./client/tick-smoother.js";
 export type { PredictionScope } from "./client/prediction-scope.js";
 export { NoPredictionScope } from "./client/prediction-scope.js";
 
@@ -75,7 +77,7 @@ export {
   ServerAuthoritativeClient,
   ServerAuthoritativeServer,
 } from "./strategies/server-authoritative.js";
-export type { ServerAuthoritativeServerConfig } from "./strategies/server-authoritative.js";
+export type { ServerAuthoritativeServerConfig, SmoothingConfig } from "./strategies/server-authoritative.js";
 
 /**
  * GGPO-style rollback netcode.
@@ -89,7 +91,7 @@ export { RollbackClient } from "./strategies/rollback.js";
 export {
   DEFAULT_TICK_RATE,
   DEFAULT_TICK_INTERVAL_MS,
-  DEFAULT_INTERPOLATION_DELAY_MS,
+  DEFAULT_INTERPOLATION_TICKS,
   DEFAULT_SNAPSHOT_HISTORY_SIZE,
   DEFAULT_FLOOR_Y,
   MAX_INPUT_BUFFER_SIZE,

@@ -16,10 +16,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -123,7 +127,7 @@ describe("Predictor", () => {
       const world = createWorld(createGroundedPlayer(playerId));
       predictor.setBaseState(world, playerId);
 
-      predictor.applyInput(createInput(0, 0, true, Date.now()));
+      predictor.applyInput(createInput(0, 0, true, Date.now(), true)); // jumpPressed: true
 
       const state = predictor.getState();
       const playerState = state?.players?.get(playerId);

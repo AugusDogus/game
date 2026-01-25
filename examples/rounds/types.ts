@@ -157,8 +157,12 @@ export const PROJECTILE_LIFETIME_TICKS = 100; // 5 seconds at 20Hz
 export interface RoundsInput {
   /** Horizontal movement (-1 to 1) */
   moveX: number;
-  /** Jump pressed this frame */
+  /** Whether jump is currently held */
   jump: boolean;
+  /** Rising edge: jump was just pressed this sample */
+  jumpPressed: boolean;
+  /** Falling edge: jump was just released this sample */
+  jumpReleased: boolean;
   /** Shoot pressed this frame */
   shoot: boolean;
   /** Aim direction X (world coords) */
@@ -178,6 +182,8 @@ export function createIdleInput(timestamp?: number): RoundsInput {
   return {
     moveX: 0,
     jump: false,
+    jumpPressed: false,
+    jumpReleased: false,
     shoot: false,
     aimX: 0,
     aimY: 0,
@@ -235,7 +241,6 @@ export interface RoundsPlayer {
   wallSliding: boolean;
   wallDirX: -1 | 0 | 1;
   timeToWallUnstick: number;
-  jumpWasPressedLastFrame: boolean;
   coyoteTimeCounter: number;
   jumpBufferCounter: number;
 
@@ -353,7 +358,6 @@ export function createRoundsPlayer(
     wallSliding: false,
     wallDirX: 0,
     timeToWallUnstick: 0,
-    jumpWasPressedLastFrame: false,
     coyoteTimeCounter: 0,
     jumpBufferCounter: 0,
     projectileSeq: 0,

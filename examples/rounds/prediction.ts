@@ -3,12 +3,16 @@
  *
  * Handles extracting predictable state and merging predictions
  * with authoritative server state.
+ *
+ * NOTE: Input edge detection (jumpPressed/jumpReleased) is handled client-side
+ * at input sampling time. This makes the simulation fully deterministic and
+ * replayable without needing to preserve input tracking state during reconciliation.
  */
 
 import type { PredictionScope } from "@game/netcode";
 import { simulateRounds } from "./simulation.js";
 import type { RoundsInput, RoundsWorld } from "./types.js";
-import { createIdleInput, createRoundsWorld } from "./types.js";
+import { createIdleInput } from "./types.js";
 
 /**
  * Extract the predictable portion of the world for a given player.
@@ -77,7 +81,6 @@ function mergePrediction(
       wallSliding: predictedPlayer.wallSliding,
       wallDirX: predictedPlayer.wallDirX,
       timeToWallUnstick: predictedPlayer.timeToWallUnstick,
-      jumpWasPressedLastFrame: predictedPlayer.jumpWasPressedLastFrame,
       coyoteTimeCounter: predictedPlayer.coyoteTimeCounter,
       jumpBufferCounter: predictedPlayer.jumpBufferCounter,
       extraJumpsRemaining: predictedPlayer.extraJumpsRemaining,
@@ -163,7 +166,7 @@ function simulatePredicted(
 
 /**
  * Get the local player's position from the predicted state.
- * Used for visual smoothing to track position changes during reconciliation.
+ * Used by FishNet-style tick smoothing to track position changes during reconciliation.
  */
 function getLocalPlayerPosition(
   state: Partial<RoundsWorld>,
@@ -175,31 +178,6 @@ function getLocalPlayerPosition(
 }
 
 /**
- * Apply a visual offset to the local player's position.
- * Used for visual smoothing to hide small reconciliation corrections.
- */
-function applyVisualOffset(
-  world: RoundsWorld,
-  localPlayerId: string,
-  offsetX: number,
-  offsetY: number,
-): RoundsWorld {
-  const player = world.players.get(localPlayerId);
-  if (!player) return world;
-
-  const players = new Map(world.players);
-  players.set(localPlayerId, {
-    ...player,
-    position: {
-      x: player.position.x + offsetX,
-      y: player.position.y + offsetY,
-    },
-  });
-
-  return { ...world, players };
-}
-
-/**
  * Prediction scope for ROUNDS game
  */
 export const roundsPredictionScope: PredictionScope<RoundsWorld, RoundsInput> = {
@@ -208,5 +186,4 @@ export const roundsPredictionScope: PredictionScope<RoundsWorld, RoundsInput> = 
   simulatePredicted,
   createIdleInput,
   getLocalPlayerPosition,
-  applyVisualOffset,
 };

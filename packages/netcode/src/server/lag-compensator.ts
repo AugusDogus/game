@@ -11,7 +11,6 @@
 
 import type { SnapshotBuffer } from "../core/snapshot-buffer.js";
 import type { ActionValidator, Snapshot } from "../core/types.js";
-import { DEFAULT_INTERPOLATION_DELAY_MS } from "../constants.js";
 
 /**
  * Configuration for the lag compensator.
@@ -28,7 +27,7 @@ export interface LagCompensatorConfig {
    * Interpolation delay used by clients in milliseconds.
    * This is subtracted from the rewind calculation since clients
    * see other players this far in the past.
-   * Default: DEFAULT_INTERPOLATION_DELAY_MS (100ms)
+   * Default: ~33ms (2 ticks at 60 TPS)
    */
   interpolationDelayMs?: number;
 }
@@ -106,7 +105,8 @@ export class LagCompensator<TWorld> {
   constructor(snapshotBuffer: SnapshotBuffer<TWorld>, config: LagCompensatorConfig = {}) {
     this.snapshotBuffer = snapshotBuffer;
     this.maxRewindMs = config.maxRewindMs ?? 200;
-    this.interpolationDelayMs = config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
+    // Default: 2 ticks at 60 TPS = ~33ms
+    this.interpolationDelayMs = config.interpolationDelayMs ?? 33;
   }
 
   /**

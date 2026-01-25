@@ -16,6 +16,8 @@ export function createTestInput(
     moveX: overrides.moveX ?? 0,
     moveY: overrides.moveY ?? 0,
     jump: overrides.jump ?? false,
+    jumpPressed: overrides.jumpPressed ?? false,
+    jumpReleased: overrides.jumpReleased ?? false,
     shoot: overrides.shoot ?? false,
     shootTargetX: overrides.shootTargetX ?? 0,
     shootTargetY: overrides.shootTargetY ?? 0,
@@ -60,7 +62,6 @@ export function createTestPlayer(
     wallSliding: overrides.wallSliding ?? false,
     wallDirX: overrides.wallDirX ?? 0,
     timeToWallUnstick: overrides.timeToWallUnstick ?? 0,
-    jumpWasPressedLastFrame: overrides.jumpWasPressedLastFrame ?? false,
     coyoteTimeCounter: overrides.coyoteTimeCounter ?? 0,
     jumpBufferCounter: overrides.jumpBufferCounter ?? 0,
   };

@@ -4,15 +4,13 @@
  */
 
 import { InputBuffer } from "../client/input-buffer.js";
-import { Interpolator } from "../client/interpolation.js";
 import type { PredictionScope } from "../client/prediction-scope.js";
 import { Predictor } from "../client/prediction.js";
 import { Reconciler } from "../client/reconciliation.js";
 import {
-  VisualSmoother,
-  type VisualSmootherConfig,
-  DEFAULT_VISUAL_SMOOTHER_CONFIG,
-} from "../client/visual-smoother.js";
+  TickSmoother,
+  type TickSmootherConfig,
+} from "../client/tick-smoother.js";
 import { DEFAULT_TICK_INTERVAL_MS } from "../constants.js";
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
 import type { InputMerger, InterpolateFunction, Snapshot } from "../core/types.js";
@@ -25,24 +23,31 @@ import {
 import type { ClientStrategy, ServerStrategy } from "./types.js";
 
 /**
- * Configuration for visual smoothing in the client strategy.
+ * Configuration for tick-based smoothing in the client strategy.
  */
-export interface VisualSmoothingConfig {
-  /** Enable visual smoothing (default: true) */
-  enabled: boolean;
-  /** Smoothing factor (default: 0.9) */
-  smoothFactor?: number;
-  /** Snap threshold for large corrections (default: 50) */
-  snapThreshold?: number;
+export interface SmoothingConfig {
+  /** Interpolation ticks for local player (default: 1) */
+  ownerInterpolationTicks?: number;
+  /** Interpolation ticks for remote players - not yet used (default: 2) */
+  spectatorInterpolationTicks?: number;
+  /** Maximum entries over target before discarding (default: 3) */
+  maxOverBuffer?: number;
 }
 
 /**
  * Client-side server-authoritative strategy.
- * Handles prediction, reconciliation, interpolation, and visual smoothing.
+ * Handles prediction, reconciliation, and FishNet-style tick smoothing.
  *
- * Uses a fixed tick interval for prediction and reconciliation to match
- * server simulation exactly, ensuring smooth gameplay with minimal corrections.
- * Visual smoothing blends any remaining corrections over multiple frames.
+ * The smoothing approach for the local player:
+ * 1. Physics state updates immediately from prediction (instant response)
+ * 2. When server snapshot arrives and reconciliation causes a position change,
+ *    we track the "correction offset" (difference from before/after reconciliation)
+ * 3. The visual position smoothly reduces this offset over time
+ *
+ * This ensures:
+ * - Input response is instant (no input lag from smoothing)
+ * - Server corrections are smooth (no visible snapping)
+ * - With 0ms latency, there should be no smoothing needed at all
  */
 export class ServerAuthoritativeClient<
   TWorld,
@@ -51,10 +56,9 @@ export class ServerAuthoritativeClient<
   private inputBuffer: InputBuffer<TInput>;
   private predictor: Predictor<TWorld, TInput>;
   private reconciler: Reconciler<TWorld, TInput> | null = null;
-  private interpolator: Interpolator<TWorld>;
+  private tickSmoother: TickSmoother;
   private predictionScope: PredictionScope<TWorld, TInput>;
-  private visualSmoother: VisualSmoother;
-  private visualSmoothingEnabled: boolean;
+  private interpolate: InterpolateFunction<TWorld>;
   private playerId: string | null = null;
   private lastServerState: TWorld | null = null;
   private lastServerSnapshot: Snapshot<TWorld> | null = null;
@@ -63,42 +67,46 @@ export class ServerAuthoritativeClient<
   private tickIntervalMs: number;
   private lastRenderTime: number = 0;
 
+  /**
+   * Visual offset for smoothing reconciliation corrections.
+   * This is the difference between where the player WAS visually
+   * and where they ARE after reconciliation.
+   */
+  private visualOffsetX: number = 0;
+  private visualOffsetY: number = 0;
+
+  /** Position before reconciliation (for calculating correction offset) */
+  private preReconcileX: number = 0;
+  private preReconcileY: number = 0;
+
   constructor(
     predictionScope: PredictionScope<TWorld, TInput>,
     interpolate: InterpolateFunction<TWorld>,
-    interpolationDelayMs: number,
     tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
-    visualSmoothing?: VisualSmoothingConfig,
+    smoothingConfig?: SmoothingConfig,
   ) {
     this.predictionScope = predictionScope;
+    this.interpolate = interpolate;
     this.tickIntervalMs = tickIntervalMs;
     this.inputBuffer = new InputBuffer<TInput>();
     this.predictor = new Predictor<TWorld, TInput>(predictionScope, tickIntervalMs);
-    this.interpolator = new Interpolator<TWorld>(interpolate, interpolationDelayMs);
 
-    // Visual smoothing configuration
-    // Only enable if the prediction scope supports position extraction
-    const canSmooth = !!predictionScope.getLocalPlayerPosition && !!predictionScope.applyVisualOffset;
-    this.visualSmoothingEnabled = canSmooth && (visualSmoothing?.enabled ?? true);
-    
-    const smootherConfig: Partial<VisualSmootherConfig> = {};
-    if (visualSmoothing?.smoothFactor !== undefined) {
-      smootherConfig.smoothFactor = visualSmoothing.smoothFactor;
-    }
-    if (visualSmoothing?.snapThreshold !== undefined) {
-      smootherConfig.snapThreshold = visualSmoothing.snapThreshold;
-    }
-    this.visualSmoother = new VisualSmoother(smootherConfig);
+    // Configure FishNet-style tick smoothing (used for offset decay)
+    const smootherConfig: Partial<TickSmootherConfig> = {
+      tickIntervalMs,
+      ownerInterpolationTicks: smoothingConfig?.ownerInterpolationTicks ?? 1,
+      spectatorInterpolationTicks: smoothingConfig?.spectatorInterpolationTicks ?? 2,
+      maxOverBuffer: smoothingConfig?.maxOverBuffer ?? 3,
+    };
+    this.tickSmoother = new TickSmoother(smootherConfig);
   }
 
   onLocalInput(input: TInput): void {
     // Add to input buffer (seq returned but not needed here)
     this.inputBuffer.add(input);
 
-    // Apply prediction locally
+    // Apply prediction locally - this is instant, no smoothing
     this.predictor.applyInput(input);
-
-    // Return seq for sending to server (caller handles network)
   }
 
   /**
@@ -112,41 +120,62 @@ export class ServerAuthoritativeClient<
   onSnapshot(snapshot: Snapshot<TWorld>): void {
     // Detect world reset by checking for level ID change (more reliable than tick detection)
     const worldAny = snapshot.state as Record<string, unknown>;
-    const currentLevelId = typeof worldAny.levelId === 'string' ? worldAny.levelId : null;
-    const levelChanged = this.lastLevelId !== null && currentLevelId !== null && currentLevelId !== this.lastLevelId;
-    
+    const currentLevelId = typeof worldAny.levelId === "string" ? worldAny.levelId : null;
+    const levelChanged =
+      this.lastLevelId !== null && currentLevelId !== null && currentLevelId !== this.lastLevelId;
+
     // Also detect world reset by tick going backwards significantly (fallback for games without levelId)
     const tickWentBackwards = this.lastSnapshotTick >= 0 && snapshot.tick < this.lastSnapshotTick - 5;
-    
-    
+
     if (levelChanged || tickWentBackwards) {
-      // World was reset - clear prediction/interpolation state before processing
-      // This prevents replaying old inputs from the previous world onto the new world
+      // World was reset - clear prediction/smoothing state before processing
       this.inputBuffer.clear();
       this.predictor.reset();
-      this.interpolator.clear();
+      this.tickSmoother.clear();
+      this.visualOffsetX = 0;
+      this.visualOffsetY = 0;
     }
-    
+
     this.lastSnapshotTick = snapshot.tick;
     if (currentLevelId !== null) {
       this.lastLevelId = currentLevelId;
     }
 
-    // Store for interpolation
-    this.interpolator.addSnapshot(snapshot);
+    // Store server state
     this.lastServerState = snapshot.state;
     this.lastServerSnapshot = snapshot;
 
+    // Capture position BEFORE reconciliation
+    if (this.playerId && this.predictionScope.getLocalPlayerPosition) {
+      const predictedState = this.predictor.getState();
+      if (predictedState) {
+        const posBefore = this.predictionScope.getLocalPlayerPosition(predictedState, this.playerId);
+        if (posBefore) {
+          this.preReconcileX = posBefore.x + this.visualOffsetX;
+          this.preReconcileY = posBefore.y + this.visualOffsetY;
+        }
+      }
+    }
+
     // Reconcile if we have a player ID
     if (this.playerId && this.reconciler) {
-      const result = this.reconciler.reconcile(snapshot);
-      
-      // Feed position delta to visual smoother
-      if (this.visualSmoothingEnabled && result.positionDelta) {
-        this.visualSmoother.onReconciliationSnap(
-          result.positionDelta.x,
-          result.positionDelta.y,
-        );
+      this.reconciler.reconcile(snapshot);
+
+      // Capture position AFTER reconciliation
+      if (this.predictionScope.getLocalPlayerPosition) {
+        const predictedState = this.predictor.getState();
+        if (predictedState) {
+          const posAfter = this.predictionScope.getLocalPlayerPosition(predictedState, this.playerId);
+          if (posAfter) {
+            // Calculate the correction that reconciliation caused
+            const correctionX = this.preReconcileX - posAfter.x;
+            const correctionY = this.preReconcileY - posAfter.y;
+
+            // Add to visual offset (this is what we'll smooth out)
+            this.visualOffsetX = correctionX;
+            this.visualOffsetY = correctionY;
+          }
+        }
       }
     }
   }
@@ -159,40 +188,43 @@ export class ServerAuthoritativeClient<
   }
 
   getStateForRendering(): TWorld | null {
-    // Update visual smoother with frame delta
+    // Calculate frame delta
     const now = performance.now();
-    if (this.lastRenderTime > 0) {
-      const deltaMs = now - this.lastRenderTime;
-      this.visualSmoother.update(deltaMs);
-    }
+    const deltaMs = this.lastRenderTime > 0 ? now - this.lastRenderTime : this.tickIntervalMs;
     this.lastRenderTime = now;
 
-    // Get interpolated state for other players
-    const interpolatedState = this.interpolator.getInterpolatedState();
-    if (!interpolatedState) {
-      return this.lastServerState;
+    // If no server state yet, nothing to render
+    if (!this.lastServerState) {
+      return null;
     }
 
-    // Merge with local prediction
-    let result: TWorld;
+    // Get the physics state (prediction merged with server state)
+    let physicsState: TWorld;
     if (this.predictor.getState()) {
-      result = this.predictor.mergeWithServer(interpolatedState);
+      physicsState = this.predictor.mergeWithServer(this.lastServerState);
     } else {
-      result = interpolatedState;
+      physicsState = this.lastServerState;
     }
 
-    // Apply visual smoothing offset to local player
-    if (
-      this.visualSmoothingEnabled &&
-      this.playerId &&
-      this.visualSmoother.hasOffset() &&
-      this.predictionScope.applyVisualOffset
-    ) {
-      const offset = this.visualSmoother.getOffset();
-      result = this.predictionScope.applyVisualOffset(result, this.playerId, offset.x, offset.y);
+    // Decay visual offset toward zero (smooth out reconciliation corrections)
+    if (Math.abs(this.visualOffsetX) > 0.001 || Math.abs(this.visualOffsetY) > 0.001) {
+      // Decay rate: reduce offset by ~90% per tick duration
+      // This means corrections are smoothed out over roughly 1-2 ticks
+      const decayFactor = Math.pow(0.1, deltaMs / this.tickIntervalMs);
+      this.visualOffsetX *= decayFactor;
+      this.visualOffsetY *= decayFactor;
+
+      // Snap to zero if very small
+      if (Math.abs(this.visualOffsetX) < 0.01) this.visualOffsetX = 0;
+      if (Math.abs(this.visualOffsetY) < 0.01) this.visualOffsetY = 0;
+
+      // Apply offset to physics state for rendering
+      if (this.playerId && (this.visualOffsetX !== 0 || this.visualOffsetY !== 0)) {
+        return this.applyPositionOffset(physicsState, this.playerId, this.visualOffsetX, this.visualOffsetY);
+      }
     }
 
-    return result;
+    return physicsState;
   }
 
   getLocalPlayerId(): string | null {
@@ -209,16 +241,18 @@ export class ServerAuthoritativeClient<
       playerId,
       this.tickIntervalMs,
     );
+    this.tickSmoother.setIsOwner(true);
   }
 
   reset(): void {
     this.inputBuffer.clear();
     this.predictor.reset();
-    this.interpolator.clear();
-    this.visualSmoother.reset();
-    // Note: playerId and reconciler are preserved because they're tied to the 
+    this.tickSmoother.clear();
+    this.visualOffsetX = 0;
+    this.visualOffsetY = 0;
+    // Note: playerId and reconciler are preserved because they're tied to the
     // socket connection, not the game state. A reset (e.g., level change) should
-    // clear prediction/interpolation state but keep the player's identity.
+    // clear prediction/smoothing state but keep the player's identity.
     this.lastServerState = null;
     this.lastSnapshotTick = -1;
     this.lastLevelId = null;
@@ -230,6 +264,41 @@ export class ServerAuthoritativeClient<
    */
   getInputBuffer(): InputBuffer<TInput> {
     return this.inputBuffer;
+  }
+
+  /**
+   * Apply a position offset to a player in the world state.
+   * Creates a shallow copy of the world with the player's position adjusted.
+   */
+  private applyPositionOffset(world: TWorld, playerId: string, offsetX: number, offsetY: number): TWorld {
+    // This is a generic implementation that works with our standard world structure
+    // Games can provide their own implementation via PredictionScope if needed
+    const worldAny = world as Record<string, unknown>;
+
+    if (worldAny.players instanceof Map) {
+      const players = worldAny.players as Map<string, { position?: { x: number; y: number } }>;
+      const player = players.get(playerId);
+
+      if (player?.position) {
+        // Create new player with offset position
+        const newPlayer = {
+          ...player,
+          position: {
+            x: player.position.x + offsetX,
+            y: player.position.y + offsetY,
+          },
+        };
+
+        // Create new players map
+        const newPlayers = new Map(players);
+        newPlayers.set(playerId, newPlayer);
+
+        // Return new world with updated players
+        return { ...world, players: newPlayers } as TWorld;
+      }
+    }
+
+    return world;
   }
 }
 
@@ -272,10 +341,7 @@ export class ServerAuthoritativeServer<
   private mergeInputs: InputMerger<TInput>;
   private createIdleInput: () => TInput;
 
-  constructor(
-    worldManager: WorldManager<TWorld>,
-    config: ServerAuthoritativeServerConfig<TWorld, TInput>,
-  ) {
+  constructor(worldManager: WorldManager<TWorld>, config: ServerAuthoritativeServerConfig<TWorld, TInput>) {
     this.worldManager = worldManager;
     this.inputQueue = new InputQueue<TInput>();
     this.snapshotBuffer = new SnapshotBuffer<TWorld>(config.snapshotHistorySize);
@@ -288,9 +354,7 @@ export class ServerAuthoritativeServer<
       config.mergeInputs ??
       ((inputs: TInput[]) => {
         if (inputs.length === 0) {
-          throw new Error(
-            "mergeInputs called with empty array - provide a custom merger that handles idle inputs",
-          );
+          throw new Error("mergeInputs called with empty array - provide a custom merger that handles idle inputs");
         }
         // Safe: we just checked length > 0
         return inputs.at(-1) as TInput;
@@ -352,11 +416,7 @@ export class ServerAuthoritativeServer<
       createIdleInput: this.createIdleInput,
     };
 
-    const updatedWorld = processTickInputs(
-      currentWorld,
-      batchedInputs,
-      tickConfig,
-    );
+    const updatedWorld = processTickInputs(currentWorld, batchedInputs, tickConfig);
 
     this.worldManager.setState(updatedWorld);
     this.worldManager.incrementTick();
@@ -380,13 +440,13 @@ export class ServerAuthoritativeServer<
   setWorldState(world: TWorld): void {
     // Start with the new world state
     let newWorld = world;
-    
+
     // Re-add all connected players to the new world
     // This ensures players persist across level changes
     for (const clientId of this.connectedClients) {
       newWorld = this.addPlayerToWorld(newWorld, clientId);
     }
-    
+
     this.worldManager.setState(newWorld);
     // Clear snapshot buffer since world state changed drastically
     this.snapshotBuffer.clear();

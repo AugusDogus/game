@@ -22,10 +22,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -269,12 +273,12 @@ describe("GameLoop", () => {
       const now = Date.now();
       inputQueue.enqueue("player-1", {
         seq: 0,
-        input: createInput(0, 0, true, now), // Jump pressed
+        input: createInput(0, 0, true, now, true), // Jump pressed (jumpPressed: true)
         timestamp: now,
       });
       inputQueue.enqueue("player-1", {
         seq: 1,
-        input: createInput(0, 0, false, now + 16), // Jump released
+        input: createInput(0, 0, false, now + 16, false, true), // Jump released (jumpReleased: true)
         timestamp: now + 16,
       });
 

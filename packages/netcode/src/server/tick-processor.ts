@@ -61,8 +61,9 @@ export function processTickInputs<TWorld, TInput>(
     // Gather the i-th input from each client (or idle if they don't have one)
     for (const clientId of config.getConnectedClients()) {
       const clientInputs = batchedInputs.get(clientId);
-      if (clientInputs && i < clientInputs.length) {
-        inputsThisStep.set(clientId, clientInputs[i].input);
+      const inputAtIndex = clientInputs?.[i];
+      if (inputAtIndex) {
+        inputsThisStep.set(clientId, inputAtIndex.input);
       } else {
         inputsThisStep.set(clientId, config.createIdleInput());
       }

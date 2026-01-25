@@ -5,14 +5,13 @@ import type { PredictionScope } from "./prediction-scope.js";
 import type { Predictor } from "./prediction.js";
 
 /**
- * Result of a reconciliation operation, including position delta for visual smoothing.
+ * Callback invoked during reconciliation replay for each replayed tick.
+ * Used by tick-based smoothing to ease-in corrections to buffered positions.
+ *
+ * @param tick - The tick number being replayed
+ * @param state - The predicted state after applying the input for this tick
  */
-export interface ReconciliationResult<TWorld> {
-  /** The merged world state for rendering */
-  world: TWorld;
-  /** Position delta (oldPos - newPos) for visual smoothing, null if position tracking unavailable */
-  positionDelta: { x: number; y: number } | null;
-}
+export type ReconciliationReplayCallback<TWorld> = (tick: number, state: Partial<TWorld>) => void;
 
 /**
  * Handles server reconciliation by syncing server state and replaying unacknowledged inputs.
@@ -21,79 +20,79 @@ export interface ReconciliationResult<TWorld> {
  * Replays inputs using the fixed tick interval to match server simulation exactly.
  * This ensures reconciliation produces the same state as the server,
  * minimizing visible snapping and providing smooth gameplay.
+ *
+ * The replay callback allows external systems (like TickSmoother) to receive
+ * corrected positions during replay for ease-in smoothing.
  */
 export class Reconciler<TWorld, TInput extends { timestamp: number }> {
   private inputBuffer: InputBuffer<TInput>;
   private predictor: Predictor<TWorld, TInput>;
-  private predictionScope: PredictionScope<TWorld, TInput>;
   private playerId: string;
   private tickIntervalMs: number;
+  private onReplayCallback: ReconciliationReplayCallback<TWorld> | null = null;
 
   constructor(
     inputBuffer: InputBuffer<TInput>,
     predictor: Predictor<TWorld, TInput>,
-    predictionScope: PredictionScope<TWorld, TInput>,
+    _predictionScope: PredictionScope<TWorld, TInput>, // Kept for API compatibility
     playerId: string,
     tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
   ) {
     this.inputBuffer = inputBuffer;
     this.predictor = predictor;
-    this.predictionScope = predictionScope;
     this.playerId = playerId;
     this.tickIntervalMs = tickIntervalMs;
   }
 
   /**
-   * Reconcile server state with local prediction.
-   * Returns the merged world state for rendering and position delta for visual smoothing.
+   * Set a callback to be invoked during replay for each tick.
+   * Used by tick-based smoothing to ease-in corrections.
+   *
+   * @param callback - Function called with (tick, state) for each replayed input
    */
-  reconcile(snapshot: Snapshot<TWorld>): ReconciliationResult<TWorld> {
+  setReplayCallback(callback: ReconciliationReplayCallback<TWorld> | null): void {
+    this.onReplayCallback = callback;
+  }
+
+  /**
+   * Reconcile server state with local prediction.
+   *
+   * 1. Acknowledges inputs that the server has processed
+   * 2. Sets the predictor base state to the server's authoritative state
+   * 3. Replays all unacknowledged inputs to rebuild the predicted state
+   * 4. Calls the replay callback for each replayed tick (for smoothing)
+   *
+   * @param snapshot - Server snapshot containing authoritative state and input acks
+   */
+  reconcile(snapshot: Snapshot<TWorld>): void {
     // Get the last processed sequence number for this player
     const lastProcessedSeq = snapshot.inputAcks.get(this.playerId) ?? -1;
 
     // Remove acknowledged inputs from buffer
     this.inputBuffer.acknowledge(lastProcessedSeq);
 
-    // Capture position BEFORE reconciliation (for visual smoothing)
-    let positionBefore: { x: number; y: number } | null = null;
-    const predictedState = this.predictor.getState();
-    if (predictedState && this.predictionScope.getLocalPlayerPosition) {
-      positionBefore = this.predictionScope.getLocalPlayerPosition(predictedState, this.playerId);
-    }
-
     // Set base state from server's authoritative world state
     this.predictor.setBaseState(snapshot.state, this.playerId);
 
-    // Replay all unacknowledged inputs with their original timestamp deltas
-    // This ensures reconciliation produces the same state as prediction did
+    // Replay all unacknowledged inputs
     const unacknowledged = this.inputBuffer.getUnacknowledged(lastProcessedSeq);
 
     // Replay each unacknowledged input with the server's fixed tick delta
     // The server processes each input with a separate simulation call
     // using the fixed tick interval, so reconciliation must match this behavior
+    let replayTick = snapshot.tick;
     for (const inputMsg of unacknowledged) {
+      replayTick++;
       this.predictor.applyInputWithDelta(inputMsg.input, this.tickIntervalMs);
-    }
 
-    // Capture position AFTER reconciliation
-    let positionDelta: { x: number; y: number } | null = null;
-    const newPredictedState = this.predictor.getState();
-    if (positionBefore && newPredictedState && this.predictionScope.getLocalPlayerPosition) {
-      const positionAfter = this.predictionScope.getLocalPlayerPosition(newPredictedState, this.playerId);
-      if (positionAfter) {
-        // Delta = old position - new position (vector from new back to old)
-        positionDelta = {
-          x: positionBefore.x - positionAfter.x,
-          y: positionBefore.y - positionAfter.y,
-        };
+      // Notify smoother to ease-in the corrected state at this tick
+      if (this.onReplayCallback) {
+        const currentState = this.predictor.getState();
+        if (currentState) {
+          this.onReplayCallback(replayTick, currentState);
+        }
       }
     }
-
-    // Return merged state (server world + local predictions) and position delta
-    return {
-      world: this.predictor.mergeWithServer(snapshot.state),
-      positionDelta,
-    };
   }
 
   /**

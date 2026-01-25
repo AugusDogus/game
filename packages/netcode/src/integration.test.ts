@@ -43,10 +43,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -308,8 +312,8 @@ describe("Client-Server Integration", () => {
 
     predictor.setBaseState(serverWorld, PLAYER_ID);
 
-    // Single jump input
-    const input = createInput(0, 0, true, 1000);
+    // Single jump input with jumpPressed: true
+    const input = createInput(0, 0, true, 1000, true);
     predictor.applyInput(input);
     inputQueue.enqueue(PLAYER_ID, { seq: 0, input, timestamp: input.timestamp });
 
@@ -454,7 +458,7 @@ describe("Client-Server Integration", () => {
 
     // Multiple inputs including a jump in the middle
     inputQueue.enqueue(PLAYER_ID, { seq: 0, input: createInput(1, 0, false, 1000), timestamp: 1000 });
-    inputQueue.enqueue(PLAYER_ID, { seq: 1, input: createInput(1, 0, true, 1016), timestamp: 1016 }); // Jump!
+    inputQueue.enqueue(PLAYER_ID, { seq: 1, input: createInput(1, 0, true, 1016, true), timestamp: 1016 }); // Jump pressed!
     inputQueue.enqueue(PLAYER_ID, { seq: 2, input: createInput(1, 0, false, 1033), timestamp: 1033 });
 
     const { world: newServerWorld } = serverTick(serverWorld, inputQueue, connectedClients);
@@ -472,10 +476,14 @@ describe("Scale Tests", () => {
     moveY: number,
     jump: boolean,
     timestamp: number,
+    jumpPressed: boolean = false,
+    jumpReleased: boolean = false,
   ): PlatformerInput => ({
     moveX,
     moveY,
     jump,
+    jumpPressed,
+    jumpReleased,
     shoot: false,
     shootTargetX: 0,
     shootTargetY: 0,
@@ -610,6 +618,8 @@ describe("Player Disconnect Tests", () => {
     moveX,
     moveY,
     jump,
+    jumpPressed: false,
+    jumpReleased: false,
     shoot: false,
     shootTargetX: 0,
     shootTargetY: 0,

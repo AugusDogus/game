@@ -485,7 +485,6 @@ function simulatePlayer(
     wallSliding: player.wallSliding,
     wallDirX: player.wallDirX,
     timeToWallUnstick: player.timeToWallUnstick,
-    jumpWasPressedLastFrame: player.jumpWasPressedLastFrame,
     jumpHeld: input.jump,
     coyoteTimeCounter: player.coyoteTimeCounter,
     jumpBufferCounter: player.jumpBufferCounter,
@@ -510,10 +509,12 @@ function simulatePlayer(
     moveX: input.moveX,
     moveY: 0,
     jump: input.jump,
+    jumpPressed: input.jumpPressed,
+    jumpReleased: input.jumpReleased,
   };
 
-  // Air jump logic
-  if (input.jump && !wasGrounded && !player.jumpWasPressedLastFrame && extraJumpsRemaining > 0) {
+  // Air jump logic - use jumpPressed from input (client-side edge detection)
+  if (input.jumpPressed && !wasGrounded && extraJumpsRemaining > 0) {
     // Consume an extra jump
     extraJumpsRemaining--;
     // Apply jump velocity - create new velocity object since Vector2 is readonly
@@ -549,7 +550,6 @@ function simulatePlayer(
     wallSliding: newState.wallSliding,
     wallDirX: newState.wallDirX,
     timeToWallUnstick: newState.timeToWallUnstick,
-    jumpWasPressedLastFrame: newState.jumpWasPressedLastFrame,
     coyoteTimeCounter: newState.coyoteTimeCounter,
     jumpBufferCounter: newState.jumpBufferCounter,
     invulnerabilityTicks,

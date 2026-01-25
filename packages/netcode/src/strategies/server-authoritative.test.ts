@@ -22,10 +22,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -127,7 +131,7 @@ describe("ServerAuthoritativeClient", () => {
       // Add some inputs that would normally be replayed
       const input1 = createInput(1, 0, false, Date.now());
       client.onLocalInput(input1);
-      const input2 = createInput(1, 0, true, Date.now() + 16);
+      const input2 = createInput(1, 0, true, Date.now() + 16, true); // jumpPressed: true
       client.onLocalInput(input2);
 
       // Verify inputs are in buffer
@@ -371,8 +375,8 @@ describe("ServerAuthoritativeServer", () => {
 
       // Player presses jump, then releases before next tick
       const now = Date.now();
-      server.onClientInput("player-1", createInput(0, 0, true, now), 0);
-      server.onClientInput("player-1", createInput(0, 0, false, now + 16), 1);
+      server.onClientInput("player-1", createInput(0, 0, true, now, true), 0); // jumpPressed: true
+      server.onClientInput("player-1", createInput(0, 0, false, now + 16, false, true), 1); // jumpReleased: true
 
       server.tick();
 

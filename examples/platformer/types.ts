@@ -19,8 +19,12 @@ export interface PlatformerInput {
    * but kept for API compatibility and potential future use (e.g., vertical movement in 3D platformers)
    */
   moveY: number;
-  /** Whether jump was pressed */
+  /** Whether jump is currently held */
   jump: boolean;
+  /** Rising edge: jump was just pressed this sample */
+  jumpPressed: boolean;
+  /** Falling edge: jump was just released this sample */
+  jumpReleased: boolean;
   /** Whether shoot was pressed this frame */
   shoot: boolean;
   /** Target X position for shooting (in world coordinates) */
@@ -187,8 +191,6 @@ export interface PlatformerPlayer {
   wallDirX: -1 | 0 | 1;
   /** Time remaining before player can leave wall (wall stick) */
   timeToWallUnstick: number;
-  /** Whether jump was pressed last frame (for detecting press edge) */
-  jumpWasPressedLastFrame: boolean;
   /** Time remaining where jump is still allowed after leaving ground (coyote time) */
   coyoteTimeCounter: number;
   /** Time remaining for buffered jump to execute */
@@ -284,7 +286,6 @@ export function createPlatformerPlayer(
     wallSliding: false,
     wallDirX: 0,
     timeToWallUnstick: 0,
-    jumpWasPressedLastFrame: false,
     coyoteTimeCounter: 0,
     jumpBufferCounter: 0,
   };
@@ -299,6 +300,8 @@ export function createIdleInput(timestamp?: number): PlatformerInput {
     moveX: 0,
     moveY: 0,
     jump: false,
+    jumpPressed: false,
+    jumpReleased: false,
     shoot: false,
     shootTargetX: 0,
     shootTargetY: 0,

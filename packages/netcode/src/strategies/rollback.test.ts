@@ -22,6 +22,8 @@ const createInput = (
   moveX,
   moveY,
   jump,
+  jumpPressed: false,
+  jumpReleased: false,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,

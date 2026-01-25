@@ -5,7 +5,7 @@
  */
 
 import type { Server, Socket } from "socket.io";
-import { DEFAULT_INTERPOLATION_DELAY_MS, DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE } from "./constants.js";
+import { DEFAULT_INTERPOLATION_TICKS, DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE, DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
 import type { ActionMessage, ActionResult, ActionValidator, GameDefinition, InputMerger, SimulateFunction } from "./core/types.js";
 import { DefaultWorldManager } from "./core/world.js";
 import { ActionQueue } from "./server/action-queue.js";
@@ -51,10 +51,11 @@ interface ServerConfigBase<
    */
   maxRewindMs?: number;
   /**
-   * Interpolation delay used by clients (must match client config).
-   * Default: DEFAULT_INTERPOLATION_DELAY_MS (100ms)
+   * Interpolation ticks used by clients (must match client config).
+   * Used for lag compensation calculations.
+   * Default: DEFAULT_INTERPOLATION_TICKS (2 ticks)
    */
-  interpolationDelayMs?: number;
+  interpolationTicks?: number;
   /**
    * Called when an action is validated (for logging/debugging).
    * @param clientId - The client who performed the action
@@ -280,10 +281,14 @@ export function createServer<
   const strategy = new ServerAuthoritativeServer<TWorld, TInput>(worldManager, serverConfig);
 
   // Lag compensation (only if validateAction is provided)
+  // Convert interpolation ticks to milliseconds for lag compensation
+  const interpolationTicks = config.interpolationTicks ?? DEFAULT_INTERPOLATION_TICKS;
+  const interpolationDelayMs = interpolationTicks * tickIntervalMs;
+  
   const lagCompensator = config.validateAction
     ? new LagCompensator<TWorld>(strategy.getSnapshotBuffer(), {
         maxRewindMs: config.maxRewindMs ?? 200,
-        interpolationDelayMs: config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS,
+        interpolationDelayMs,
       })
     : null;
 

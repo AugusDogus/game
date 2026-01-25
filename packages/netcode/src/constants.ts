@@ -17,10 +17,25 @@ export const DEFAULT_TICK_RATE = 60;
 export const DEFAULT_TICK_INTERVAL_MS = 1000 / DEFAULT_TICK_RATE; // ~16.67ms
 
 /**
- * Default interpolation delay: ~50ms (3 ticks behind at 60 TPS)
- * This ensures smooth rendering of other entities while minimizing perceived lag.
+ * Default interpolation ticks for the local player (owner).
+ * Lower value = less latency, relies more on client-side prediction.
+ * FishNet uses 1 tick for owners.
  */
-export const DEFAULT_INTERPOLATION_DELAY_MS = 50;
+export const DEFAULT_OWNER_INTERPOLATION_TICKS = 1;
+
+/**
+ * Default interpolation ticks for remote players (spectators).
+ * Higher value = more buffer, smoother rendering with network jitter.
+ * FishNet uses 2 ticks for spectators.
+ */
+export const DEFAULT_SPECTATOR_INTERPOLATION_TICKS = 2;
+
+/**
+ * Default interpolation buffer size in ticks.
+ * Used for lag compensation calculations on the server.
+ * @deprecated Use DEFAULT_SPECTATOR_INTERPOLATION_TICKS instead
+ */
+export const DEFAULT_INTERPOLATION_TICKS = DEFAULT_SPECTATOR_INTERPOLATION_TICKS;
 
 /**
  * Default snapshot history size: 180 snapshots

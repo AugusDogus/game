@@ -176,7 +176,7 @@ const playerHazardCollision = (playerAABB: AABB, hazard: Hazard): boolean => {
 
 /**
  * Merge multiple platformer inputs into one.
- * Uses the last input for movement, but preserves jump if ANY input had it.
+ * Uses the last input for movement, but preserves jump edges if ANY input had them.
  * This prevents missed jumps when multiple inputs arrive in one tick.
  */
 export const mergePlatformerInputs: InputMerger<PlatformerInput> = (
@@ -188,11 +188,16 @@ export const mergePlatformerInputs: InputMerger<PlatformerInput> = (
 
   // Safe to use at() here since we checked length > 0 above
   const lastInput = inputs.at(-1) as PlatformerInput;
+  // Preserve jump state and edges if ANY input had them
   const anyJump = inputs.some((input) => input.jump);
+  const anyJumpPressed = inputs.some((input) => input.jumpPressed);
+  const anyJumpReleased = inputs.some((input) => input.jumpReleased);
 
   return {
     ...lastInput,
     jump: anyJump,
+    jumpPressed: anyJumpPressed,
+    jumpReleased: anyJumpReleased,
   };
 };
 
@@ -385,7 +390,6 @@ function simulatePlayerWithSupport(
     wallSliding: player.wallSliding,
     wallDirX: player.wallDirX,
     timeToWallUnstick: player.timeToWallUnstick,
-    jumpWasPressedLastFrame: player.jumpWasPressedLastFrame,
     jumpHeld: input.jump,
     coyoteTimeCounter: player.coyoteTimeCounter,
     jumpBufferCounter: player.jumpBufferCounter,
@@ -416,8 +420,8 @@ function simulatePlayerWithSupport(
   // Note: isSupported was for jump INPUT, not for the output grounded state
   let isGrounded = controller.collisions.below;
 
-  // If supported by another player, snap to their top
-  if (isSupported && !newState.jumpWasPressedLastFrame) {
+  // If supported by another player, snap to their top (but not if player is jumping)
+  if (isSupported && !input.jumpPressed) {
     for (const [, other] of otherPlayers) {
       if (!isPlayerAlive(other)) continue;
       const aBottom = newY - PLAYER_HEIGHT / 2;
@@ -505,7 +509,6 @@ function simulatePlayerWithSupport(
     wallSliding: newState.wallSliding,
     wallDirX: newState.wallDirX,
     timeToWallUnstick: newState.timeToWallUnstick,
-    jumpWasPressedLastFrame: newState.jumpWasPressedLastFrame,
     coyoteTimeCounter: newState.coyoteTimeCounter,
     jumpBufferCounter: newState.jumpBufferCounter,
   };

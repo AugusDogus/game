@@ -20,10 +20,14 @@ const createInput = (
   moveY: number,
   jump: boolean,
   timestamp: number,
+  jumpPressed: boolean = false,
+  jumpReleased: boolean = false,
 ): PlatformerInput => ({
   moveX,
   moveY,
   jump,
+  jumpPressed,
+  jumpReleased,
   shoot: false,
   shootTargetX: 0,
   shootTargetY: 0,
@@ -182,7 +186,7 @@ describe("simulatePlatformer", () => {
         true,
       );
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", createInput(0, 0, true, Date.now())],
+        ["player-1", createInput(0, 0, true, Date.now(), true)], // jumpPressed: true
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -198,7 +202,7 @@ describe("simulatePlatformer", () => {
       // Expected: velocity.y = -50 + (-800 * 0.05) = -90 (no jump, just gravity)
       const world = createWorldWithPlayer("player-1", { x: 0, y: 100 }, { x: 0, y: -50 }, false);
       const inputs = new Map<string, PlatformerInput>([
-        ["player-1", createInput(0, 0, true, Date.now())],
+        ["player-1", createInput(0, 0, true, Date.now(), true)], // jumpPressed: true but not grounded
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -225,7 +229,7 @@ describe("simulatePlatformer", () => {
 
       const inputs = new Map<string, PlatformerInput>([
         ["player-1", createInput(1, 0, false, Date.now())],
-        ["player-2", createInput(-1, 0, true, Date.now())],
+        ["player-2", createInput(-1, 0, true, Date.now(), true)], // jumpPressed: true
       ]);
 
       const newWorld = simulatePlatformer(world, inputs, 50);
@@ -501,7 +505,7 @@ describe("mergePlatformerInputs", () => {
 
   test("should preserve jump if any input had it", () => {
     const inputs: PlatformerInput[] = [
-      createInput(0, 0, true, 1000),
+      createInput(0, 0, true, 1000, true), // jumpPressed: true
       createInput(0, 0, false, 1016),
       createInput(0, 0, false, 1032),
     ];
@@ -509,6 +513,7 @@ describe("mergePlatformerInputs", () => {
     const merged = mergePlatformerInputs(inputs);
 
     expect(merged.jump).toBe(true);
+    expect(merged.jumpPressed).toBe(true);
   });
 
   test("should not set jump if no input had it", () => {
@@ -526,13 +531,15 @@ describe("mergePlatformerInputs", () => {
     // Player taps jump briefly - might be released before next server tick
     const inputs: PlatformerInput[] = [
       createInput(0, 0, false, 1000),
-      createInput(0, 0, true, 1016), // Jump pressed
-      createInput(0, 0, false, 1032), // Jump released
+      createInput(0, 0, true, 1016, true), // Jump pressed (jumpPressed: true)
+      createInput(0, 0, false, 1032, false, true), // Jump released (jumpReleased: true)
     ];
 
     const merged = mergePlatformerInputs(inputs);
 
     // Jump should still register
     expect(merged.jump).toBe(true);
+    expect(merged.jumpPressed).toBe(true);
+    expect(merged.jumpReleased).toBe(true);
   });
 });

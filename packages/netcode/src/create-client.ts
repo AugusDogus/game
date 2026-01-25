@@ -6,32 +6,25 @@
 
 import type { Socket } from "socket.io-client";
 import type { PredictionScope } from "./client/prediction-scope.js";
-import { DEFAULT_INTERPOLATION_DELAY_MS, DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
+import { DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
 import type { ActionResult, GameDefinition, InterpolateFunction, Snapshot } from "./core/types.js";
-import { ServerAuthoritativeClient, type VisualSmoothingConfig } from "./strategies/server-authoritative.js";
+import { ServerAuthoritativeClient, type SmoothingConfig } from "./strategies/server-authoritative.js";
 
 /**
  * Base configuration shared by all client config variants.
  */
-interface ClientConfigBase<
-  TWorld,
-  _TInput extends { timestamp: number },
-  TActionResult = unknown,
-> {
+interface ClientConfigBase<TWorld, _TInput extends { timestamp: number }, TActionResult = unknown> {
   /** Socket.IO client socket instance */
   socket: Socket;
-  /** How far behind real-time to render other players (default: 50ms at 60 TPS). Higher = smoother but more delay. */
-  interpolationDelayMs?: number;
   /** Server tick interval in milliseconds (default: ~16.67ms / 60 TPS). Must match server's tickIntervalMs for accurate prediction. */
   tickIntervalMs?: number;
   /** Artificial latency for testing netcode behavior (default: 0) */
   simulatedLatency?: number;
   /**
-   * Visual smoothing configuration for reconciliation corrections.
-   * Smooths small position corrections over multiple frames to prevent jitter.
-   * Requires PredictionScope to implement getLocalPlayerPosition and applyVisualOffset.
+   * FishNet-style tick smoothing configuration.
+   * Controls how the local player's graphical position is smoothed during reconciliation.
    */
-  visualSmoothing?: VisualSmoothingConfig;
+  smoothing?: SmoothingConfig;
   /** Called when a new world snapshot is received and processed */
   onWorldUpdate?: (state: TWorld) => void;
   /** Called when another player joins the game */
@@ -45,11 +38,8 @@ interface ClientConfigBase<
 /**
  * Client config using explicit function properties.
  */
-interface ClientConfigExplicit<
-  TWorld,
-  TInput extends { timestamp: number },
-  TActionResult = unknown,
-> extends ClientConfigBase<TWorld, TInput, TActionResult> {
+interface ClientConfigExplicit<TWorld, TInput extends { timestamp: number }, TActionResult = unknown>
+  extends ClientConfigBase<TWorld, TInput, TActionResult> {
   /** Defines how to predict and merge local player state. See {@link PredictionScope}. */
   predictionScope: PredictionScope<TWorld, TInput>;
   /** Function to interpolate between two world states for smooth rendering of other players */
@@ -61,11 +51,8 @@ interface ClientConfigExplicit<
 /**
  * Client config using a GameDefinition object.
  */
-interface ClientConfigWithGame<
-  TWorld,
-  TInput extends { timestamp: number },
-  TActionResult = unknown,
-> extends ClientConfigBase<TWorld, TInput, TActionResult> {
+interface ClientConfigWithGame<TWorld, TInput extends { timestamp: number }, TActionResult = unknown>
+  extends ClientConfigBase<TWorld, TInput, TActionResult> {
   /** Complete game definition providing interpolation and prediction scope */
   game: GameDefinition<TWorld, TInput>;
   /** Do not provide when using game definition */
@@ -84,11 +71,7 @@ interface ClientConfigWithGame<
  * @typeParam TInput - The type of player input (must include timestamp)
  * @typeParam TActionResult - The type of action results (optional)
  */
-export type ClientConfig<
-  TWorld,
-  TInput extends { timestamp: number },
-  TActionResult = unknown,
-> =
+export type ClientConfig<TWorld, TInput extends { timestamp: number }, TActionResult = unknown> =
   | ClientConfigExplicit<TWorld, TInput, TActionResult>
   | ClientConfigWithGame<TWorld, TInput, TActionResult>;
 
@@ -99,11 +82,7 @@ export type ClientConfig<
  * @typeParam TInput - The type of player input (must include timestamp)
  * @typeParam TAction - The type of discrete actions (optional, for lag compensation)
  */
-export interface ClientHandle<
-  TWorld,
-  TInput extends { timestamp: number },
-  TAction = unknown,
-> {
+export interface ClientHandle<TWorld, TInput extends { timestamp: number }, TAction = unknown> {
   /** Send player input to the server. Timestamp is added automatically. */
   sendInput(input: Omit<TInput, "timestamp">): void;
   /**
@@ -115,7 +94,7 @@ export interface ClientHandle<
    * @returns The sequence number assigned to this action
    */
   sendAction(action: TAction): number;
-  /** Get the current world state for rendering. Combines predicted local player with interpolated remote players. */
+  /** Get the current world state for rendering. Combines predicted local player with smoothed graphical position. */
   getStateForRendering(): TWorld | null;
   /** Get the last raw server snapshot (useful for debug visualization) */
   getLastServerSnapshot(): Snapshot<TWorld> | null;
@@ -125,10 +104,8 @@ export interface ClientHandle<
   setSimulatedLatency(latencyMs: number): void;
   /** Get current artificial latency setting */
   getSimulatedLatency(): number;
-  /** Reset all client state (prediction, interpolation, input buffer) */
+  /** Reset all client state (prediction, smoothing, input buffer) */
   reset(): void;
-  /** Get the interpolation delay used by this client (for calculating action timestamps) */
-  getInterpolationDelayMs(): number;
   /**
    * Clean up all socket event listeners.
    * Call this when unmounting the game or destroying the client to prevent memory leaks.
@@ -143,7 +120,7 @@ export interface ClientHandle<
  * - Predicts local player movement immediately for responsive gameplay
  * - Sends inputs to the server with timestamps
  * - Receives world snapshots and reconciles any mispredictions
- * - Interpolates other players between past snapshots for smooth rendering
+ * - Uses FishNet-style tick smoothing for smooth graphical rendering
  * - Sends discrete actions for lag-compensated validation
  *
  * @typeParam TWorld - The type of your game's world state
@@ -180,12 +157,7 @@ export interface ClientHandle<
  * client.sendAction({ type: 'attack', targetX: 100, targetY: 50 });
  * ```
  */
-export function createClient<
-  TWorld,
-  TInput extends { timestamp: number },
-  TAction = unknown,
-  TActionResult = unknown,
->(
+export function createClient<TWorld, TInput extends { timestamp: number }, TAction = unknown, TActionResult = unknown>(
   config: ClientConfig<TWorld, TInput, TActionResult>,
 ): ClientHandle<TWorld, TInput, TAction> {
   // Extract client logic from either explicit config or GameDefinition
@@ -199,18 +171,16 @@ export function createClient<
     throw new Error("[NetcodeClient] interpolate function is required (provide via config or game definition)");
   }
 
-  const interpolationDelayMs = config.interpolationDelayMs ?? DEFAULT_INTERPOLATION_DELAY_MS;
   const tickIntervalMs = config.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS;
   let simulatedLatency = config.simulatedLatency ?? 0;
   let actionSeq = 0;
 
-  // Create client strategy with visual smoothing
+  // Create client strategy with FishNet-style tick smoothing
   const strategy = new ServerAuthoritativeClient<TWorld, TInput>(
     predictionScope,
     interpolate,
-    interpolationDelayMs,
     tickIntervalMs,
-    config.visualSmoothing,
+    config.smoothing,
   );
 
   // Handle connection
@@ -362,10 +332,6 @@ export function createClient<
     reset() {
       strategy.reset();
       actionSeq = 0;
-    },
-
-    getInterpolationDelayMs() {
-      return interpolationDelayMs;
     },
 
     destroy() {

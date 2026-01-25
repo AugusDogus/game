@@ -63,6 +63,10 @@ export interface DerivedPhysics {
  *
  * This state is separate from the CharacterController's collision state.
  * It tracks movement-specific values that persist across frames.
+ *
+ * NOTE: Input edge detection (jumpPressed/jumpReleased) is handled client-side
+ * at input sampling time and passed through the input, not computed from state.
+ * This makes the simulation fully deterministic and replayable.
  */
 export interface PlayerMovementState {
   /** Current velocity */
@@ -75,8 +79,6 @@ export interface PlayerMovementState {
   wallDirX: -1 | 0 | 1;
   /** Time remaining before player can leave wall */
   timeToWallUnstick: number;
-  /** Whether jump was pressed last frame (for detecting press edge) */
-  jumpWasPressedLastFrame: boolean;
   /** Whether jump is currently being held */
   jumpHeld: boolean;
   /** Time remaining where jump is still allowed after leaving ground (coyote time) */
@@ -108,6 +110,10 @@ export interface PlatformerMovementInput {
   moveX: number;
   /** Vertical movement direction (-1 to 1), used for dropping through platforms */
   moveY: number;
-  /** Whether jump is pressed */
+  /** Whether jump is currently held */
   jump: boolean;
+  /** Rising edge: jump was just pressed this sample */
+  jumpPressed: boolean;
+  /** Falling edge: jump was just released this sample */
+  jumpReleased: boolean;
 }
