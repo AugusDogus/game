@@ -117,8 +117,9 @@ export class ServerAuthoritativeClient<
     this.inputBuffer.clear();
     this.predictor.reset();
     this.interpolator.clear();
-    this.playerId = null;
-    this.reconciler = null;
+    // Note: playerId and reconciler are preserved because they're tied to the 
+    // socket connection, not the game state. A reset (e.g., level change) should
+    // clear prediction/interpolation state but keep the player's identity.
     this.lastServerState = null;
   }
 
@@ -279,11 +280,22 @@ export class ServerAuthoritativeServer<
   }
 
   setWorldState(world: TWorld): void {
-    this.worldManager.setState(world);
+    // Start with the new world state
+    let newWorld = world;
+    
+    // Re-add all connected players to the new world
+    // This ensures players persist across level changes
+    for (const clientId of this.connectedClients) {
+      newWorld = this.addPlayerToWorld(newWorld, clientId);
+    }
+    
+    this.worldManager.setState(newWorld);
     // Clear snapshot buffer since world state changed drastically
     this.snapshotBuffer.clear();
     // Clear input queues since old inputs are no longer valid
     this.inputQueue.clear();
+    // Clear last input timestamps since we're starting fresh
+    this.lastInputTimestamps.clear();
   }
 
   createSnapshot(): Snapshot<TWorld> {

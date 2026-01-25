@@ -96,7 +96,7 @@ describe("ServerAuthoritativeClient", () => {
   });
 
   describe("reset", () => {
-    test("should clear all state", () => {
+    test("should clear prediction state but preserve player ID", () => {
       client.setLocalPlayerId("player-1");
 
       const input: PlatformerInput = createInput(1, 0, false, Date.now());
@@ -104,7 +104,10 @@ describe("ServerAuthoritativeClient", () => {
 
       client.reset();
 
-      expect(client.getLocalPlayerId()).toBeNull();
+      // Player ID should be preserved (tied to socket connection, not game state)
+      expect(client.getLocalPlayerId()).toBe("player-1");
+      // But input buffer should be cleared
+      expect(client.getInputBuffer().getUnacknowledged(-1)).toEqual([]);
     });
   });
 });

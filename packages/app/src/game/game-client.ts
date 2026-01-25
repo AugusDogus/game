@@ -370,4 +370,23 @@ export class GameClient {
   getDebugOptions(): DebugOptions {
     return { ...this.debugOptions };
   }
+
+  /**
+   * Clear all position history arrays
+   */
+  clearHistory(): void {
+    this.localPredictedHistory = [];
+    this.localServerHistory = [];
+    this.otherPlayersHistory.clear();
+    this.otherPlayersServerHistory.clear();
+  }
+
+  /**
+   * Reset all client state for a level change.
+   * Clears netcode state and position histories.
+   */
+  resetForLevelChange(): void {
+    this.netcodeClient.reset();
+    this.clearHistory();
+  }
 }

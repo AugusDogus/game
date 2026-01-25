@@ -132,16 +132,29 @@ function App() {
       setLatency(rtt);
     }
 
+    function onLevelChanged(data: { id: string; name: string }) {
+      console.log(`Level changed to: ${data.name}`);
+      // Reset game client state so player respawns at new level
+      if (gameClientRef.current) {
+        gameClientRef.current.resetForLevelChange();
+      }
+      // Invalidate queries to refresh UI
+      qc.invalidateQueries({ queryKey: ["levels"] });
+      qc.invalidateQueries({ queryKey: ["gameStatus"] });
+    }
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("pong", onPong);
+    socket.on("level_changed", onLevelChanged);
 
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("pong", onPong);
+      socket.off("level_changed", onLevelChanged);
     };
-  }, []);
+  }, [qc]);
 
   // Connection and game client lifecycle management
   useEffect(() => {
