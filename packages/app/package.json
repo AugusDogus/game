@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch run src/server.ts"
+    "dev": "DEV_MODE=true bun --watch run src/server.ts",
+    "start": "bun run src/server.ts"
   },
   "dependencies": {
     "@game/example-platformer": "workspace:*",

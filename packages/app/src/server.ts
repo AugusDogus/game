@@ -20,6 +20,9 @@ import {
 } from "@game/example-platformer";
 import homepage from "./client/index.html";
 
+// Dev mode: enables development conveniences like auto-starting the game
+const DEV_MODE = process.env.DEV_MODE === "true";
+
 const startTime = Date.now();
 
 // Create Socket.IO server and Bun engine with superjson parser for Map/Set/Date support
@@ -69,6 +72,17 @@ const netcodeServer = createServer({
   snapshotHistorySize: 60,
   mergeInputs: mergePlatformerInputs,
   createIdleInput,
+  onPlayerJoin: (playerId) => {
+    console.log(`Player joined: ${playerId}`);
+    if (DEV_MODE) {
+      const world = netcodeServer.getWorldState();
+      if (world.gameState === "lobby" && world.players.size >= 1) {
+        const newWorld = forceStartGame(world);
+        netcodeServer.setWorld(newWorld);
+        console.log("🎮 Dev mode: Auto-started game!");
+      }
+    }
+  },
 });
 netcodeServer.start();
 
