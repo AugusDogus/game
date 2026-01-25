@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { SnapshotBuffer } from "../core/snapshot-buffer.js";
 import type { Snapshot } from "../core/types.js";
 import { DefaultWorldManager } from "../core/world.js";
@@ -11,9 +11,15 @@ import {
   type PlatformerWorld,
   createPlatformerWorld,
   getPlayer,
+  initPlatformerPhysics,
 } from "@game/example-platformer";
 import { GameLoop } from "./game-loop.js";
 import { InputQueue } from "./input-queue.js";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
 
 /** Helper to create test input with all required fields */
 const createInput = (
@@ -159,8 +165,8 @@ describe("GameLoop", () => {
 
   describe("real-world scenarios", () => {
     test("idle player: gravity should apply even when no inputs are received", async () => {
-      // Player spawns in the air (simulating spawn point above ground)
-      addPlayer("player-1", 0, 0); // y=0 is above the floor
+      // Player spawns in the air (Y-up: y=100 is above the floor at y=0)
+      addPlayer("player-1", 0, 100);
 
       // NO inputs sent - player is AFK or tabbed out
 
@@ -171,13 +177,13 @@ describe("GameLoop", () => {
       // Player should have fallen due to gravity
       const world = worldManager.getState();
       const player = world.players.get("player-1");
-      expect(player?.position.y).toBeGreaterThan(0); // Y increases downward
+      expect(player?.position.y).toBeLessThan(100); // Y-up: Y decreases when falling
     });
 
     test("two players: active player inputs should not affect idle player physics", async () => {
-      // Two players spawn in the air
-      addPlayer("active-player", 0, 0);
-      addPlayer("idle-player", 100, 0);
+      // Two players spawn in the air (Y-up)
+      addPlayer("active-player", 0, 100);
+      addPlayer("idle-player", 100, 100);
 
       // Only active player sends inputs (moving right)
       inputQueue.enqueue("active-player", {
@@ -194,18 +200,18 @@ describe("GameLoop", () => {
       const activePlayer = world.players.get("active-player");
       const idlePlayer = world.players.get("idle-player");
 
-      // Active player moved right and fell
+      // Active player moved right and fell (Y-up: Y decreased)
       expect(activePlayer?.position.x).toBeGreaterThan(0);
-      expect(activePlayer?.position.y).toBeGreaterThan(0);
+      expect(activePlayer?.position.y).toBeLessThan(100);
 
       // Idle player stayed at x=100 but still fell (gravity applied)
       expect(idlePlayer?.position.x).toBe(100);
-      expect(idlePlayer?.position.y).toBeGreaterThan(0);
+      expect(idlePlayer?.position.y).toBeLessThan(100);
     });
 
     test("input burst: multiple inputs per tick should not multiply physics", async () => {
-      // Player on the ground
-      addPlayer("player-1", 0, 190); // Near floor
+      // Player on the ground (Y-up: player center at y=10 when on floor at y=0)
+      addPlayer("player-1", 0, 10);
 
       // Simulate 60fps client sending 3 inputs before server tick (at 20fps)
       const now = Date.now();
@@ -232,16 +238,17 @@ describe("GameLoop", () => {
       const world = worldManager.getState();
       const player = world.players.get("player-1");
 
-      // Should have moved roughly 10 units (200 units/sec * 0.05 sec = 10 units)
-      // NOT 30 units (which would happen if physics ran 3x)
-      expect(player?.position.x).toBeGreaterThan(5);
+      // Should have moved in the right direction
+      // With smoothDamp, exact distance varies based on acceleration curve
+      // Key is: NOT 30+ units (which would happen if physics ran 3x)
+      expect(player?.position.x).toBeGreaterThan(1);
       expect(player?.position.x).toBeLessThan(20);
     });
 
     test("jump input in burst: jump should register even if not in last input", async () => {
-      // Player on the ground - spawn at floor level so first tick grounds them
-      // Floor is at y=200, player height is 20, so center at y=190 is on floor
-      addPlayer("player-1", 0, 190);
+      // Y-up: Player on the ground - floor is at y=0, player height is 20
+      // Player center at y=10 is on the floor
+      addPlayer("player-1", 0, 10);
 
       // Let one tick run to ground the player (spawns with isGrounded=false)
       gameLoop.start();
@@ -273,15 +280,16 @@ describe("GameLoop", () => {
       world = worldManager.getState();
       player = world.players.get("player-1");
 
-      // Jump should have registered (velocity negative = upward)
-      expect(player?.velocity.y).toBeLessThan(0);
+      // Jump should have registered (Y-up: positive velocity = upward)
+      expect(player?.velocity.y).toBeGreaterThan(0);
     });
 
     test("three players: gravity applied correctly to all", async () => {
       // Regression test for gravity multiplying with number of players
-      addPlayer("player-1", 0, 0);
-      addPlayer("player-2", 100, 0);
-      addPlayer("player-3", 200, 0);
+      // Y-up: start at y=100 (above floor)
+      addPlayer("player-1", 0, 100);
+      addPlayer("player-2", 100, 100);
+      addPlayer("player-3", 200, 100);
 
       // No inputs - all players should fall due to gravity
       gameLoop.start();
@@ -298,8 +306,8 @@ describe("GameLoop", () => {
       expect(p2.position.y).toBeCloseTo(p3.position.y, 2);
 
       // Position should be reasonable (not 3x gravity)
-      // After 100ms at 980 gravity: y ≈ 0.5 * 980 * 0.1^2 = 4.9 units
-      expect(p1.position.y).toBeLessThan(15);
+      // Y-up: started at 100, should have fallen less than 15 units
+      expect(p1.position.y).toBeGreaterThan(85);
     });
 
     test("mixed input rates: different clients can send different amounts", async () => {
@@ -346,8 +354,9 @@ describe("GameLoop", () => {
     });
 
     test("client disconnect: remaining clients unaffected", async () => {
-      addPlayer("staying", 0, 0);
-      addPlayer("leaving", 100, 0);
+      // Y-up: players start above floor
+      addPlayer("staying", 0, 100);
+      addPlayer("leaving", 100, 100);
 
       // Both send inputs
       const now = Date.now();
@@ -383,8 +392,8 @@ describe("GameLoop", () => {
       world = worldManager.getState();
       const stayingPlayer = world.players.get("staying");
 
-      // Staying player should have continued falling normally
-      expect(stayingPlayer?.position.y).toBeGreaterThan(stayingY1);
+      // Staying player should have continued falling normally (Y-up: Y decreases)
+      expect(stayingPlayer?.position.y).toBeLessThan(stayingY1);
       // Should NOT be affected by the other player's removal
       expect(world.players.has("leaving")).toBe(false);
     });

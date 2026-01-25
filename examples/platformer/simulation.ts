@@ -1,16 +1,26 @@
 /**
  * Platformer game simulation logic
+ *
+ * Coordinate System: Y-UP
+ * - Positive Y points upward
+ * - Floor is at y=0 (DEFAULT_FLOOR_Y)
+ * - Jumping increases Y, falling decreases Y
+ * - Gravity is negative (pulls down)
+ *
+ * Collision Detection:
+ * - Uses @game/physics2d for platform/floor collision (raycast-based) when available
+ * - Falls back to AABB collision when physics not initialized
+ * - Player-player collision always uses AABB (dynamic objects)
  */
 
 import {
     DEFAULT_FLOOR_Y,
-    DEFAULT_GRAVITY,
-    DEFAULT_JUMP_VELOCITY,
-    DEFAULT_PLAYER_SPEED,
 } from "@game/netcode";
 import type { InputMerger, SimulateFunction } from "@game/netcode";
+import { CharacterController, vec2 } from "@game/physics2d";
 import type {
     Hazard,
+    LevelConfig,
     Platform,
     PlatformerInput,
     PlatformerPlayer,
@@ -36,6 +46,25 @@ import {
     PROJECTILE_SPEED,
     RESPAWN_TIMER_TICKS,
 } from "./types.js";
+import {
+    getPhysicsWorldForLevel,
+} from "./physics-bridge.js";
+import {
+    updatePlayerMovement,
+    derivePhysics,
+    DEFAULT_PLAYER_CONFIG,
+    type PlayerMovementState,
+} from "./player.js";
+
+// =============================================================================
+// Derived Physics (computed once at module load)
+// =============================================================================
+
+/**
+ * Physics values derived from player config.
+ * Calculated once to ensure consistency across all simulation calls.
+ */
+const derivedPhysics = derivePhysics(DEFAULT_PLAYER_CONFIG);
 
 // =============================================================================
 // Constants
@@ -83,14 +112,20 @@ const aabbOverlap = (a: AABB, b: AABB): boolean =>
 /**
  * Calculate the minimum translation vector to separate two overlapping AABBs
  * Returns the vector to move 'a' so it no longer overlaps 'b'
+ *
+ * Y-UP coordinate system:
+ * - Top of AABB = y + height (higher Y)
+ * - Bottom of AABB = y (lower Y)
  */
 const calculateSeparation = (a: AABB, b: AABB): Vector2 => {
   const overlapLeft = a.x + a.width - b.x;
   const overlapRight = b.x + b.width - a.x;
-  const overlapTop = a.y + a.height - b.y;
-  const overlapBottom = b.y + b.height - a.y;
+  // In Y-up: "top" means higher Y, "bottom" means lower Y
+  const overlapTop = a.y + a.height - b.y; // a's top overlaps into b's bottom
+  const overlapBottom = b.y + b.height - a.y; // b's top overlaps into a's bottom
 
   const minOverlapX = overlapLeft < overlapRight ? -overlapLeft : overlapRight;
+  // Positive Y pushes up, negative Y pushes down
   const minOverlapY = overlapTop < overlapBottom ? -overlapTop : overlapBottom;
 
   // Push out along the axis with the smallest overlap
@@ -216,7 +251,7 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
         player,
         input,
         deltaSeconds,
-        worldAfterStateUpdate.platforms,
+        worldAfterStateUpdate,
         isSupported,
         otherPlayers,
       );
@@ -284,15 +319,28 @@ export const simulatePlatformer: SimulateFunction<PlatformerWorld, PlatformerInp
 };
 
 /**
- * Simulate a single player with platformer physics
- * @param isSupported - Whether player is standing on floor or another player (skip gravity if true)
- * @param otherPlayers - Other players to check for collision during movement
+ * Simulate a single player with platformer physics.
+ *
+ * Uses Sebastian Lague's movement system from player.ts for:
+ * - Variable jump height (tap vs hold)
+ * - Movement smoothing (acceleration/deceleration)
+ * - Wall sliding and wall jumping
+ *
+ * Uses @game/physics2d CharacterController for platform/floor collision detection.
+ * Uses AABB for player-player collision (dynamic objects).
+ *
+ * @param player - The player to simulate
+ * @param input - Player input for this frame
+ * @param deltaSeconds - Time step in seconds
+ * @param world - The game world (for physics world lookup)
+ * @param isSupported - Whether player is standing on another player
+ * @param otherPlayers - Other players for collision checking
  */
 function simulatePlayerWithSupport(
   player: PlatformerPlayer,
   input: PlatformerInput,
   deltaSeconds: number,
-  platforms: Platform[],
+  world: PlatformerWorld,
   isSupported: boolean,
   otherPlayers: Map<string, PlatformerPlayer>,
 ): PlatformerPlayer {
@@ -306,35 +354,72 @@ function simulatePlayerWithSupport(
     return player;
   }
 
-  // Start with current velocity
-  let velocityX = input.moveX * DEFAULT_PLAYER_SPEED;
-  let velocityY = player.velocity.y;
-  let jumping = false;
+  // --- Get physics world for this level ---
+  const physicsWorld = getPhysicsWorldForLevel({
+    id: world.levelId,
+    name: world.levelId,
+    platforms: world.platforms,
+    spawnPoints: world.spawnPoints,
+    hazards: world.hazards,
+  });
 
-  // Handle jumping - only if grounded/supported and jump pressed
-  if (input.jump && (player.isGrounded || isSupported)) {
-    velocityY = DEFAULT_JUMP_VELOCITY;
-    jumping = true;
-  } else if (isSupported && velocityY >= 0) {
-    // If supported and not jumping, don't apply gravity - stay put
-    velocityY = 0;
-  } else {
-    // Apply gravity (Y increases downward) - only when not supported
-    velocityY += DEFAULT_GRAVITY * deltaSeconds;
-  }
+  // --- Create CharacterController for this frame ---
+  const controller = new CharacterController(physicsWorld, {
+    position: vec2(player.position.x, player.position.y),
+    halfSize: vec2(PLAYER_WIDTH / 2, PLAYER_HEIGHT / 2),
+  });
 
-  // Calculate new position
-  let newX = player.position.x + velocityX * deltaSeconds;
-  let newY = player.position.y + velocityY * deltaSeconds;
-  
-  // If supported (and not jumping), snap to the support surface to fix floating-point gaps
-  // This ensures the player is exactly on top of what's supporting them
-  if (isSupported && !jumping) {
-    // Find what's supporting us and snap to it
+  // Store previous frame's grounded state for jump/acceleration logic
+  // Sebastian's code uses a persistent controller where collisions carry over,
+  // but we create a new controller each frame, so we pass this separately.
+  const wasGrounded = player.isGrounded || isSupported;
+  // Only consider player on wall if they were NOT grounded
+  // This prevents wall jump from triggering when player lands on ground near a wall
+  const wasOnWallLeft = !wasGrounded && player.wallDirX === -1;
+  const wasOnWallRight = !wasGrounded && player.wallDirX === 1;
+
+  // --- Build movement state from player ---
+  const movementState: PlayerMovementState = {
+    velocity: { ...player.velocity },
+    velocityXSmoothing: player.velocityXSmoothing,
+    wallSliding: player.wallSliding,
+    wallDirX: player.wallDirX,
+    timeToWallUnstick: player.timeToWallUnstick,
+    jumpWasPressedLastFrame: player.jumpWasPressedLastFrame,
+    jumpHeld: input.jump,
+  };
+
+  // --- Run player movement (handles gravity, jump, wall mechanics) ---
+  // This now matches Sebastian Lague's Player.cs structure exactly
+  const newState = updatePlayerMovement(
+    controller,
+    movementState,
+    input,
+    DEFAULT_PLAYER_CONFIG,
+    derivedPhysics,
+    deltaSeconds,
+    {
+      below: wasGrounded,
+      left: wasOnWallLeft,
+      right: wasOnWallRight,
+    },
+  );
+
+  // --- Extract position from controller ---
+  let newX = controller.position.x;
+  let newY = controller.position.y;
+  let velocityX = newState.velocity.x;
+  let velocityY = newState.velocity.y;
+  // Player is grounded if touching ground (from NEW collision state after move)
+  // Note: isSupported was for jump INPUT, not for the output grounded state
+  let isGrounded = controller.collisions.below;
+
+  // If supported by another player, snap to their top
+  if (isSupported && !newState.jumpWasPressedLastFrame) {
     for (const [, other] of otherPlayers) {
       if (!isPlayerAlive(other)) continue;
-      const aBottom = newY + PLAYER_HEIGHT / 2;
-      const bTop = other.position.y - PLAYER_HEIGHT / 2;
+      const aBottom = newY - PLAYER_HEIGHT / 2;
+      const bTop = other.position.y + PLAYER_HEIGHT / 2;
       const aLeft = newX - PLAYER_WIDTH / 2;
       const aRight = newX + PLAYER_WIDTH / 2;
       const bLeft = other.position.x - PLAYER_WIDTH / 2;
@@ -342,52 +427,19 @@ function simulatePlayerWithSupport(
       const horizontalOverlap = aLeft < bRight && aRight > bLeft;
       // If we're within snapping distance and horizontally overlapping, snap to top
       if (horizontalOverlap && Math.abs(aBottom - bTop) < 2) {
-        newY = other.position.y - PLAYER_HEIGHT;
+        newY = other.position.y + PLAYER_HEIGHT;
+        velocityY = 0;
+        isGrounded = true;
         break;
       }
     }
   }
 
-  // Check floor collision
-  // If jumping, we're not grounded even if we were supported
-  let isGrounded = jumping ? false : isSupported;
+  // --- Player-player collision (AABB) ---
+  // Physics engine handles static geometry, but players are dynamic
+  // so we use AABB for player-player collision
 
-  if (newY + PLAYER_HEIGHT / 2 >= DEFAULT_FLOOR_Y) {
-    newY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
-    velocityY = 0;
-    isGrounded = true;
-  }
-
-  // Check platform collisions
   let playerAABB = getPlayerAABB({
-    ...player,
-    position: { x: newX, y: newY },
-  });
-
-  for (const platform of platforms) {
-    const collision = playerPlatformCollision(playerAABB, platform);
-    if (collision.collides) {
-      newX += collision.separation.x;
-      newY += collision.separation.y;
-
-      // If pushed up (landed on platform), ground the player
-      if (collision.separation.y < 0) {
-        velocityY = 0;
-        isGrounded = true;
-      }
-      // If pushed down (hit head), stop upward velocity
-      if (collision.separation.y > 0) {
-        velocityY = Math.max(0, velocityY);
-      }
-      // If pushed horizontally, stop horizontal velocity
-      if (collision.separation.x !== 0) {
-        velocityX = 0;
-      }
-    }
-  }
-
-  // Check player-player collisions DURING movement (prevents moving into other players)
-  playerAABB = getPlayerAABB({
     ...player,
     position: { x: newX, y: newY },
   });
@@ -397,7 +449,6 @@ function simulatePlayerWithSupport(
 
     const otherAABB = getPlayerAABB(other);
     // Use >= for collision check to catch players that are exactly touching
-    // (standard AABB uses strict < which misses exact edge contact)
     const touching = 
       playerAABB.x <= otherAABB.x + otherAABB.width &&
       playerAABB.x + playerAABB.width >= otherAABB.x &&
@@ -417,22 +468,21 @@ function simulatePlayerWithSupport(
     );
 
     if (overlapX < overlapY) {
-      // Horizontal collision - push this player back and stop horizontal velocity
+      // Horizontal collision - push this player back
       const pushDir = newX < other.position.x ? -1 : 1;
-      // Push by full overlap plus tiny buffer for floating point precision
       newX += pushDir * (overlapX + 0.1);
       velocityX = 0;
     } else {
-      // Vertical collision
-      if (newY < other.position.y) {
+      // Vertical collision (Y-up: higher Y = on top)
+      if (newY > other.position.y) {
         // This player is on top - land on the other player
-        newY = other.position.y - PLAYER_HEIGHT;
+        newY = other.position.y + PLAYER_HEIGHT;
         velocityY = 0;
         isGrounded = true;
       } else {
         // This player is below - get pushed down
-        newY = other.position.y + PLAYER_HEIGHT;
-        velocityY = Math.max(0, velocityY);
+        newY = other.position.y - PLAYER_HEIGHT;
+        velocityY = Math.min(0, velocityY);
       }
     }
 
@@ -448,6 +498,12 @@ function simulatePlayerWithSupport(
     position: { x: newX, y: newY },
     velocity: { x: velocityX, y: velocityY },
     isGrounded,
+    // Update movement state fields
+    velocityXSmoothing: newState.velocityXSmoothing,
+    wallSliding: newState.wallSliding,
+    wallDirX: newState.wallDirX,
+    timeToWallUnstick: newState.timeToWallUnstick,
+    jumpWasPressedLastFrame: newState.jumpWasPressedLastFrame,
   };
 }
 
@@ -457,10 +513,11 @@ function simulatePlayerWithSupport(
 
 /**
  * Check if player A is standing on player B (A's bottom touches B's top)
+ * Y-up: bottom = y - halfHeight, top = y + halfHeight
  */
 function isStandingOn(playerA: PlatformerPlayer, playerB: PlatformerPlayer): boolean {
-  const aBottom = playerA.position.y + PLAYER_HEIGHT / 2;
-  const bTop = playerB.position.y - PLAYER_HEIGHT / 2;
+  const aBottom = playerA.position.y - PLAYER_HEIGHT / 2;
+  const bTop = playerB.position.y + PLAYER_HEIGHT / 2;
   
   // Check vertical alignment (A's bottom near B's top)
   const verticallyAligned = Math.abs(aBottom - bTop) < 2;
@@ -477,15 +534,16 @@ function isStandingOn(playerA: PlatformerPlayer, playerB: PlatformerPlayer): boo
 
 /**
  * Check if a player is supported (standing on floor or another player)
+ * Y-up: floor at y=0, player bottom = y - halfHeight
  */
 function isPlayerSupported(
   player: PlatformerPlayer,
   allPlayers: Map<string, PlatformerPlayer>,
   playerId: string,
 ): boolean {
-  // Check floor
-  const playerBottom = player.position.y + PLAYER_HEIGHT / 2;
-  if (playerBottom >= DEFAULT_FLOOR_Y - 1) {
+  // Check floor (Y-up: bottom of player should be at or below floor level)
+  const playerBottom = player.position.y - PLAYER_HEIGHT / 2;
+  if (playerBottom <= DEFAULT_FLOOR_Y + 1) {
     return true;
   }
   
@@ -564,14 +622,15 @@ function resolvePlayerCollisions(
         });
       } else {
         // Vertical collision - top player lands on bottom player
-        const aOnTop = playerA.position.y < playerB.position.y;
+        // Y-up: higher Y = on top
+        const aOnTop = playerA.position.y > playerB.position.y;
         const topId = aOnTop ? idA : idB;
         const bottomId = aOnTop ? idB : idA;
         const topPlayer = newPlayers.get(topId) as PlatformerPlayer;
         const bottomPlayer = newPlayers.get(bottomId) as PlatformerPlayer;
 
         // Position top player exactly on bottom player's head
-        const newTopY = bottomPlayer.position.y - PLAYER_HEIGHT;
+        const newTopY = bottomPlayer.position.y + PLAYER_HEIGHT;
 
         newPlayers.set(topId, {
           ...topPlayer,
@@ -583,13 +642,13 @@ function resolvePlayerCollisions(
     }
   }
 
-  // Final pass: clamp to floor
+  // Final pass: clamp to floor (Y-up: floor at y=0, player center must be >= halfHeight)
   for (const [playerId, player] of newPlayers) {
-    const maxY = DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2;
-    if (player.position.y > maxY) {
+    const minY = DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2;
+    if (player.position.y < minY) {
       newPlayers.set(playerId, {
         ...player,
-        position: { x: player.position.x, y: maxY },
+        position: { x: player.position.x, y: minY },
         velocity: { x: player.velocity.x, y: 0 },
         isGrounded: true,
       });
@@ -700,8 +759,8 @@ function simulateProjectiles(
       continue; // Remove projectile
     }
 
-    // Check collision with floor
-    if (newPosition.y >= DEFAULT_FLOOR_Y) {
+    // Check collision with floor (Y-up: floor at y=0)
+    if (newPosition.y <= DEFAULT_FLOOR_Y) {
       continue; // Remove projectile
     }
 
@@ -837,12 +896,13 @@ export function spawnProjectile(
  */
 const getDeterministicSpawnPoint = (spawnPoints: SpawnPoint[], seed: number): Vector2 => {
   if (spawnPoints.length === 0) {
-    return { x: 0, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 };
+    // Y-up: spawn player with center at halfHeight above floor
+    return { x: 0, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 };
   }
   // Use absolute value and modulo to get a deterministic index
   const index = Math.abs(seed) % spawnPoints.length;
   const spawnPoint = spawnPoints[index];
-  return spawnPoint ? spawnPoint.position : { x: 0, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 };
+  return spawnPoint ? spawnPoint.position : { x: 0, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 };
 };
 
 /**
@@ -1224,7 +1284,7 @@ export function applyKnockback(
   // Normalize direction and apply force
   const magnitude = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
   const normalizedX = magnitude > 0 ? direction.x / magnitude : 0;
-  const normalizedY = magnitude > 0 ? direction.y / magnitude : -1; // Default up if no direction
+  const normalizedY = magnitude > 0 ? direction.y / magnitude : 1; // Default up if no direction (Y-up: positive = up)
 
   const newPlayers = new Map(world.players);
   newPlayers.set(targetId, {
@@ -1247,12 +1307,14 @@ export function applyKnockback(
  */
 export function setLevelConfig(
   world: PlatformerWorld,
+  levelId: string,
   platforms: Platform[],
   spawnPoints: SpawnPoint[],
   hazards: Hazard[],
 ): PlatformerWorld {
   return {
     ...world,
+    levelId,
     platforms,
     spawnPoints,
     hazards,

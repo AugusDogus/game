@@ -55,6 +55,12 @@ export function createTestPlayer(
     lastHitBy: overrides.lastHitBy ?? null,
     respawnTimer: overrides.respawnTimer ?? null,
     projectileSeq: overrides.projectileSeq ?? 0,
+    // Movement state fields
+    velocityXSmoothing: overrides.velocityXSmoothing ?? 0,
+    wallSliding: overrides.wallSliding ?? false,
+    wallDirX: overrides.wallDirX ?? 0,
+    timeToWallUnstick: overrides.timeToWallUnstick ?? 0,
+    jumpWasPressedLastFrame: overrides.jumpWasPressedLastFrame ?? false,
   };
 }
 
@@ -90,6 +96,7 @@ export function createTestWorld(
     projectiles: overrides.projectiles ?? [],
     tick: overrides.tick ?? 0,
     gameState: overrides.gameState ?? "playing",
+    levelId: overrides.levelId ?? "test-level",
     platforms: overrides.platforms ?? [],
     spawnPoints: overrides.spawnPoints ?? [],
     hazards: overrides.hazards ?? [],

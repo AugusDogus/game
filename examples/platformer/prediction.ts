@@ -84,6 +84,7 @@ export const platformerPredictionScope: PredictionScope<PlatformerWorld, Platfor
     // Build a full world state for simulation
     const worldForSimulation: PlatformerWorld = {
       players: state.players as Map<string, PlatformerPlayer>,
+      levelId: state.levelId ?? "default",
       platforms: state.platforms ?? [],
       hazards: state.hazards ?? [],
       spawnPoints: state.spawnPoints ?? [],

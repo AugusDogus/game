@@ -1,8 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll } from "bun:test";
 import {
-  DEFAULT_PLAYER_SPEED,
-  DEFAULT_GRAVITY,
-  DEFAULT_JUMP_VELOCITY,
   DEFAULT_FLOOR_Y,
 } from "@game/netcode";
 import {
@@ -14,6 +11,16 @@ import {
 import { createPlatformerWorld } from "./types.js";
 import type { PlatformerWorld, PlatformerInput } from "./types.js";
 import { createTestPlayer, createPlayingWorld } from "./test-utils.js";
+import { initPlatformerPhysics } from "./physics-bridge.js";
+import { derivePhysics, DEFAULT_PLAYER_CONFIG } from "./player.js";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
+
+// Derived physics for test assertions
+const derivedPhysics = derivePhysics(DEFAULT_PLAYER_CONFIG);
 
 /** Helper to create test input with all required fields */
 const createInput = (
@@ -34,7 +41,7 @@ const createInput = (
 describe("simulatePlatformer", () => {
   const createWorldWithPlayer = (
     playerId: string,
-    position = { x: 0, y: 0 },
+    position = { x: 0, y: 100 },
     velocity = { x: 0, y: 0 },
     isGrounded = false,
   ): PlatformerWorld => {
@@ -44,37 +51,40 @@ describe("simulatePlatformer", () => {
 
   describe("gravity", () => {
     test("should apply gravity to falling player", () => {
-      const world = createWorldWithPlayer("player-1", { x: 0, y: 0 });
+      // Setup: player at y=100, airborne, no input
+      // Physics: gravity = -800, dt = 0.05s
+      // Expected: velocity.y = 0 + (-800 * 0.05) = -40
+      // Expected: position.y = 100 + (-40 * 0.05) = 98
+      const world = createWorldWithPlayer("player-1", { x: 0, y: 100 });
       const inputs = new Map<string, PlatformerInput>();
 
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
 
-      // Velocity should increase (positive = downward)
-      expect(player?.velocity.y).toBeGreaterThan(0);
-      // Position should move down
-      expect(player?.position.y).toBeGreaterThan(0);
+      expect(player?.velocity.y).toBe(-40);
+      expect(player?.position.y).toBe(98);
     });
 
     test("should accumulate gravity over time", () => {
-      let world = createWorldWithPlayer("player-1", { x: 0, y: 0 });
+      // Setup: player at y=100, airborne, no input, 3 ticks
+      // Physics: gravity = -800, dt = 0.05s per tick
+      // Expected after 3 ticks: velocity.y = -40 + -40 + -40 = -120
+      let world = createWorldWithPlayer("player-1", { x: 0, y: 100 });
       const inputs = new Map<string, PlatformerInput>();
 
-      // Simulate multiple ticks
       world = simulatePlatformer(world, inputs, 50);
       world = simulatePlatformer(world, inputs, 50);
       world = simulatePlatformer(world, inputs, 50);
 
       const player = world.players.get("player-1");
-      // After 3 ticks, should have fallen significantly
-      expect(player?.velocity.y).toBeGreaterThan(DEFAULT_GRAVITY * 0.05 * 2);
+      expect(player?.velocity.y).toBe(-120);
     });
   });
 
   describe("floor collision", () => {
     test("should stop player at floor", () => {
-      // Player just above floor
-      const world = createWorldWithPlayer("player-1", { x: 0, y: DEFAULT_FLOOR_Y - 15 });
+      // Y-up: Player just above floor (floor at y=0, player center should end at y=10)
+      const world = createWorldWithPlayer("player-1", { x: 0, y: 15 });
       const inputs = new Map<string, PlatformerInput>();
 
       // Simulate until player hits floor
@@ -85,8 +95,9 @@ describe("simulatePlatformer", () => {
 
       const player = newWorld.players.get("player-1");
 
-      // Player should be on floor (center at floor - half height)
-      expect(player?.position.y).toBe(DEFAULT_FLOOR_Y - 10);
+      // Y-up: Player should be on floor (center at floor + half height = 0 + 10 = 10)
+      // Use toBeCloseTo due to floating-point precision in physics engine
+      expect(player?.position.y).toBeCloseTo(DEFAULT_FLOOR_Y + 10, 5);
       expect(player?.velocity.y).toBe(0);
       expect(player?.isGrounded).toBe(true);
     });
@@ -94,9 +105,13 @@ describe("simulatePlatformer", () => {
 
   describe("horizontal movement", () => {
     test("should move right when moveX is positive", () => {
+      // Setup: grounded player at x=0, moveX=1, dt=50ms
+      // Physics: smoothDamp from 0 to 200 with smoothTime=0.1, dt=0.05
+      // Expected velocity.x: 52.67034990791896 (from smoothDamp formula)
+      // Expected position.x: 2.633517495395948 (velocity * dt)
       const world = createWorldWithPlayer(
         "player-1",
-        { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         { x: 0, y: 0 },
         true,
       );
@@ -107,14 +122,17 @@ describe("simulatePlatformer", () => {
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
 
-      expect(player?.position.x).toBeGreaterThan(0);
-      expect(player?.velocity.x).toBe(DEFAULT_PLAYER_SPEED);
+      expect(player?.velocity.x).toBe(52.67034990791896);
+      expect(player?.position.x).toBe(2.633517495395948);
     });
 
     test("should move left when moveX is negative", () => {
+      // Setup: grounded player at x=0, moveX=-1, dt=50ms
+      // Physics: smoothDamp from 0 to -200 with smoothTime=0.1, dt=0.05
+      // Expected: same magnitude as right, but negative
       const world = createWorldWithPlayer(
         "player-1",
-        { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         { x: 0, y: 0 },
         true,
       );
@@ -125,15 +143,18 @@ describe("simulatePlatformer", () => {
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
 
-      expect(player?.position.x).toBeLessThan(0);
-      expect(player?.velocity.x).toBe(-DEFAULT_PLAYER_SPEED);
+      expect(player?.velocity.x).toBe(-52.67034990791896);
+      expect(player?.position.x).toBe(-2.633517495395948);
     });
 
-    test("should stop when no input", () => {
+    test("should decelerate when no input", () => {
+      // Setup: grounded player moving at 200 u/s, no input, dt=50ms
+      // Physics: smoothDamp from 200 to 0 with smoothTime=0.1, dt=0.05
+      // Expected: velocity decreases toward 0
       const world = createWorldWithPlayer(
         "player-1",
-        { x: 0, y: DEFAULT_FLOOR_Y - 10 },
-        { x: DEFAULT_PLAYER_SPEED, y: 0 },
+        { x: 0, y: DEFAULT_FLOOR_Y + 10 },
+        { x: DEFAULT_PLAYER_CONFIG.moveSpeed, y: 0 },
         true,
       );
       const inputs = new Map<string, PlatformerInput>();
@@ -141,16 +162,21 @@ describe("simulatePlatformer", () => {
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
 
-      // Velocity should be 0 with no input (no momentum in this simple physics)
-      expect(player?.velocity.x).toBe(0);
+      // Velocity decelerates from 200 toward 0
+      // smoothDamp(200, 0, 0, 0.1, 0.05) gives approximately 147.33
+      expect(player?.velocity.x).toBe(147.32965009208104);
     });
   });
 
   describe("jumping", () => {
     test("should jump when grounded and jump pressed", () => {
+      // Setup: grounded player, jump pressed, dt=50ms
+      // Physics: maxJumpVelocity = 320 (from derivePhysics)
+      // Order: gravity applied first (-40), then jump sets velocity to 320
+      // Expected: velocity.y = 320, isGrounded = false
       const world = createWorldWithPlayer(
         "player-1",
-        { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         { x: 0, y: 0 },
         true,
       );
@@ -161,13 +187,15 @@ describe("simulatePlatformer", () => {
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
 
-      // Should have upward velocity (negative Y)
-      expect(player?.velocity.y).toBe(DEFAULT_JUMP_VELOCITY);
+      expect(player?.velocity.y).toBe(320); // maxJumpVelocity
       expect(player?.isGrounded).toBe(false);
     });
 
     test("should not jump when not grounded", () => {
-      const world = createWorldWithPlayer("player-1", { x: 0, y: 0 }, { x: 0, y: 50 }, false);
+      // Setup: airborne player at y=100, velocity.y=-50, jump pressed, dt=50ms
+      // Physics: gravity = -800, dt = 0.05
+      // Expected: velocity.y = -50 + (-800 * 0.05) = -90 (no jump, just gravity)
+      const world = createWorldWithPlayer("player-1", { x: 0, y: 100 }, { x: 0, y: -50 }, false);
       const inputs = new Map<string, PlatformerInput>([
         ["player-1", createInput(0, 0, true, Date.now())],
       ]);
@@ -175,19 +203,21 @@ describe("simulatePlatformer", () => {
       const newWorld = simulatePlatformer(world, inputs, 50);
       const player = newWorld.players.get("player-1");
 
-      // Should not have jump velocity, just gravity
-      expect(player?.velocity.y).not.toBe(DEFAULT_JUMP_VELOCITY);
+      expect(player?.velocity.y).toBe(-90);
     });
   });
 
   describe("multiple players", () => {
     test("should simulate all players independently", () => {
+      // Setup: Two grounded players far apart
+      // Player 1: moveX=1, no jump
+      // Player 2: moveX=-1, jump
       const player1 = createTestPlayer("player-1", {
-        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        position: { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         isGrounded: true,
       });
       const player2 = createTestPlayer("player-2", {
-        position: { x: 100, y: DEFAULT_FLOOR_Y - 10 },
+        position: { x: 100, y: DEFAULT_FLOOR_Y + 10 },
         isGrounded: true,
       });
       const world = createPlayingWorld([player1, player2]);
@@ -202,25 +232,28 @@ describe("simulatePlatformer", () => {
       const newP1 = newWorld.players.get("player-1");
       const newP2 = newWorld.players.get("player-2");
 
-      // Player 1 moved right and stays on ground (grounded players have y velocity = 0)
-      expect(newP1?.position.x).toBeGreaterThan(0);
+      // Player 1: moved right (exact values from smoothDamp)
+      expect(newP1?.position.x).toBe(2.633517495395948);
+      expect(newP1?.velocity.x).toBe(52.67034990791896);
       expect(newP1?.isGrounded).toBe(true);
 
-      // Player 2 moved left and jumped
-      expect(newP2?.position.x).toBeLessThan(100);
-      expect(newP2?.velocity.y).toBe(DEFAULT_JUMP_VELOCITY);
+      // Player 2: moved left and jumped
+      expect(newP2?.position.x).toBe(100 - 2.633517495395948);
+      expect(newP2?.velocity.x).toBe(-52.67034990791896);
+      expect(newP2?.velocity.y).toBe(320); // maxJumpVelocity
+      expect(newP2?.isGrounded).toBe(false);
     });
   });
 
   describe("player-player collision", () => {
     test("horizontal collision: players should not overlap when walking into each other", () => {
-      // Two players on the ground, close together
+      // Y-up: Two players on the ground
       const player1 = createTestPlayer("player-1", {
-        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        position: { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         isGrounded: true,
       });
       const player2 = createTestPlayer("player-2", {
-        position: { x: 25, y: DEFAULT_FLOOR_Y - 10 }, // 25 units apart (player width is 20)
+        position: { x: 25, y: DEFAULT_FLOOR_Y + 10 }, // 25 units apart (player width is 20)
         isGrounded: true,
       });
       let world = createPlayingWorld([player1, player2]);
@@ -248,11 +281,11 @@ describe("simulatePlatformer", () => {
     test("horizontal collision: pushing should be stable (no jitter)", () => {
       // Two players overlapping - simulate collision resolution
       const player1 = createTestPlayer("player-1", {
-        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        position: { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         isGrounded: true,
       });
       const player2 = createTestPlayer("player-2", {
-        position: { x: 15, y: DEFAULT_FLOOR_Y - 10 }, // Overlapping (within 20 units)
+        position: { x: 15, y: DEFAULT_FLOOR_Y + 10 }, // Overlapping (within 20 units)
         isGrounded: true,
       });
       let world = createPlayingWorld([player1, player2]);
@@ -283,11 +316,11 @@ describe("simulatePlatformer", () => {
     test("horizontal collision: continuous movement into player should not jitter", () => {
       // This tests the bug where holding left/right into another player causes jitter
       const player1 = createTestPlayer("player-1", {
-        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+        position: { x: 0, y: DEFAULT_FLOOR_Y + 10 },
         isGrounded: true,
       });
       const player2 = createTestPlayer("player-2", {
-        position: { x: 25, y: DEFAULT_FLOOR_Y - 10 }, // 25 units apart (player width is 20)
+        position: { x: 25, y: DEFAULT_FLOOR_Y + 10 }, // 25 units apart (player width is 20)
         isGrounded: true,
       });
       let world = createPlayingWorld([player1, player2]);
@@ -328,14 +361,14 @@ describe("simulatePlatformer", () => {
     });
 
     test("vertical collision: player should be able to stand on another player", () => {
-      // Player 2 on the ground, player 1 falling onto them
+      // Y-up: Player 2 on the ground, player 1 falling onto them
       const player1 = createTestPlayer("player-1", {
-        position: { x: 0, y: DEFAULT_FLOOR_Y - 50 }, // Above player 2
-        velocity: { x: 0, y: 100 }, // Falling down
+        position: { x: 0, y: DEFAULT_FLOOR_Y + 50 }, // Above player 2
+        velocity: { x: 0, y: -100 }, // Y-up: falling down means negative velocity
         isGrounded: false,
       });
       const player2 = createTestPlayer("player-2", {
-        position: { x: 0, y: DEFAULT_FLOOR_Y - 10 }, // On the ground
+        position: { x: 0, y: DEFAULT_FLOOR_Y + 10 }, // On the ground
         isGrounded: true,
       });
       let world = createPlayingWorld([player1, player2]);
@@ -350,10 +383,10 @@ describe("simulatePlatformer", () => {
       const p1 = world.players.get("player-1");
       const p2 = world.players.get("player-2");
 
-      // Player 1 should be on top of player 2 (not overlapping, not on floor)
-      // Player 1's bottom should be at player 2's top
-      const p1Bottom = (p1?.position.y ?? 0) + 10; // center + half height
-      const p2Top = (p2?.position.y ?? 0) - 10; // center - half height
+      // Y-up: Player 1 should be on top of player 2
+      // Player 1's bottom (y - halfHeight) should be at player 2's top (y + halfHeight)
+      const p1Bottom = (p1?.position.y ?? 0) - 10; // center - half height
+      const p2Top = (p2?.position.y ?? 0) + 10; // center + half height
       
       expect(p1Bottom).toBeCloseTo(p2Top, 1);
       expect(p1?.isGrounded).toBe(true); // Should be grounded (standing on player)
@@ -361,9 +394,9 @@ describe("simulatePlatformer", () => {
     });
 
     test("vertical collision: standing on player should be stable (no bouncing)", () => {
-      // Player 1 already positioned on top of player 2
-      const player2Y = DEFAULT_FLOOR_Y - 10;
-      const player1Y = player2Y - 20; // Exactly on top (20 = player height)
+      // Y-up: Player 1 already positioned on top of player 2
+      const player2Y = DEFAULT_FLOOR_Y + 10;
+      const player1Y = player2Y + 20; // Exactly on top (20 = player height, higher Y in Y-up)
       
       const player1 = createTestPlayer("player-1", {
         position: { x: 0, y: player1Y },

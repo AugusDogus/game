@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { GameClient } from "../game/game-client.js";
 import { socket } from "./socket";
+import { initPlatformerPhysics } from "@game/example-platformer";
 
 const queryClient = new QueryClient();
 
@@ -373,11 +374,14 @@ function App() {
   );
 }
 
+// Initialize physics before rendering (required for client-side prediction)
 const rootElement = document.getElementById("root");
 if (rootElement) {
-  createRoot(rootElement).render(
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>,
-  );
+  initPlatformerPhysics().then(() => {
+    createRoot(rootElement).render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>,
+    );
+  });
 }

@@ -68,8 +68,11 @@ export class CanvasRenderer {
     canvas.width = this.width;
     canvas.height = this.height;
 
-    // Set up coordinate system (origin at center)
+    // Set up coordinate system:
+    // - Origin at center
+    // - Y-up (positive Y points upward, matching game/physics coords)
     this.ctx.translate(this.width / 2, this.height / 2);
+    this.ctx.scale(1, -1); // Flip Y axis
   }
 
   /**
@@ -79,6 +82,34 @@ export class CanvasRenderer {
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, this.width, this.height);
+    this.ctx.restore();
+  }
+
+  /**
+   * Draw text at a position in world coordinates.
+   * Handles Y-flip so text appears right-side up.
+   *
+   * @param text The text to draw
+   * @param x X position in world coords
+   * @param y Y position in world coords
+   */
+  private drawText(text: string, x: number, y: number): void {
+    this.ctx.save();
+    // Flip Y back for text rendering
+    this.ctx.translate(x, y);
+    this.ctx.scale(1, -1);
+    this.ctx.fillText(text, 0, 0);
+    this.ctx.restore();
+  }
+
+  /**
+   * Draw text with stroke at a position in world coordinates.
+   */
+  private strokeText(text: string, x: number, y: number): void {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.scale(1, -1);
+    this.ctx.strokeText(text, 0, 0);
     this.ctx.restore();
   }
 
@@ -110,14 +141,14 @@ export class CanvasRenderer {
 
     this.ctx.globalAlpha = 1;
 
-    // Draw player ID above
+    // Draw player ID above (Y-up: above means higher Y)
     this.ctx.fillStyle = "#ffffff";
     this.ctx.font = "10px monospace";
     this.ctx.textAlign = "center";
-    this.ctx.fillText(
+    this.drawText(
       player.id.substring(0, 8),
       player.position.x,
-      player.position.y - size / 2 - 5,
+      player.position.y + size / 2 + 15,
     );
 
     // Draw health bar if player is alive
@@ -125,14 +156,14 @@ export class CanvasRenderer {
       this.drawHealthBar(player);
     }
 
-    // Draw respawn timer if respawning
+    // Draw respawn timer if respawning (below player in Y-up)
     if (isRespawning && player.respawnTimer !== null) {
       this.ctx.fillStyle = "#fbbf24";
       this.ctx.font = "12px monospace";
-      this.ctx.fillText(
+      this.drawText(
         `${Math.ceil(player.respawnTimer / 20)}s`,
         player.position.x,
-        player.position.y + size / 2 + 15,
+        player.position.y - size / 2 - 5,
       );
     }
 
@@ -141,12 +172,14 @@ export class CanvasRenderer {
 
   /**
    * Draw a health bar above a player
+   * Y-up: "above" means higher Y value
    */
   drawHealthBar(player: PlatformerPlayer): void {
     const barWidth = 30;
     const barHeight = 4;
-    // Position health bar above the player ID text (which is at y - 15)
-    const barY = player.position.y - 28;
+    const size = 20;
+    // Position health bar above the player ID text (Y-up: higher Y is above)
+    const barY = player.position.y + size / 2 + 22;
 
     // Background (dark)
     this.ctx.fillStyle = "#1f2937";
@@ -260,15 +293,17 @@ export class CanvasRenderer {
 
   /**
    * Draw the floor/ground platform
+   * Y-up: floor is at y=0 (DEFAULT_FLOOR_Y), ground extends below (negative Y)
    */
   drawFloor(): void {
     this.ctx.save();
 
-    const floorY = DEFAULT_FLOOR_Y;
+    const floorY = DEFAULT_FLOOR_Y; // 0 in Y-up
     const startX = -this.width / 2;
     const endX = this.width / 2;
+    const groundDepth = this.height / 2; // How far down to draw ground
 
-    // Draw floor surface (thick line)
+    // Draw floor surface (thick line at y=0)
     this.ctx.strokeStyle = "#64748b";
     this.ctx.lineWidth = 4;
     this.ctx.beginPath();
@@ -276,19 +311,19 @@ export class CanvasRenderer {
     this.ctx.lineTo(endX, floorY);
     this.ctx.stroke();
 
-    // Draw ground fill below floor
+    // Draw ground fill below floor (negative Y in Y-up coords)
     this.ctx.fillStyle = "#1e293b";
-    this.ctx.fillRect(startX, floorY, this.width, this.height / 2 - floorY);
+    this.ctx.fillRect(startX, -groundDepth, this.width, groundDepth);
 
-    // Draw grass/ground pattern on top
+    // Draw grass/ground pattern on top of ground (just below floor line)
     this.ctx.fillStyle = "#475569";
     const grassHeight = 6;
-    this.ctx.fillRect(startX, floorY, this.width, grassHeight);
+    this.ctx.fillRect(startX, floorY - grassHeight, this.width, grassHeight);
 
-    // Draw some ground texture lines
+    // Draw some ground texture lines below floor
     this.ctx.strokeStyle = "#334155";
     this.ctx.lineWidth = 1;
-    for (let y = floorY + 20; y < this.height / 2; y += 30) {
+    for (let y = floorY - 20; y > -groundDepth; y -= 30) {
       this.ctx.beginPath();
       this.ctx.moveTo(startX, y);
       this.ctx.lineTo(endX, y);
@@ -399,14 +434,14 @@ export class CanvasRenderer {
 
 
   /**
-   * Draw debug legend
+   * Draw debug legend (screen-space UI in top-left)
    */
   drawDebugLegend(showTrails: boolean, showServerPositions: boolean): void {
     this.ctx.save();
 
-    // Position in top-left (accounting for centered coordinate system)
+    // Position in top-left (Y-up: top-left is -width/2, +height/2)
     const startX = -this.width / 2 + 10;
-    const startY = -this.height / 2 + 20;
+    const startY = this.height / 2 - 20;
 
     this.ctx.font = "11px monospace";
     this.ctx.textAlign = "left";
@@ -417,41 +452,41 @@ export class CanvasRenderer {
     if (showTrails) {
       // Green - predicted
       this.ctx.fillStyle = "#10b981";
-      this.ctx.fillRect(startX, y - 8, 12, 12);
+      this.ctx.fillRect(startX, y - 4, 12, 12);
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.fillText("Predicted (local)", startX + 18, y);
-      y += lineHeight;
+      this.drawText("Predicted (local)", startX + 18, y);
+      y -= lineHeight;
 
       // Orange - server confirmed
       this.ctx.fillStyle = "#f97316";
-      this.ctx.fillRect(startX, y - 8, 12, 12);
+      this.ctx.fillRect(startX, y - 4, 12, 12);
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.fillText("Server (local)", startX + 18, y);
-      y += lineHeight;
+      this.drawText("Server (local)", startX + 18, y);
+      y -= lineHeight;
 
       // Blue - interpolated
       this.ctx.fillStyle = "#3b82f6";
-      this.ctx.fillRect(startX, y - 8, 12, 12);
+      this.ctx.fillRect(startX, y - 4, 12, 12);
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.fillText("Interpolated (others)", startX + 18, y);
-      y += lineHeight;
+      this.drawText("Interpolated (others)", startX + 18, y);
+      y -= lineHeight;
 
       // Purple - raw server
       this.ctx.fillStyle = "#a855f7";
-      this.ctx.fillRect(startX, y - 8, 12, 12);
+      this.ctx.fillRect(startX, y - 4, 12, 12);
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.fillText("Raw server (others)", startX + 18, y);
-      y += lineHeight;
+      this.drawText("Raw server (others)", startX + 18, y);
+      y -= lineHeight;
     }
 
     if (showServerPositions) {
       // Dashed box legend
       this.ctx.strokeStyle = "#f97316";
       this.ctx.setLineDash([2, 2]);
-      this.ctx.strokeRect(startX, y - 8, 12, 12);
+      this.ctx.strokeRect(startX, y - 4, 12, 12);
       this.ctx.setLineDash([]);
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.fillText("Server ghost", startX + 18, y);
+      this.drawText("Server ghost", startX + 18, y);
     }
 
     this.ctx.restore();
@@ -496,11 +531,11 @@ export class CanvasRenderer {
   private drawLobbyOverlay(): void {
     this.ctx.fillStyle = "#ffffff";
     this.ctx.font = "bold 32px monospace";
-    this.ctx.fillText("WAITING FOR PLAYERS", 0, -20);
+    this.drawText("WAITING FOR PLAYERS", 0, 20);
 
     this.ctx.font = "16px monospace";
     this.ctx.fillStyle = "#94a3b8";
-    this.ctx.fillText("Game will start when enough players join", 0, 20);
+    this.drawText("Game will start when enough players join", 0, -20);
   }
 
   /**
@@ -511,11 +546,11 @@ export class CanvasRenderer {
 
     this.ctx.fillStyle = "#fbbf24";
     this.ctx.font = "bold 72px monospace";
-    this.ctx.fillText(seconds.toString(), 0, 20);
+    this.drawText(seconds.toString(), 0, -20);
 
     this.ctx.font = "18px monospace";
     this.ctx.fillStyle = "#ffffff";
-    this.ctx.fillText("GET READY!", 0, 60);
+    this.drawText("GET READY!", 0, -60);
   }
 
   /**
@@ -524,43 +559,44 @@ export class CanvasRenderer {
   private drawGameOverOverlay(winner: string | null): void {
     this.ctx.fillStyle = "#ef4444";
     this.ctx.font = "bold 48px monospace";
-    this.ctx.fillText("GAME OVER", 0, -30);
+    this.drawText("GAME OVER", 0, 30);
 
     this.ctx.font = "24px monospace";
     if (winner) {
       this.ctx.fillStyle = "#10b981";
-      this.ctx.fillText(`Winner: ${winner.substring(0, 8)}`, 0, 20);
+      this.drawText(`Winner: ${winner.substring(0, 8)}`, 0, -20);
     } else {
       this.ctx.fillStyle = "#94a3b8";
-      this.ctx.fillText("Draw - No Winner", 0, 20);
+      this.drawText("Draw - No Winner", 0, -20);
     }
   }
 
   /**
-   * Draw scoreboard
+   * Draw scoreboard (screen-space UI in top-right)
    */
   drawScoreboard(players: PlatformerPlayer[]): void {
     this.ctx.save();
 
-    // Position in top-right
+    // Position in top-right (Y-up: top means higher Y)
     const startX = this.width / 2 - 150;
-    const startY = -this.height / 2 + 20;
+    const startY = this.height / 2 - 20;
 
-    // Background
+    // Background (needs to extend downward in Y-up)
     this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    this.ctx.fillRect(startX - 10, startY - 15, 150, 25 + players.length * 20);
+    const bgHeight = 25 + players.length * 20;
+    this.ctx.fillRect(startX - 10, startY - bgHeight + 15, 150, bgHeight);
 
     // Title
     this.ctx.fillStyle = "#ffffff";
     this.ctx.font = "bold 12px monospace";
     this.ctx.textAlign = "left";
-    this.ctx.fillText("SCOREBOARD", startX, startY);
+    this.drawText("SCOREBOARD", startX, startY);
 
     // Sort players by kills (descending)
     const sortedPlayers = [...players].sort((a, b) => b.kills - a.kills);
 
-    // Draw each player
-    let y = startY + 20;
+    // Draw each player (going downward in Y-up means decreasing Y)
+    let y = startY - 20;
     for (const player of sortedPlayers) {
       const isAlive = isPlayerAlive(player);
       this.ctx.fillStyle = isAlive ? "#ffffff" : "#6b7280";
@@ -569,28 +605,28 @@ export class CanvasRenderer {
       const name = player.id.substring(0, 8);
       const stats = `K:${player.kills} D:${player.deaths}`;
 
-      this.ctx.fillText(name, startX, y);
-      this.ctx.textAlign = "right";
-      this.ctx.fillText(stats, startX + 140, y);
       this.ctx.textAlign = "left";
+      this.drawText(name, startX, y);
+      this.ctx.textAlign = "right";
+      this.drawText(stats, startX + 140, y);
 
-      y += 18;
+      y -= 18;
     }
 
     this.ctx.restore();
   }
 
   /**
-   * Draw kill feed
+   * Draw kill feed (screen-space UI in top-center)
    */
   drawKillFeed(killFeed: KillFeedEntry[]): void {
     if (killFeed.length === 0) return;
 
     this.ctx.save();
 
-    // Position in top-center
+    // Position in top-center (Y-up: top means higher Y)
     const startX = 0;
-    const startY = -this.height / 2 + 30;
+    const startY = this.height / 2 - 30;
 
     // Show last 5 kills
     const recentKills = killFeed.slice(-5);
@@ -613,15 +649,15 @@ export class CanvasRenderer {
       const victimName = kill.victimId.substring(0, 8);
 
       this.ctx.fillStyle = "#10b981";
-      this.ctx.fillText(killerName, startX - 40, y);
+      this.drawText(killerName, startX - 40, y);
 
       this.ctx.fillStyle = "#94a3b8";
-      this.ctx.fillText("killed", startX, y);
+      this.drawText("killed", startX, y);
 
       this.ctx.fillStyle = "#ef4444";
-      this.ctx.fillText(victimName, startX + 40, y);
+      this.drawText(victimName, startX + 40, y);
 
-      y += 18;
+      y -= 18; // Go downward (decreasing Y in Y-up)
     }
 
     this.ctx.restore();
@@ -667,6 +703,7 @@ export class CanvasRenderer {
 
   /**
    * Draw hazards (spikes, etc.)
+   * Y-up: hazard.position is bottom-left, spikes point upward (toward higher Y)
    */
   drawHazards(hazards: Array<{ position: { x: number; y: number }; width: number; height: number }>): void {
     this.ctx.save();
@@ -681,16 +718,20 @@ export class CanvasRenderer {
         hazard.height,
       );
 
-      // Draw spike pattern
+      // Draw spike pattern (pointing up in Y-up coords)
+      // Base at bottom (position.y), point at top (position.y + height)
       this.ctx.fillStyle = "#dc2626";
       const spikeWidth = 10;
       const numSpikes = Math.floor(hazard.width / spikeWidth);
       for (let i = 0; i < numSpikes; i++) {
         const x = hazard.position.x + i * spikeWidth + spikeWidth / 2;
         this.ctx.beginPath();
-        this.ctx.moveTo(x - spikeWidth / 2, hazard.position.y + hazard.height);
-        this.ctx.lineTo(x, hazard.position.y);
-        this.ctx.lineTo(x + spikeWidth / 2, hazard.position.y + hazard.height);
+        // Base at bottom
+        this.ctx.moveTo(x - spikeWidth / 2, hazard.position.y);
+        // Point at top
+        this.ctx.lineTo(x, hazard.position.y + hazard.height);
+        // Base at bottom
+        this.ctx.lineTo(x + spikeWidth / 2, hazard.position.y);
         this.ctx.closePath();
         this.ctx.fill();
       }

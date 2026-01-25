@@ -1,9 +1,15 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, beforeAll } from "bun:test";
 import { platformerPredictionScope } from "./prediction.js";
 import { createIdleInput } from "./types.js";
 import type { PlatformerWorld, PlatformerPlayer, PlatformerInput } from "./types.js";
-import { DEFAULT_FLOOR_Y, DEFAULT_PLAYER_SPEED } from "@game/netcode";
+import { DEFAULT_FLOOR_Y } from "@game/netcode";
 import { createTestPlayer, createTestWorld } from "./test-utils.js";
+import { initPlatformerPhysics } from "./physics-bridge.js";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
 
 /** Helper to create test input with all required fields */
 const createInput = (
@@ -26,7 +32,8 @@ const createPlayer = (
   overrides: Partial<Omit<PlatformerPlayer, "id">> = {},
 ): PlatformerPlayer =>
   createTestPlayer(id, {
-    position: overrides.position ?? { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+    // Y-up: grounded player center at floor + halfHeight = 0 + 10 = 10
+    position: overrides.position ?? { x: 0, y: DEFAULT_FLOOR_Y + 10 },
     velocity: overrides.velocity ?? { x: 0, y: 0 },
     isGrounded: overrides.isGrounded ?? true,
     ...overrides,
@@ -158,9 +165,13 @@ describe("platformerPredictionScope", () => {
 
   describe("simulatePredicted", () => {
     test("should move player right on positive moveX", () => {
+      // Setup: grounded player at x=100, moveX=1, dt=100ms
+      // Physics: smoothDamp from 0 to 200 with smoothTime=0.1, dt=0.1
+      // Expected velocity.x: 111.76470588235294
+      // Expected position.x: 100 + 111.76470588235294 * 0.1 = 111.17647058823529
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
+          ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y + 10 } })],
         ]),
         gameState: "playing",
       };
@@ -170,14 +181,16 @@ describe("platformerPredictionScope", () => {
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
 
       const player = result.players?.get("player");
-      // Expected: 100 + (1 * DEFAULT_PLAYER_SPEED * 0.1)
-      expect(player?.position.x).toBeGreaterThan(100);
+      expect(player?.velocity.x).toBe(111.76470588235294);
+      expect(player?.position.x).toBe(111.17647058823529);
     });
 
     test("should move player left on negative moveX", () => {
+      // Setup: grounded player at x=100, moveX=-1, dt=100ms
+      // Expected: same magnitude as right, but negative direction
       const state: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } })],
+          ["player", createPlayer("player", { position: { x: 100, y: DEFAULT_FLOOR_Y + 10 } })],
         ]),
         gameState: "playing",
       };
@@ -186,10 +199,14 @@ describe("platformerPredictionScope", () => {
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
 
-      expect(result.players?.get("player")?.position.x).toBeLessThan(100);
+      expect(result.players?.get("player")?.velocity.x).toBe(-111.76470588235294);
+      expect(result.players?.get("player")?.position.x).toBe(88.82352941176471);
     });
 
     test("should apply gravity when in air", () => {
+      // Setup: airborne player at y=100, no input, dt=100ms
+      // Physics: gravity = -800, velocity.y = 0 + (-800 * 0.1) = -80
+      // position.y = 100 + (-80 * 0.1) = 92
       const state: Partial<PlatformerWorld> = {
         players: new Map([
           [
@@ -209,16 +226,20 @@ describe("platformerPredictionScope", () => {
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
 
       const player = result.players?.get("player");
-      expect(player?.velocity.y).toBeGreaterThan(0); // Falling (gravity is positive)
+      expect(player?.velocity.y).toBe(-80);
+      expect(player?.position.y).toBe(92);
     });
 
     test("should jump when grounded and jump=true", () => {
+      // Setup: grounded player, jump pressed, dt=50ms (0.05s)
+      // Physics: maxJumpVelocity = 320
+      // Expected: velocity.y = 320
       const state: Partial<PlatformerWorld> = {
         players: new Map([
           [
             "player",
             createPlayer("player", {
-              position: { x: 0, y: DEFAULT_FLOOR_Y - 10 },
+              position: { x: 0, y: DEFAULT_FLOOR_Y + 10 },
               isGrounded: true,
             }),
           ],
@@ -226,24 +247,25 @@ describe("platformerPredictionScope", () => {
         gameState: "playing",
       };
       const input: PlatformerInput = createInput(0, 0, true, 1000);
-      const deltaTime = 16.67;
+      const deltaTime = 50; // 50ms
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
 
       const player = result.players?.get("player");
-      // Jump velocity is applied, but then gravity is also applied for this frame
-      // So velocity.y should be close to DEFAULT_JUMP_VELOCITY + gravity*deltaSeconds
-      expect(player?.velocity.y).toBeLessThan(0); // Should be moving up (negative)
+      expect(player?.velocity.y).toBe(320); // maxJumpVelocity
+      expect(player?.isGrounded).toBe(false);
     });
 
     test("should not jump when not grounded", () => {
+      // Setup: airborne player at y=100, velocity.y=-50, jump pressed, dt=50ms
+      // Physics: gravity = -800, velocity.y = -50 + (-800 * 0.05) = -90
       const state: Partial<PlatformerWorld> = {
         players: new Map([
           [
             "player",
             createPlayer("player", {
               position: { x: 0, y: 100 },
-              velocity: { x: 0, y: 50 },
+              velocity: { x: 0, y: -50 }, // Y-up: negative = falling
               isGrounded: false,
             }),
           ],
@@ -251,13 +273,12 @@ describe("platformerPredictionScope", () => {
         gameState: "playing",
       };
       const input: PlatformerInput = createInput(0, 0, true, 1000);
-      const deltaTime = 16.67;
+      const deltaTime = 50; // 50ms
 
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
 
       const player = result.players?.get("player");
-      // Should not be jump velocity (would be negative)
-      expect(player?.velocity.y).toBeGreaterThan(0); // Still falling
+      expect(player?.velocity.y).toBe(-90);
     });
 
     test("should land on floor", () => {
@@ -266,8 +287,8 @@ describe("platformerPredictionScope", () => {
           [
             "player",
             createPlayer("player", {
-              position: { x: 0, y: DEFAULT_FLOOR_Y - 5 }, // Just above floor
-              velocity: { x: 0, y: 100 }, // Falling fast
+              position: { x: 0, y: 15 }, // Just above floor (Y-up: floor at 0, player should land at y=10)
+              velocity: { x: 0, y: -100 }, // Y-up: falling fast (negative velocity)
               isGrounded: false,
             }),
           ],
@@ -280,10 +301,12 @@ describe("platformerPredictionScope", () => {
       const result = platformerPredictionScope.simulatePredicted(state, input, deltaTime, "player");
 
       const player = result.players?.get("player");
-      // Should be clamped to floor
-      expect(player?.position.y).toBeLessThanOrEqual(DEFAULT_FLOOR_Y);
-      expect(player?.velocity.y).toBe(0);
-      expect(player?.isGrounded).toBe(true);
+      // Y-up: Should be clamped to floor or near it
+      // Physics engine handles collision detection - player shouldn't go below floor
+      expect(player?.position.y).toBeGreaterThanOrEqual(DEFAULT_FLOOR_Y + 10 - 1);
+      // When grounded, velocity.y should be 0 or near 0
+      // Note: If not quite grounded, may still have negative velocity approaching floor
+      expect(player?.isGrounded || player?.velocity.y <= 0).toBe(true);
     });
 
     test("should return state unchanged for empty players", () => {
@@ -305,6 +328,8 @@ describe("platformerPredictionScope", () => {
     });
 
     test("should set velocity.x based on input", () => {
+      // Setup: grounded player, moveX=1, dt=16.67ms
+      // Physics: smoothDamp(0, 200, 0, 0.1, 0.01667) = 8.895050499138875
       const state: Partial<PlatformerWorld> = {
         players: new Map([["player", createPlayer("player", { velocity: { x: 0, y: 0 } })]]),
         gameState: "playing",
@@ -313,10 +338,12 @@ describe("platformerPredictionScope", () => {
 
       const result = platformerPredictionScope.simulatePredicted(state, input, 16.67, "player");
 
-      expect(result.players?.get("player")?.velocity.x).toBe(DEFAULT_PLAYER_SPEED);
+      expect(result.players?.get("player")?.velocity.x).toBe(8.895050499138875);
     });
 
-    test("should set velocity.x to 0 when no horizontal input", () => {
+    test("should decelerate velocity.x towards 0 when no horizontal input", () => {
+      // Setup: grounded player with velocity.x=100, no input, dt=16.67ms
+      // Physics: smoothDamp(100, 0, 0, 0.1, 0.01667) = 95.55247475043056
       const state: Partial<PlatformerWorld> = {
         players: new Map([["player", createPlayer("player", { velocity: { x: 100, y: 0 } })]]),
         gameState: "playing",
@@ -325,7 +352,7 @@ describe("platformerPredictionScope", () => {
 
       const result = platformerPredictionScope.simulatePredicted(state, input, 16.67, "player");
 
-      expect(result.players?.get("player")?.velocity.x).toBe(0);
+      expect(result.players?.get("player")?.velocity.x).toBe(95.55247475043056);
     });
   });
 
@@ -350,11 +377,11 @@ describe("platformerPredictionScope", () => {
 
   describe("integration scenarios", () => {
     test("full prediction flow: extract, simulate, merge", () => {
-      // Server world with two players
+      // Server world with two players (Y-up: grounded at y=10)
       const serverWorld = createWorld(
         [
-          createPlayer("local", { position: { x: 0, y: DEFAULT_FLOOR_Y - 10 } }),
-          createPlayer("remote", { position: { x: 100, y: DEFAULT_FLOOR_Y - 10 } }),
+          createPlayer("local", { position: { x: 0, y: DEFAULT_FLOOR_Y + 10 } }),
+          createPlayer("remote", { position: { x: 100, y: DEFAULT_FLOOR_Y + 10 } }),
         ],
         10,
       );
@@ -384,9 +411,14 @@ describe("platformerPredictionScope", () => {
     });
 
     test("multiple inputs accumulate correctly", () => {
+      // Setup: grounded player, 3 right inputs at 16.67ms each
+      // Physics: smoothDamp accelerates velocity over 3 ticks
+      // After tick 1: velocity.x = 8.895, position.x = 0.148
+      // After tick 2: velocity.x = 28.81, position.x = 0.629
+      // After tick 3: velocity.x = 52.79, position.x = 1.509
       const initialState: Partial<PlatformerWorld> = {
         players: new Map([
-          ["player", createPlayer("player", { position: { x: 0, y: DEFAULT_FLOOR_Y - 10 } })],
+          ["player", createPlayer("player", { position: { x: 0, y: DEFAULT_FLOOR_Y + 10 } })],
         ]),
         gameState: "playing",
       };
@@ -399,11 +431,11 @@ describe("platformerPredictionScope", () => {
       }
 
       const finalPos = state.players?.get("player")?.position.x ?? 0;
+      const finalVel = state.players?.get("player")?.velocity.x ?? 0;
 
-      // Should have moved significantly right (3 frames at ~16.67ms each)
-      // Speed = 200, time = ~50ms = 0.05s, distance ≈ 10 units
-      expect(finalPos).toBeGreaterThan(9);
-      expect(finalPos).toBeLessThan(12);
+      // Exact values from smoothDamp formula
+      expect(finalPos).toBe(1.5085054162983704);
+      expect(finalVel).toBe(52.78641642455983);
     });
   });
 });

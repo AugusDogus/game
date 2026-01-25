@@ -1,0 +1,22 @@
+{
+  "name": "@game/physics2d",
+  "version": "0.1.0",
+  "main": "./src/index.ts",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./math": "./src/math.ts",
+    "./world": "./src/world.ts",
+    "./controller": "./src/controller.ts"
+  },
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@dimforge/rapier2d-compat": "^0.19.3"
+  }
+}

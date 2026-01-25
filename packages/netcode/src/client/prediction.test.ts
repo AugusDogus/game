@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeAll, beforeEach } from "bun:test";
 import { Predictor } from "./prediction.js";
 import { DEFAULT_FLOOR_Y } from "../constants.js";
 import {
@@ -8,7 +8,13 @@ import {
   platformerPredictionScope,
   createTestPlayer,
   createPlayingWorld,
+  initPlatformerPhysics,
 } from "@game/example-platformer";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
 
 /** Helper to create test input with all required fields */
 const createInput = (
@@ -35,9 +41,10 @@ describe("Predictor", () => {
   });
 
   // Helper to create a grounded player
+  // Y-up: floor at y=0, player center at halfHeight (10) above floor
   const createGroundedPlayer = (id: string, x: number = 0): PlatformerPlayer =>
     createTestPlayer(id, {
-    position: { x, y: DEFAULT_FLOOR_Y - 10 },
+    position: { x, y: DEFAULT_FLOOR_Y + 10 },
     isGrounded: true,
   });
 
@@ -112,7 +119,7 @@ describe("Predictor", () => {
 
       const state = predictor.getState();
       const playerState = state?.players?.get(playerId);
-      expect(playerState?.velocity.y).toBeLessThan(0); // Negative = upward
+      expect(playerState?.velocity.y).toBeGreaterThan(0); // Y-up: positive = upward
       expect(playerState?.isGrounded).toBe(false);
     });
   });
@@ -168,8 +175,9 @@ describe("Predictor", () => {
       const otherPlayer = createGroundedPlayer("other-player", 500);
       
       // Setup server world with both players
+      // Y-up: grounded player at halfHeight above floor
       const serverLocalPlayer = createTestPlayer(playerId, {
-        position: { x: 10, y: DEFAULT_FLOOR_Y - 10 },
+        position: { x: 10, y: DEFAULT_FLOOR_Y + 10 },
         isGrounded: true,
       });
       const serverWorld = createPlayingWorld([serverLocalPlayer, otherPlayer]);
@@ -213,8 +221,10 @@ describe("Predictor", () => {
       );
 
       const state = predictor.getState();
-      // At 200 units/sec, 50ms should move 10 units
-      expect(state?.players?.get(playerId)?.position.x).toBeCloseTo(10, 0);
+      // With smoothDamp acceleration, player moves some distance in the direction of input
+      // Exact distance depends on acceleration curve, but should be positive and reasonable
+      expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
+      expect(state?.players?.get(playerId)?.position.x).toBeLessThan(15); // Upper bound
     });
 
     test("should not update internal timestamp tracking", () => {
@@ -272,8 +282,10 @@ describe("Predictor", () => {
       predictor.applyInput(createInput(1, 0, false, 1050));
 
       const state = predictor.getState();
-      // Should have moved for 50ms (10 units at 200 units/sec)
-      expect(state?.players?.get(playerId)?.position.x).toBeCloseTo(10, 0);
+      // With smoothDamp, movement starts from 0 velocity, so won't reach full speed
+      // But should move some amount in the direction of input
+      expect(state?.players?.get(playerId)?.position.x).toBeGreaterThan(0);
+      expect(state?.players?.get(playerId)?.position.x).toBeLessThan(15); // Upper bound
     });
   });
 
@@ -314,7 +326,7 @@ describe("Predictor", () => {
 
     test("tab switch: large time gap between inputs should apply correct physics", () => {
       const player = createTestPlayer(playerId, {
-        position: { x: 0, y: 0 }, // In the air
+        position: { x: 0, y: 100 }, // In the air (above floor in Y-up)
         isGrounded: false,
       });
       const world = createWorld(player);
@@ -330,8 +342,9 @@ describe("Predictor", () => {
 
       // Should have fallen significantly more during the 500ms gap
       // (but clamped to 100ms max for safety)
-      const fallDuringGap = posAfterGap - posAfterFirst;
-      expect(fallDuringGap).toBeGreaterThan(0); // Fell down (Y increases)
+      // Y-up: falling means Y decreases
+      const fallDuringGap = posAfterFirst - posAfterGap;
+      expect(fallDuringGap).toBeGreaterThan(0); // Fell down (Y decreased)
     });
 
     test("rapid inputs: burst of inputs should not cause excessive movement", () => {

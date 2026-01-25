@@ -113,20 +113,23 @@ export class GameClient {
   }
 
   /**
-   * Convert mouse event coordinates to world coordinates
+   * Convert mouse event coordinates to world coordinates.
+   * Y-up coordinate system: screen Y increases down, world Y increases up.
    */
   private updateMousePosition(e: MouseEvent): void {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
     const scaleY = this.canvas.height / rect.height;
     
-    // Get canvas-relative position
+    // Get canvas-relative position (screen coords: Y-down)
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
     
-    // Convert to world coordinates (canvas center is world origin)
+    // Convert to world coordinates:
+    // - Canvas center is world origin
+    // - Flip Y because world uses Y-up, screen uses Y-down
     this.mouseX = canvasX - this.canvas.width / 2;
-    this.mouseY = canvasY - this.canvas.height / 2;
+    this.mouseY = -(canvasY - this.canvas.height / 2); // Flip Y
   }
 
   /**

@@ -4,6 +4,12 @@
  * Levels define platforms, spawn points, and hazards.
  * These are loaded at game start and set via setLevelConfig().
  *
+ * Coordinate System: Y-UP
+ * - Floor is at y=0 (DEFAULT_FLOOR_Y)
+ * - Positive Y points upward
+ * - Platform.position is the bottom-left corner
+ * - Player spawns should have y = PLAYER_HEIGHT/2 to be on the floor
+ *
  * @module examples/platformer/levels
  */
 
@@ -26,8 +32,9 @@ export const LEVEL_BASIC_ARENA: LevelConfig = {
   bounds: { width: 800, height: 600 },
   platforms: [],
   spawnPoints: [
-    { position: { x: -200, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 } },
-    { position: { x: 200, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 } },
+    // Y-up: player center at halfHeight above floor
+    { position: { x: -200, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 } },
+    { position: { x: 200, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 } },
   ],
   hazards: [],
 };
@@ -46,49 +53,50 @@ export const LEVEL_PLATFORMS: LevelConfig = {
   description: "Floating platforms at various heights",
   bounds: { width: 1000, height: 800 },
   platforms: [
-    // Center platform (high)
+    // Center platform (high) - bottom at y=180
     {
       id: "plat-center",
-      position: { x: -75, y: DEFAULT_FLOOR_Y - 200 },
+      position: { x: -75, y: 180 },
       width: 150,
       height: 20,
     },
-    // Left platform (medium height)
+    // Left platform (medium height) - bottom at y=100
     {
       id: "plat-left",
-      position: { x: -350, y: DEFAULT_FLOOR_Y - 120 },
+      position: { x: -350, y: 100 },
       width: 120,
       height: 20,
     },
-    // Right platform (medium height)
+    // Right platform (medium height) - bottom at y=100
     {
       id: "plat-right",
-      position: { x: 230, y: DEFAULT_FLOOR_Y - 120 },
+      position: { x: 230, y: 100 },
       width: 120,
       height: 20,
     },
-    // Lower left platform
+    // Lower left platform - bottom at y=40
     {
       id: "plat-lower-left",
-      position: { x: -250, y: DEFAULT_FLOOR_Y - 60 },
+      position: { x: -250, y: 40 },
       width: 100,
       height: 20,
     },
-    // Lower right platform
+    // Lower right platform - bottom at y=40
     {
       id: "plat-lower-right",
-      position: { x: 150, y: DEFAULT_FLOOR_Y - 60 },
+      position: { x: 150, y: 40 },
       width: 100,
       height: 20,
     },
   ],
   spawnPoints: [
-    // Ground spawns
-    { position: { x: -300, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 } },
-    { position: { x: 300, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 } },
-    // Platform spawns
-    { position: { x: -290, y: DEFAULT_FLOOR_Y - 120 - PLAYER_HEIGHT / 2 } },
-    { position: { x: 290, y: DEFAULT_FLOOR_Y - 120 - PLAYER_HEIGHT / 2 } },
+    // Ground spawns (player center at halfHeight above floor)
+    { position: { x: -300, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 } },
+    { position: { x: 300, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 } },
+    // Platform spawns (player center at halfHeight above platform top)
+    // Platform top = platform.y + platform.height = 100 + 20 = 120
+    { position: { x: -290, y: 120 + PLAYER_HEIGHT / 2 } },
+    { position: { x: 290, y: 120 + PLAYER_HEIGHT / 2 } },
   ],
   hazards: [],
 };
@@ -107,61 +115,61 @@ export const LEVEL_DANGER_ZONE: LevelConfig = {
   description: "Watch out for the spikes!",
   bounds: { width: 1000, height: 800 },
   platforms: [
-    // Safe center platform
+    // Safe center platform - bottom at y=130
     {
       id: "plat-safe-center",
-      position: { x: -100, y: DEFAULT_FLOOR_Y - 150 },
+      position: { x: -100, y: 130 },
       width: 200,
       height: 20,
     },
-    // Left safe platform
+    // Left safe platform - bottom at y=80
     {
       id: "plat-safe-left",
-      position: { x: -400, y: DEFAULT_FLOOR_Y - 100 },
+      position: { x: -400, y: 80 },
       width: 150,
       height: 20,
     },
-    // Right safe platform
+    // Right safe platform - bottom at y=80
     {
       id: "plat-safe-right",
-      position: { x: 250, y: DEFAULT_FLOOR_Y - 100 },
+      position: { x: 250, y: 80 },
       width: 150,
       height: 20,
     },
-    // High platform
+    // High platform - bottom at y=230
     {
       id: "plat-high",
-      position: { x: -50, y: DEFAULT_FLOOR_Y - 250 },
+      position: { x: -50, y: 230 },
       width: 100,
       height: 20,
     },
   ],
   spawnPoints: [
-    // All spawns are on safe platforms
-    { position: { x: 0, y: DEFAULT_FLOOR_Y - 150 - PLAYER_HEIGHT / 2 } },
-    { position: { x: -325, y: DEFAULT_FLOOR_Y - 100 - PLAYER_HEIGHT / 2 } },
-    { position: { x: 325, y: DEFAULT_FLOOR_Y - 100 - PLAYER_HEIGHT / 2 } },
-    { position: { x: 0, y: DEFAULT_FLOOR_Y - 250 - PLAYER_HEIGHT / 2 } },
+    // All spawns are on safe platforms (player center at halfHeight above platform top)
+    { position: { x: 0, y: 150 + PLAYER_HEIGHT / 2 } },      // center platform top = 150
+    { position: { x: -325, y: 100 + PLAYER_HEIGHT / 2 } },   // left platform top = 100
+    { position: { x: 325, y: 100 + PLAYER_HEIGHT / 2 } },    // right platform top = 100
+    { position: { x: 0, y: 250 + PLAYER_HEIGHT / 2 } },      // high platform top = 250
   ],
   hazards: [
-    // Spikes covering most of the floor
+    // Spikes on the floor (bottom at y=0, height=15)
     {
       id: "spikes-left",
-      position: { x: -450, y: DEFAULT_FLOOR_Y - 15 },
+      position: { x: -450, y: 0 },
       width: 300,
       height: 15,
       damage: 5, // Damage per tick while touching
     },
     {
       id: "spikes-center",
-      position: { x: -100, y: DEFAULT_FLOOR_Y - 15 },
+      position: { x: -100, y: 0 },
       width: 200,
       height: 15,
       damage: 5,
     },
     {
       id: "spikes-right",
-      position: { x: 150, y: DEFAULT_FLOOR_Y - 15 },
+      position: { x: 150, y: 0 },
       width: 300,
       height: 15,
       damage: 5,
@@ -183,59 +191,135 @@ export const LEVEL_TOWER: LevelConfig = {
   description: "Climb to the top!",
   bounds: { width: 600, height: 1000 },
   platforms: [
-    // Ground level platforms (left and right)
+    // Ground level platforms (left and right) - just above floor
     {
       id: "plat-ground-left",
-      position: { x: -250, y: DEFAULT_FLOOR_Y - 20 },
+      position: { x: -250, y: 0 },
       width: 100,
       height: 20,
     },
     {
       id: "plat-ground-right",
-      position: { x: 150, y: DEFAULT_FLOOR_Y - 20 },
+      position: { x: 150, y: 0 },
       width: 100,
       height: 20,
     },
-    // Level 1
+    // Level 1 - bottom at y=60
     {
       id: "plat-l1-center",
-      position: { x: -60, y: DEFAULT_FLOOR_Y - 80 },
+      position: { x: -60, y: 60 },
       width: 120,
       height: 20,
     },
-    // Level 2
+    // Level 2 - bottom at y=130
     {
       id: "plat-l2-left",
-      position: { x: -180, y: DEFAULT_FLOOR_Y - 150 },
+      position: { x: -180, y: 130 },
       width: 100,
       height: 20,
     },
     {
       id: "plat-l2-right",
-      position: { x: 80, y: DEFAULT_FLOOR_Y - 150 },
+      position: { x: 80, y: 130 },
       width: 100,
       height: 20,
     },
-    // Level 3
+    // Level 3 - bottom at y=200
     {
       id: "plat-l3-center",
-      position: { x: -50, y: DEFAULT_FLOOR_Y - 220 },
+      position: { x: -50, y: 200 },
       width: 100,
       height: 20,
     },
-    // Level 4 (top)
+    // Level 4 (top) - bottom at y=280
     {
       id: "plat-top",
-      position: { x: -75, y: DEFAULT_FLOOR_Y - 300 },
+      position: { x: -75, y: 280 },
       width: 150,
       height: 20,
     },
   ],
   spawnPoints: [
-    { position: { x: -200, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 } },
-    { position: { x: 200, y: DEFAULT_FLOOR_Y - PLAYER_HEIGHT / 2 } },
-    { position: { x: 0, y: DEFAULT_FLOOR_Y - 80 - PLAYER_HEIGHT / 2 } },
-    { position: { x: 0, y: DEFAULT_FLOOR_Y - 300 - PLAYER_HEIGHT / 2 } },
+    // Ground spawns
+    { position: { x: -200, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 } },
+    { position: { x: 200, y: DEFAULT_FLOOR_Y + PLAYER_HEIGHT / 2 } },
+    // Platform spawns (L1 top = 80, top platform top = 300)
+    { position: { x: 0, y: 80 + PLAYER_HEIGHT / 2 } },
+    { position: { x: 0, y: 300 + PLAYER_HEIGHT / 2 } },
+  ],
+  hazards: [],
+};
+
+// =============================================================================
+// Level: Wall Jump Test
+// =============================================================================
+
+/**
+ * A level designed to test wall jumping mechanics.
+ * Features tall walls on both sides and platforms to climb using wall jumps.
+ */
+export const LEVEL_WALL_TEST: LevelConfig = {
+  id: "wall-test",
+  name: "Wall Jump Test",
+  description: "Practice wall jumping between tall walls",
+  bounds: { width: 400, height: 600 },
+  platforms: [
+    // Left wall (tall, from floor to high up)
+    {
+      id: "wall-left",
+      position: { x: -180, y: 0 },
+      width: 20,
+      height: 400,
+    },
+    // Right wall (tall, from floor to high up)
+    {
+      id: "wall-right",
+      position: { x: 160, y: 0 },
+      width: 20,
+      height: 400,
+    },
+    // Ground platform in the middle (between walls)
+    {
+      id: "plat-ground",
+      position: { x: -80, y: 0 },
+      width: 160,
+      height: 20,
+    },
+    // Mid-height platform (reachable by wall jumping)
+    {
+      id: "plat-mid",
+      position: { x: -50, y: 150 },
+      width: 100,
+      height: 20,
+    },
+    // High platform (goal - requires multiple wall jumps)
+    {
+      id: "plat-high",
+      position: { x: -60, y: 300 },
+      width: 120,
+      height: 20,
+    },
+    // Small ledges on walls for resting
+    {
+      id: "ledge-left",
+      position: { x: -160, y: 200 },
+      width: 40,
+      height: 15,
+    },
+    {
+      id: "ledge-right",
+      position: { x: 120, y: 250 },
+      width: 40,
+      height: 15,
+    },
+  ],
+  spawnPoints: [
+    // Spawn on ground platform
+    { position: { x: 0, y: 20 + PLAYER_HEIGHT / 2 } },
+    { position: { x: -40, y: 20 + PLAYER_HEIGHT / 2 } },
+    { position: { x: 40, y: 20 + PLAYER_HEIGHT / 2 } },
+    // Spawn on mid platform
+    { position: { x: 0, y: 170 + PLAYER_HEIGHT / 2 } },
   ],
   hazards: [],
 };
@@ -252,6 +336,7 @@ export const LEVELS: Record<string, LevelConfig> = {
   platforms: LEVEL_PLATFORMS,
   "danger-zone": LEVEL_DANGER_ZONE,
   tower: LEVEL_TOWER,
+  "wall-test": LEVEL_WALL_TEST,
 };
 
 /**
@@ -353,16 +438,19 @@ export function validateLevel(level: LevelConfig): LevelValidationResult {
   }
 
   // Check spawn point validity (should be above floor or on a platform)
+  // Y-up: floor is at y=0, positive Y is above floor
   for (let i = 0; i < level.spawnPoints.length; i++) {
     const spawn = level.spawnPoints[i];
     if (!spawn) continue;
 
     // Check if spawn is below floor (probably a mistake)
-    if (spawn.position.y > DEFAULT_FLOOR_Y) {
+    // Y-up: below floor means y < DEFAULT_FLOOR_Y (which is 0)
+    if (spawn.position.y < DEFAULT_FLOOR_Y) {
       warnings.push(`Spawn point ${i} is below floor level`);
     }
 
     // Check if spawn is inside a hazard
+    // Y-up: hazard box is from position.y to position.y + height
     for (const hazard of level.hazards) {
       if (
         spawn.position.x >= hazard.position.x &&

@@ -3,7 +3,7 @@
  * These tests simulate the full client-server flow to catch timing mismatches.
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { InputBuffer } from "./client/input-buffer.js";
 import { Predictor } from "./client/prediction.js";
 import { Reconciler } from "./client/reconciliation.js";
@@ -18,10 +18,16 @@ import {
   createIdleInput,
   createPlatformerWorld,
   getPlayer,
+  initPlatformerPhysics,
   type PlatformerInput,
   type PlatformerWorld,
 } from "@game/example-platformer";
 import { InputQueue } from "./server/input-queue.js";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
 
 /**
  * Helper to create a world in "playing" state for tests
@@ -126,7 +132,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 }); // On ground
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 }); // On ground
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -165,7 +171,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -209,7 +215,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
     let serverTick_ = 0;
@@ -273,7 +279,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
     let serverTick_ = 0;
@@ -364,7 +370,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 }); // On ground
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 }); // On ground
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -410,7 +416,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -449,8 +455,8 @@ describe("Client-Server Integration", () => {
   test("two clients: both should have correct physics", () => {
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player-a", { x: 0, y: 190 });
-    serverWorld = addPlayerToWorld(serverWorld, "player-b", { x: 100, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player-a", { x: 0, y: 10 });
+    serverWorld = addPlayerToWorld(serverWorld, "player-b", { x: 100, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -519,7 +525,7 @@ describe("Client-Server Integration", () => {
     
     // Setup server
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
     let serverTickNum = 0;
@@ -585,7 +591,7 @@ describe("Client-Server Integration", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
     let serverTickNum = 0;
@@ -649,8 +655,9 @@ describe("Client-Server Integration", () => {
     // This test verifies that adding a second client doesn't cause
     // gravity to be applied multiple times (the 2x gravity bug)
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player-a", { x: 0, y: 0 }); // In the air
-    serverWorld = addPlayerToWorld(serverWorld, "player-b", { x: 100, y: 0 }); // Also in the air
+    // Y-up: players start in the air at y=100
+    serverWorld = addPlayerToWorld(serverWorld, "player-a", { x: 0, y: 100 }); // In the air
+    serverWorld = addPlayerToWorld(serverWorld, "player-b", { x: 100, y: 100 }); // Also in the air
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -678,21 +685,21 @@ describe("Client-Server Integration", () => {
     const playerB = getPlayer(newServerWorld, "player-b");
 
     // Both players should have fallen the same amount due to gravity
-    // At 980 gravity, 50ms = 0.98 units/tick velocity change
-    // With initial velocity 0, after 50ms: v = 980 * 0.05 = 49 units/sec
-    // Position change = 0.5 * 980 * 0.05^2 = 1.225 units (approximately)
+    // Y-up: gravity is negative (-800), so Y decreases
     expect(playerA.position.y).toBeCloseTo(playerB.position.y, 5);
     
     // Critical: gravity should be applied only once, not twice
-    // If gravity was applied twice, position.y would be ~2.45 instead of ~1.225
-    expect(playerA.position.y).toBeLessThan(3); // Should be around 1.225
+    // Y-up: players should have fallen a small amount (should still be near 100)
+    expect(playerA.position.y).toBeGreaterThan(97); // Should have fallen ~1-2 units
+    expect(playerA.position.y).toBeLessThan(100); // But did fall
   });
 
   test("two clients: one moving, one idle - physics isolation", () => {
     // Verify that one client's inputs don't affect another client's physics
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "active", { x: 0, y: 190 }); // On ground
-    serverWorld = addPlayerToWorld(serverWorld, "idle", { x: 100, y: 0 }); // In the air
+    // Y-up: grounded player at y=10 (floor at 0), airborne player at y=100
+    serverWorld = addPlayerToWorld(serverWorld, "active", { x: 0, y: 10 }); // On ground
+    serverWorld = addPlayerToWorld(serverWorld, "idle", { x: 100, y: 100 }); // In the air
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -731,9 +738,9 @@ describe("Client-Server Integration", () => {
     // Idle player should NOT have moved horizontally
     expect(idlePlayer?.position.x).toBe(100);
     
-    // Idle player SHOULD have fallen due to gravity (applied once for tickInterval)
-    expect(idlePlayer?.position.y).toBeGreaterThan(0);
-    expect(idlePlayer?.position.y).toBeLessThan(10); // But not too much (only 50ms of gravity)
+    // Idle player SHOULD have fallen due to gravity (Y-up: Y decreases when falling)
+    expect(idlePlayer?.position.y).toBeLessThan(100);
+    expect(idlePlayer?.position.y).toBeGreaterThan(90); // But not too much (only 50ms of gravity)
   });
 
   test("variable delta timing: irregular input timestamps should work", () => {
@@ -742,7 +749,8 @@ describe("Client-Server Integration", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    // Y-up: player on ground at y=10
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -782,7 +790,7 @@ describe("Client-Server Integration", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 50, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 50, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -821,7 +829,7 @@ describe("Client-Server Integration", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     // Ensure player is grounded
     const player = getPlayer(serverWorld, PLAYER_ID);
     serverWorld = {
@@ -869,7 +877,7 @@ describe("Client-Server Integration", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
     let serverTickNum = 0;
@@ -951,9 +959,9 @@ describe("Scale Tests", () => {
     let serverWorld = createPlayingWorld();
     const inputQueue = new InputQueue<PlatformerInput>();
 
-    // Add 10 players at different positions
+    // Y-up: Add 10 players in the air at y=100
     for (let i = 0; i < playerCount; i++) {
-      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x: i * 50, y: 0 });
+      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x: i * 50, y: 100 });
     }
 
     // Each player sends different inputs
@@ -996,8 +1004,8 @@ describe("Scale Tests", () => {
         expect(player?.position.x).toBeLessThan(startX);
       }
       
-      // All players should have fallen due to gravity
-      expect(player?.position.y).toBeGreaterThan(0);
+      // Y-up: All players should have fallen due to gravity (Y decreased from 100)
+      expect(player?.position.y).toBeLessThan(100);
     }
 
     // Verify gravity was only applied once per player
@@ -1011,9 +1019,9 @@ describe("Scale Tests", () => {
     let serverWorld = createPlayingWorld();
     const inputQueue = new InputQueue<PlatformerInput>();
 
-    // Add 50 players at different positions to avoid collision
+    // Y-up: Add 50 players in the air at y=100
     for (let i = 0; i < playerCount; i++) {
-      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x: i * 50, y: 0 });
+      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x: i * 50, y: 100 });
     }
 
     // All players send idle inputs
@@ -1047,8 +1055,9 @@ describe("Scale Tests", () => {
     expect(player0.position.y).toBeCloseTo(player49.position.y, 3);
     
     // Critical: gravity should be applied only once, not 50x
-    // At 980 gravity, DEFAULT_FRAME_DELTA_MSms: y = 0.5 * 980 * 0.01667^2 ≈ 0.136 units
-    expect(player0.position.y).toBeLessThan(1); // Should be ~0.136, not ~6.8
+    // Y-up: players should have fallen a tiny amount from 100 (should be ~99.9)
+    expect(player0.position.y).toBeGreaterThan(99); // Should have only fallen a tiny amount
+    expect(player0.position.y).toBeLessThan(100); // But did fall
   });
 
   test("100 players stress test: physics remains consistent", () => {
@@ -1056,12 +1065,12 @@ describe("Scale Tests", () => {
     let serverWorld = createPlayingWorld();
     const inputQueue = new InputQueue<PlatformerInput>();
 
-    // Add 100 players at different positions to avoid collision
+    // Y-up: Add 100 players in the air at y=100
     // First 50 start at x=0, 50, 100, ... (moving right)
     // Last 50 start at x=5000, 5050, 5100, ... (moving left, far from first group)
     for (let i = 0; i < playerCount; i++) {
       const x = i < 50 ? i * 50 : 5000 + (i - 50) * 50;
-      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x, y: 0 });
+      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x, y: 100 });
     }
 
     // Half move right, half move left
@@ -1113,8 +1122,8 @@ describe("Scale Tests", () => {
 describe("Player Disconnect Tests", () => {
   test("player disconnects mid-movement: remaining players unaffected", () => {
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "staying", { x: 0, y: 190 });
-    serverWorld = addPlayerToWorld(serverWorld, "leaving", { x: 100, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "staying", { x: 0, y: 10 });
+    serverWorld = addPlayerToWorld(serverWorld, "leaving", { x: 100, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
 
     // Both players moving
@@ -1175,8 +1184,8 @@ describe("Player Disconnect Tests", () => {
 
   test("player disconnects mid-jump: jump state doesn't corrupt other players", () => {
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "grounded", { x: 0, y: 190 });
-    serverWorld = addPlayerToWorld(serverWorld, "jumping", { x: 100, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "grounded", { x: 0, y: 10 });
+    serverWorld = addPlayerToWorld(serverWorld, "jumping", { x: 100, y: 10 });
     
     // Set both as grounded
     const groundedPlayer = getPlayer(serverWorld, "grounded");
@@ -1215,8 +1224,8 @@ describe("Player Disconnect Tests", () => {
       }
     }
 
-    // Jumping player should have negative Y velocity
-    expect(currentWorld.players.get("jumping")?.velocity.y).toBeLessThan(0);
+    // Jumping player should have positive Y velocity (Y-up: positive = upward)
+    expect(currentWorld.players.get("jumping")?.velocity.y).toBeGreaterThan(0);
 
     // Remove jumping player mid-air
     const newPlayers = new Map(currentWorld.players);
@@ -1240,15 +1249,16 @@ describe("Player Disconnect Tests", () => {
       }
     }
 
-    // Grounded player should still be near ground level (not inheriting jump)
+    // Y-up: Grounded player should still be near ground level (not inheriting jump)
+    // Floor is at y=0, player center at y=10 when grounded
     const groundedY = currentWorld.players.get("grounded")?.position.y ?? 0;
-    expect(groundedY).toBeGreaterThan(180); // Near floor at 190
+    expect(groundedY).toBeLessThan(20); // Near floor (should be at y=10)
   });
 
   test("multiple players disconnect simultaneously", () => {
     let serverWorld = createPlayingWorld();
     for (let i = 0; i < 5; i++) {
-      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x: i * 50, y: 190 });
+      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x: i * 50, y: 10 });
     }
 
     const inputQueue = new InputQueue<PlatformerInput>();
@@ -1323,7 +1333,7 @@ describe("Network Condition Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1382,7 +1392,7 @@ describe("Network Condition Tests", () => {
 
   test("out-of-order packets: inputs arriving 3,1,2 should process correctly", () => {
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1426,14 +1436,15 @@ describe("Network Condition Tests", () => {
     // Player should have moved right
     expect(player?.position.x).toBeGreaterThan(0);
     
-    // Movement should be reasonable for 3 inputs
-    expect(player?.position.x).toBeGreaterThan(5);
+    // Movement should be reasonable for 3 inputs with smoothDamp acceleration
+    // Velocity ramps up gradually, so less than instant (200 * 0.05 = 10 units)
+    expect(player?.position.x).toBeGreaterThan(1);
     expect(player?.position.x).toBeLessThan(20);
   });
 
   test("duplicate packets: same input received twice should not double-apply", () => {
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
 
     const input: PlatformerInput = createInput(1, 0, false, 1000);
@@ -1460,14 +1471,14 @@ describe("Network Condition Tests", () => {
     const player = currentWorld.players.get("player");
     
     // Movement should be for 1 input only, not 2
-    // 200 units/sec * 0.01667 sec = ~3.33 units
-    expect(player?.position.x).toBeGreaterThan(2);
-    expect(player?.position.x).toBeLessThan(5); // Not double (~6.67)
+    // With smoothDamp from 0, movement is less than instant (velocity ramps up)
+    expect(player?.position.x).toBeGreaterThan(0);
+    expect(player?.position.x).toBeLessThan(5); // Not double movement
   });
 
   test("packet loss: missing input seq should be handled gracefully", () => {
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1514,7 +1525,7 @@ describe("Network Condition Tests", () => {
 
   test("late packets: acknowledged inputs are removed from queue", () => {
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
 
     // First batch of inputs
@@ -1560,7 +1571,7 @@ describe("Network Condition Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1622,7 +1633,7 @@ describe("Chaos/Fuzz Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1678,7 +1689,7 @@ describe("Chaos/Fuzz Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1719,7 +1730,7 @@ describe("Chaos/Fuzz Tests", () => {
   test("extreme macro-deltas: 500ms gaps - graceful clamping", () => {
     // Test that large deltas are gracefully clamped to prevent physics explosions
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1759,12 +1770,13 @@ describe("Chaos/Fuzz Tests", () => {
     expect(serverPlayer?.position.x).toBeGreaterThan(0);
     
     // Movement should be clamped - not as much as 2650ms would give
-    // 200 units/sec * 2.65 sec = 530 units unclamped
-    // With clamping, should be much less (roughly 6 * 100ms * 200/1000 = 120 max)
+    // With smoothDamp acceleration, movement is less than instant velocity
+    // But still should be significant over multiple large deltas
     expect(serverPlayer?.position.x).toBeLessThan(200);
     
-    // Y should be at or near floor (gravity still works, player landed)
-    expect(serverPlayer?.position.y).toBeGreaterThanOrEqual(190);
+    // Y-up: Y should be at or near floor (floor at 0, player center at 10 when grounded)
+    // Use toBeCloseTo for floating point tolerance
+    expect(serverPlayer?.position.y).toBeCloseTo(10, 4);
   });
 
   test("alternating micro and macro deltas", () => {
@@ -1772,7 +1784,7 @@ describe("Chaos/Fuzz Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1827,7 +1839,7 @@ describe("Chaos/Fuzz Tests", () => {
     // Add random number of players
     for (let i = 0; i < playerCount; i++) {
       const x = Math.floor(random() * 500) - 250;
-      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x, y: 190 });
+      serverWorld = addPlayerToWorld(serverWorld, `player-${i}`, { x, y: 10 });
       initialPositions.set(`player-${i}`, x);
       timeWeightedMovement.set(`player-${i}`, 0);
     }
@@ -1908,9 +1920,10 @@ describe("Chaos/Fuzz Tests", () => {
       }
       // Small or mixed movement - don't assert direction
       
-      // Y should be within valid range (above floor if jumping, at floor if not)
-      expect(player.position.y).toBeLessThanOrEqual(200);
-      expect(player.position.y).toBeGreaterThan(0);
+      // Y-up: Y should be within valid range (floor at 0, can jump above)
+      // Player should be above floor (y >= halfHeight = 10) and not unreasonably high
+      expect(player.position.y).toBeGreaterThanOrEqual(10);
+      expect(player.position.y).toBeLessThan(500);
       
       // Positions should be reasonable (not exploded to infinity)
       expect(Math.abs(player.position.x)).toBeLessThan(1000);
@@ -1922,7 +1935,8 @@ describe("Chaos/Fuzz Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 100, y: 190 });
+    // Y-up: player on floor (center at halfHeight=10 above floor at 0)
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 100, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -1969,7 +1983,7 @@ describe("Chaos/Fuzz Tests", () => {
     const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
     
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     // Start grounded
     const player = getPlayer(serverWorld, "player");
     serverWorld = {
@@ -2019,7 +2033,7 @@ describe("Chaos/Fuzz Tests", () => {
     // Test that same-timestamp inputs use a minimum delta (1ms) instead of 0
     // This prevents divide-by-zero and zero-time physics
     let serverWorld = createPlayingWorld();
-    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 190 });
+    serverWorld = addPlayerToWorld(serverWorld, "player", { x: 0, y: 10 });
     const inputQueue = new InputQueue<PlatformerInput>();
     const serverTimestamps = new Map<string, number>();
 
@@ -2057,12 +2071,13 @@ describe("Chaos/Fuzz Tests", () => {
     
     // Movement should be small since we used 1ms deltas for duplicates
     // First input: DEFAULT_FRAME_DELTA_MSms, inputs 2-5: 1ms each = 20.67ms total
-    // 200 units/sec * 0.02067 sec ≈ 4.13 units
-    expect(serverPlayer?.position.x).toBeGreaterThan(3);
-    expect(serverPlayer?.position.x).toBeLessThan(6);
+    // With smoothDamp, velocity ramps up gradually, so movement is less than instant
+    expect(serverPlayer?.position.x).toBeGreaterThan(0);
+    expect(serverPlayer?.position.x).toBeLessThan(8);
     
-    // Y position should be at floor (gravity worked)
-    expect(serverPlayer?.position.y).toBeGreaterThanOrEqual(190);
+    // Y-up: Y position should be at floor (floor at 0, player center at 10 when grounded)
+    // Use toBeCloseTo for floating point tolerance
+    expect(serverPlayer?.position.y).toBeCloseTo(10, 4);
   });
 
   test("fuzz: 100 iterations of random chaos", () => {
@@ -2079,7 +2094,7 @@ describe("Chaos/Fuzz Tests", () => {
       // Spawn players far apart to avoid collision (player width is ~20, use 100 spacing)
       for (let p = 0; p < playerCount; p++) {
         const x = p * 100; // 0, 100, 200, 300, 400
-        serverWorld = addPlayerToWorld(serverWorld, `p${p}`, { x, y: 190 });
+        serverWorld = addPlayerToWorld(serverWorld, `p${p}`, { x, y: 10 });
         initialPositions.set(`p${p}`, x);
         netMovement.set(`p${p}`, 0);
       }
@@ -2128,9 +2143,9 @@ describe("Chaos/Fuzz Tests", () => {
         const player = getPlayer(currentWorld, `p${p}`);
         const initialX = getFromMap(initialPositions, `p${p}`, "initialPositions");
         
-        // Y should be in valid range (can be mid-jump or on floor)
-        expect(player.position.y).toBeGreaterThan(0); // Not flown off top
-        expect(player.position.y).toBeLessThanOrEqual(200); // Not fallen through floor
+        // Y-up: Y should be in valid range (floor at 0, player center >= halfHeight=10)
+        expect(player.position.y).toBeGreaterThanOrEqual(10); // On or above floor
+        expect(player.position.y).toBeLessThan(500); // Not unreasonably high
         
         // Positions bounded (no explosions) - relative to starting position
         expect(Math.abs(player.position.x - initialX)).toBeLessThan(200);

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { describe, expect, test, beforeAll, beforeEach } from "bun:test";
 import { DefaultWorldManager } from "../core/world.js";
 import {
   type PlatformerWorld,
@@ -13,8 +13,14 @@ import {
   interpolatePlatformer,
   platformerPredictionScope,
   getPlayer,
+  initPlatformerPhysics,
 } from "@game/example-platformer";
 import { ServerAuthoritativeClient, ServerAuthoritativeServer } from "./server-authoritative.js";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
 
 /** Helper to create test input with all required fields */
 const createInput = (
@@ -205,19 +211,28 @@ describe("ServerAuthoritativeServer", () => {
     });
 
     test("should apply physics to idle players", () => {
-      // Player spawns in the air
+      // Player spawns at default position (0,0)
       server.addClient("player-1");
+      
+      // Move player into the air to test gravity (Y-up: y=100 is in air)
+      const world = server.getWorldState();
+      const p = world.players.get("player-1");
+      if (p) {
+        const newPlayers = new Map(world.players);
+        newPlayers.set("player-1", { ...p, position: { x: 0, y: 100 } });
+        worldManager.setState({ ...world, players: newPlayers });
+      }
 
       // No inputs sent
       server.tick();
       server.tick();
       server.tick();
 
-      const world = server.getWorldState();
-      const player = world.players.get("player-1");
+      const finalWorld = server.getWorldState();
+      const player = finalWorld.players.get("player-1");
 
-      // Player should have fallen due to gravity
-      expect(player?.position.y).toBeGreaterThan(0);
+      // Y-up: Player should have fallen due to gravity (Y decreased from 100)
+      expect(player?.position.y).toBeLessThan(100);
     });
   });
 
@@ -272,8 +287,8 @@ describe("ServerAuthoritativeServer", () => {
       world = server.getWorldState();
       player = world.players.get("player-1");
 
-      // Jump should have registered (negative Y velocity = upward)
-      expect(player?.velocity.y).toBeLessThan(0);
+      // Y-up: Jump should have registered (positive Y velocity = upward)
+      expect(player?.velocity.y).toBeGreaterThan(0);
     });
 
     test("lag compensation: getSnapshotAtTimestamp returns closest snapshot", () => {
@@ -301,14 +316,14 @@ describe("ServerAuthoritativeServer", () => {
       server.addClient("player-1");
       server.addClient("player-2");
       
-      // Move players apart to avoid collision (they spawn at same position)
+      // Move players apart and into the air (Y-up: y=100 is above floor at y=0)
       const world = server.getWorldState();
       const p1 = world.players.get("player-1");
       const p2 = world.players.get("player-2");
       if (p1 && p2) {
         const newPlayers = new Map(world.players);
-        newPlayers.set("player-1", { ...p1, position: { x: 0, y: 0 } });
-        newPlayers.set("player-2", { ...p2, position: { x: 100, y: 0 } });
+        newPlayers.set("player-1", { ...p1, position: { x: 0, y: 100 } });
+        newPlayers.set("player-2", { ...p2, position: { x: 100, y: 100 } });
         worldManager.setState({ ...world, players: newPlayers });
       }
 
@@ -325,24 +340,24 @@ describe("ServerAuthoritativeServer", () => {
       // Both players should have fallen the same amount
       expect(player1.position.y).toBeCloseTo(player2.position.y, 5);
       
-      // Position should be reasonable for one tick of gravity
-      // At 980 gravity, 50ms tick: y = 0.5 * 980 * 0.05^2 ≈ 1.225 units
-      // Should NOT be ~2.45 (which would indicate double gravity)
-      expect(player1.position.y).toBeLessThan(3);
+      // Y-up: Position should have decreased slightly from 100
+      // Should NOT have fallen more than ~3 units in one tick
+      expect(player1.position.y).toBeGreaterThan(97);
+      expect(player1.position.y).toBeLessThan(100);
     });
 
     test("two clients with different input counts: physics isolation", () => {
       server.addClient("active");
       server.addClient("idle");
       
-      // Move players apart to avoid collision
+      // Move players apart and into the air (Y-up)
       const world = server.getWorldState();
       const activeP = world.players.get("active");
       const idleP = world.players.get("idle");
       if (activeP && idleP) {
         const newPlayers = new Map(world.players);
-        newPlayers.set("active", { ...activeP, position: { x: 0, y: 0 } });
-        newPlayers.set("idle", { ...idleP, position: { x: 100, y: 0 } });
+        newPlayers.set("active", { ...activeP, position: { x: 0, y: 10 }, isGrounded: true }); // On ground
+        newPlayers.set("idle", { ...idleP, position: { x: 100, y: 100 } }); // In air
         worldManager.setState({ ...world, players: newPlayers });
       }
 
@@ -365,8 +380,8 @@ describe("ServerAuthoritativeServer", () => {
       // Idle player should NOT have moved horizontally (stays at x=100)
       expect(idlePlayer?.position.x).toBe(100);
 
-      // But idle player SHOULD have fallen (gravity for tickInterval)
-      expect(idlePlayer?.position.y).toBeGreaterThan(0);
+      // Y-up: Idle player SHOULD have fallen (Y decreased from 100)
+      expect(idlePlayer?.position.y).toBeLessThan(100);
     });
 
     test("stop movement: no extra distance when releasing key", () => {
@@ -387,9 +402,9 @@ describe("ServerAuthoritativeServer", () => {
       const snapshot = server.tick();
       const player = snapshot.state.players.get("player-1");
 
-      // Movement should be reasonable for 2 inputs of movement at 16ms each
-      // 200 units/sec * 0.032 sec = 6.4 units approximately
-      expect(player?.position.x).toBeGreaterThan(5);
+      // Movement should be in the right direction
+      // With smoothDamp, velocity ramps up and then back down
+      expect(player?.position.x).toBeGreaterThan(1);
       expect(player?.position.x).toBeLessThan(15);
     });
 
@@ -410,9 +425,10 @@ describe("ServerAuthoritativeServer", () => {
       const snapshot = server.tick();
       const player = snapshot.state.players.get("player-1");
 
-      // Total time: 16.67 (default) + 10 + 30 + 15 = ~72ms of movement
-      // 200 units/sec * 0.072 sec = 14.4 units approximately
-      expect(player?.position.x).toBeGreaterThan(10);
+      // Total time: ~72ms of movement with irregular deltas
+      // With smoothDamp, velocity ramps up gradually
+      // Movement should be positive but less than instant velocity would give
+      expect(player?.position.x).toBeGreaterThan(1);
       expect(player?.position.x).toBeLessThan(20);
     });
 

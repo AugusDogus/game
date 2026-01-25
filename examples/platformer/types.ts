@@ -57,11 +57,15 @@ export const PLAYER_HEIGHT = 20;
 
 /**
  * A platform in the game world
+ *
+ * Y-up coordinate system:
+ * - position is the bottom-left corner
+ * - The platform spans from position.y to position.y + height
  */
 export interface Platform {
   /** Unique identifier for the platform */
   id: string;
-  /** Position of the platform's top-left corner */
+  /** Position of the platform's bottom-left corner (Y-up coords) */
   position: Vector2;
   /** Width of the platform */
   width: number;
@@ -79,11 +83,15 @@ export interface SpawnPoint {
 
 /**
  * A hazard in the level (e.g., spikes, pits)
+ *
+ * Y-up coordinate system:
+ * - position is the bottom-left corner
+ * - The hazard spans from position.y to position.y + height
  */
 export interface Hazard {
   /** Unique identifier for the hazard */
   id: string;
-  /** Position of the hazard's top-left corner */
+  /** Position of the hazard's bottom-left corner (Y-up coords) */
   position: Vector2;
   /** Width of the hazard */
   width: number;
@@ -172,6 +180,18 @@ export interface PlatformerPlayer {
   respawnTimer: number | null;
   /** Sequence counter for deterministic projectile ID generation */
   projectileSeq: number;
+
+  // --- Movement state (for smooth controls) ---
+  /** Smoothing value for horizontal velocity (used by SmoothDamp) */
+  velocityXSmoothing: number;
+  /** Whether currently wall sliding */
+  wallSliding: boolean;
+  /** Which side the wall is on (-1 = left, 1 = right, 0 = none) */
+  wallDirX: -1 | 0 | 1;
+  /** Time remaining before player can leave wall (wall stick) */
+  timeToWallUnstick: number;
+  /** Whether jump was pressed last frame (for detecting press edge) */
+  jumpWasPressedLastFrame: boolean;
 }
 
 // =============================================================================
@@ -190,6 +210,8 @@ export interface PlatformerWorld {
   tick: number;
   /** Current game state */
   gameState: GameState;
+  /** Level ID for physics world caching */
+  levelId: string;
   /** Platforms in the level */
   platforms: Platform[];
   /** Spawn points for players */
@@ -219,12 +241,14 @@ export const DEFAULT_MATCH_CONFIG: MatchConfig = {
  */
 export function createPlatformerWorld(
   matchConfig: MatchConfig = DEFAULT_MATCH_CONFIG,
+  levelId: string = "default",
 ): PlatformerWorld {
   return {
     players: new Map(),
     projectiles: [],
     tick: 0,
     gameState: "lobby",
+    levelId,
     platforms: [],
     spawnPoints: [],
     hazards: [],
@@ -254,6 +278,12 @@ export function createPlatformerPlayer(
     lastHitBy: null,
     respawnTimer: null,
     projectileSeq: 0,
+    // Movement state (initialized to defaults)
+    velocityXSmoothing: 0,
+    wallSliding: false,
+    wallDirX: 0,
+    timeToWallUnstick: 0,
+    jumpWasPressedLastFrame: false,
   };
 }
 

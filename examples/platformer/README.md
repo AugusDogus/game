@@ -2,6 +2,17 @@
 
 A complete 2D multiplayer platformer demonstrating all features of `@game/netcode`.
 
+## Coordinate System
+
+This example uses **Y-up coordinates** (physics standard):
+
+- **Positive Y points upward** - y=0 is the floor, higher Y is above
+- **Gravity is negative** (-800 units/s²) - pulls players downward
+- **Jump velocity is positive** (+400 units/s) - pushes players upward
+- **Floor is at y=0** - player centers are at y=10 when grounded (half of PLAYER_HEIGHT)
+
+The renderer handles the Y-flip internally, so the game world uses physics coordinates while rendering appears correctly on screen.
+
 ## Overview
 
 This example implements:
@@ -218,8 +229,8 @@ Key gameplay constants (all can be imported):
 
 ```typescript
 // Player dimensions
-PLAYER_WIDTH = 32
-PLAYER_HEIGHT = 48
+PLAYER_WIDTH = 20
+PLAYER_HEIGHT = 20
 
 // Combat
 ATTACK_RADIUS = 50
@@ -227,11 +238,11 @@ ATTACK_DAMAGE = 20
 PROJECTILE_SPEED = 400
 PROJECTILE_DAMAGE = 15
 
-// Physics (use with @game/netcode constants)
-DEFAULT_PLAYER_SPEED = 200    // from @game/netcode
-DEFAULT_GRAVITY = 980         // from @game/netcode
-DEFAULT_JUMP_VELOCITY = -400  // from @game/netcode
-DEFAULT_FLOOR_Y = 250         // from @game/netcode
+// Physics (Y-up coordinate system, from @game/netcode)
+DEFAULT_PLAYER_SPEED = 200    // Horizontal movement speed (units/sec)
+DEFAULT_GRAVITY = -800        // Negative = pulls downward
+DEFAULT_JUMP_VELOCITY = 400   // Positive = pushes upward  
+DEFAULT_FLOOR_Y = 0           // Ground level at y=0
 ```
 
 ## Creating a GameDefinition

@@ -77,7 +77,7 @@ describe("Level registry", () => {
 
   it("getAllLevels should return all levels", () => {
     const levels = getAllLevels();
-    expect(levels.length).toBe(4);
+    expect(levels.length).toBe(5);
     expect(levels).toContain(LEVEL_BASIC_ARENA);
     expect(levels).toContain(LEVEL_PLATFORMS);
   });

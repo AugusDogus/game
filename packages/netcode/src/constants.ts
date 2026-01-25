@@ -26,25 +26,10 @@ export const DEFAULT_INTERPOLATION_DELAY_MS = 100;
 export const DEFAULT_SNAPSHOT_HISTORY_SIZE = 60;
 
 /**
- * Default player movement speed (units per second)
+ * Floor Y position (ground level)
+ * In Y-up coordinates, floor is at y=0
  */
-export const DEFAULT_PLAYER_SPEED = 200;
-
-/**
- * Gravity acceleration (pixels per second squared)
- * Positive value pulls downward (Y increases downward in canvas)
- */
-export const DEFAULT_GRAVITY = 800;
-
-/**
- * Jump velocity (pixels per second, negative = upward)
- */
-export const DEFAULT_JUMP_VELOCITY = -400;
-
-/**
- * Floor Y position (slightly below center)
- */
-export const DEFAULT_FLOOR_Y = 200;
+export const DEFAULT_FLOOR_Y = 0;
 
 /**
  * Maximum input buffer size (prevent memory issues)

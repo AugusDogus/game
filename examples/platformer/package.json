@@ -6,6 +6,7 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "dependencies": {
-    "@game/netcode": "workspace:*"
+    "@game/netcode": "workspace:*",
+    "@game/physics2d": "workspace:*"
   }
 }

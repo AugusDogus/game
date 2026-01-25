@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Snapshot } from "../core/types.js";
 import {
   platformerPredictionScope,
+  initPlatformerPhysics,
   type PlatformerInput,
   type PlatformerPlayer,
   type PlatformerWorld,
@@ -11,6 +12,11 @@ import {
 import { InputBuffer } from "./input-buffer.js";
 import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
+
+// Initialize physics before any tests run
+beforeAll(async () => {
+  await initPlatformerPhysics();
+});
 
 /** Helper to create test input with all required fields */
 const createInput = (
@@ -165,11 +171,11 @@ describe("Reconciler", () => {
       const resultPlayer = result.players.get(playerId);
 
       // All 12 inputs should be replayed with proper timing
-      // First input uses default 16.67ms, remaining 11 use actual deltas (16.67ms each)
-      // Total: 12 * 16.67ms = ~200ms at 200 units/sec = ~40 units
-      // Allow some tolerance for floating point
-      expect(resultPlayer?.position.x).toBeGreaterThan(35);
-      expect(resultPlayer?.position.x).toBeLessThan(45);
+      // With smoothDamp acceleration, velocity ramps up from 0 to target (200 u/s)
+      // Movement is less than instant velocity would give, but still substantial
+      // Should move some meaningful distance in the direction of input
+      expect(resultPlayer?.position.x).toBeGreaterThan(15);
+      expect(resultPlayer?.position.x).toBeLessThan(50);
     });
 
     test("partial acknowledgment: only replay unacknowledged inputs", () => {
@@ -225,8 +231,8 @@ describe("Reconciler", () => {
 
       // Client should accept server position (x=0) and replay seq 1 and 2
       // Since server says x=0, we replay 2 inputs (~100ms of movement)
-      // At 200 units/sec, should move about 20 units
-      expect(resultPlayer?.position.x).toBeGreaterThan(10);
+      // With smoothDamp, velocity builds up gradually, so less than instant
+      expect(resultPlayer?.position.x).toBeGreaterThan(5);
       expect(resultPlayer?.position.x).toBeLessThan(30);
     });
 
@@ -236,9 +242,10 @@ describe("Reconciler", () => {
       inputBuffer.add(createInput(0, 0, true, 1050)); // Still holding jump
 
       // Server confirms player is in the air
+      // Y-up: negative velocity = falling down
       const serverPlayer = createTestPlayer(playerId, {
         position: { x: 0, y: 100 }, // In the air
-        velocity: { x: 0, y: 50 }, // Falling down
+        velocity: { x: 0, y: -50 }, // Falling down (negative in Y-up)
         isGrounded: false, // NOT grounded
       });
       const snapshot = createSnapshot(serverPlayer, -1);
@@ -247,8 +254,8 @@ describe("Reconciler", () => {
       const resultPlayer = result.players.get(playerId);
 
       // Player should continue falling, not get another jump
-      // Velocity should still be positive (falling) or more positive
-      expect(resultPlayer?.velocity.y).toBeGreaterThanOrEqual(50);
+      // Y-up: Velocity should still be negative (falling) or more negative
+      expect(resultPlayer?.velocity.y).toBeLessThanOrEqual(-50);
       expect(resultPlayer?.isGrounded).toBe(false);
     });
 

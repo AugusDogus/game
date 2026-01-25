@@ -7,6 +7,17 @@ A TypeScript game engine for building fast-paced multiplayer games. Built with a
 | Package | Description |
 |---------|-------------|
 | [@game/netcode](packages/netcode/) | Networking layer - client/server sync, prediction, reconciliation, interpolation, lag compensation |
+| [@game/physics2d](packages/physics2d/) | 2D physics primitives - raycast-based character controller using Rapier |
+
+## Coordinate System
+
+This engine uses a **Y-up coordinate system**:
+
+- **Positive Y points upward** - jumping increases Y, falling decreases Y
+- **Floor is at y=0** - ground level is the origin
+- **Gravity is negative** - pulls objects downward (decreases Y)
+
+The renderer flips Y when drawing to the canvas (which uses Y-down), so game logic uses physics-standard coordinates while rendering appears correctly on screen.
 
 ## Features
 
