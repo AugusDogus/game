@@ -83,4 +83,52 @@ export class SnapshotBuffer<TWorld> {
   size(): number {
     return this.snapshots.length;
   }
+
+  /**
+   * Get all stored snapshots (ordered by tick, oldest first)
+   */
+  getAll(): Snapshot<TWorld>[] {
+    return [...this.snapshots];
+  }
+
+  /**
+   * Get the two snapshots that bracket a target timestamp (for interpolation).
+   * Returns { from, to, alpha } where alpha is the interpolation factor (0..1).
+   * If exact match or only one snapshot available, from === to and alpha = 0.
+   */
+  getBracketingSnapshots(targetTimestamp: number): {
+    from: Snapshot<TWorld>;
+    to: Snapshot<TWorld>;
+    alpha: number;
+  } | null {
+    if (this.snapshots.length === 0) {
+      return null;
+    }
+    if (this.snapshots.length === 1) {
+      return { from: this.snapshots[0]!, to: this.snapshots[0]!, alpha: 0 };
+    }
+
+    // Find the first snapshot with timestamp > targetTimestamp (the "to" snapshot)
+    let toIndex = this.snapshots.findIndex((s) => s.timestamp > targetTimestamp);
+
+    if (toIndex === -1) {
+      // All snapshots are <= target, use the last two
+      toIndex = this.snapshots.length - 1;
+    }
+    if (toIndex === 0) {
+      // All snapshots are > target, use the first one
+      return { from: this.snapshots[0]!, to: this.snapshots[0]!, alpha: 0 };
+    }
+
+    const from = this.snapshots[toIndex - 1]!;
+    const to = this.snapshots[toIndex]!;
+
+    const timeDiff = to.timestamp - from.timestamp;
+    if (timeDiff <= 0) {
+      return { from, to, alpha: 0 };
+    }
+
+    const alpha = Math.max(0, Math.min(1, (targetTimestamp - from.timestamp) / timeDiff));
+    return { from, to, alpha };
+  }
 }

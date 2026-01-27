@@ -23,6 +23,18 @@ function lerpVector2(a: Vector2, b: Vector2, t: number): Vector2 {
 }
 
 /**
+ * Distance between two vectors
+ */
+function distance(a: Vector2, b: Vector2): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/** Teleport threshold - don't interpolate if position changed more than this */
+const TELEPORT_THRESHOLD = 200;
+
+/**
  * Interpolate a player between two states
  */
 function interpolatePlayer(
@@ -30,11 +42,15 @@ function interpolatePlayer(
   to: RoundsPlayer,
   alpha: number,
 ): RoundsPlayer {
+  // Snap position if player teleported (respawn, large correction)
+  const positionDistance = distance(from.position, to.position);
+  const shouldTeleport = positionDistance > TELEPORT_THRESHOLD;
+
   return {
     ...to, // Use 'to' for discrete values
-    // Interpolate continuous values
-    position: lerpVector2(from.position, to.position, alpha),
-    velocity: lerpVector2(from.velocity, to.velocity, alpha),
+    // Interpolate continuous values (unless teleporting)
+    position: shouldTeleport ? to.position : lerpVector2(from.position, to.position, alpha),
+    velocity: shouldTeleport ? to.velocity : lerpVector2(from.velocity, to.velocity, alpha),
     // Health interpolates for smooth damage feedback
     health: lerp(from.health, to.health, alpha),
     shieldHealth: lerp(from.shieldHealth, to.shieldHealth, alpha),
@@ -49,9 +65,13 @@ function interpolateProjectile(
   to: Projectile,
   alpha: number,
 ): Projectile {
+  // Snap position if projectile teleported (bounced off wall, wrapped around)
+  const positionDistance = distance(from.position, to.position);
+  const shouldTeleport = positionDistance > TELEPORT_THRESHOLD;
+
   return {
     ...to,
-    position: lerpVector2(from.position, to.position, alpha),
+    position: shouldTeleport ? to.position : lerpVector2(from.position, to.position, alpha),
     // Don't interpolate velocity - it changes suddenly on bounce
   };
 }

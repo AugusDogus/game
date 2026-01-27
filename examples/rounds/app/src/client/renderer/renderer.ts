@@ -2,7 +2,7 @@
  * ROUNDS game renderer using PixiJS
  */
 
-import { Application, Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import type {
   RoundsWorld,

@@ -1,0 +1,29 @@
+---
+description: This is a greenfield project - no backwards compatibility needed
+alwaysApply: true
+---
+
+# Greenfield Project - No Legacy Support
+
+This project has no production users. When implementing or refactoring:
+
+- **Delete old code** rather than wrapping it in conditionals or feature flags
+- **Implement the correct solution directly**, not as an optional mode alongside legacy behavior
+- **Do NOT maintain backwards compatibility** with previous internal implementations
+- **Remove dead code paths** - if a better approach exists, replace entirely
+
+## Anti-patterns to Avoid
+
+```typescript
+// ❌ BAD - preserving old behavior "just in case"
+if (config.useNewApproach) {
+  newImplementation();
+} else {
+  oldImplementation(); // dead code in greenfield
+}
+
+// ✅ GOOD - just implement the right thing
+newImplementation();
+```
+
+When reviewing plans or requirements that mention "backwards compatibility", "fallback to old behavior", or "optional migration path" - question whether this complexity is actually needed. It almost certainly isn't.

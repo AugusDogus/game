@@ -10,7 +10,6 @@ import {
   removePlayerFromWorld,
   mergePlatformerInputs,
   forceStartGame,
-  interpolatePlatformer,
   platformerPredictionScope,
   getPlayer,
 } from "@game/example-platformer";
@@ -42,8 +41,7 @@ describe("ServerAuthoritativeClient", () => {
   beforeEach(() => {
     client = new ServerAuthoritativeClient<PlatformerWorld, PlatformerInput>(
       platformerPredictionScope,
-      interpolatePlatformer,
-      100, // 100ms interpolation delay
+      50, // 50ms tick interval (20 TPS)
     );
   });
 

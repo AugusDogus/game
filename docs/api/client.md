@@ -31,6 +31,16 @@ interface ClientConfig<TWorld, TInput, TActionResult> {
   /** Socket.IO client socket */
   socket: Socket;
 
+  /**
+   * Server tick interval in milliseconds (default: ~16.67ms / 60 TPS).
+   * 
+   * IMPORTANT: This value is validated against the server's tickIntervalMs
+   * received in the handshake. If there's a mismatch beyond 1ms tolerance,
+   * the client will throw an error. The safest approach is to omit this
+   * and let the client use the server-authoritative value.
+   */
+  tickIntervalMs?: number;
+
   /** Callback when interpolated world state updates (call your render here) */
   onWorldUpdate?: (world: TWorld) => void;
 
@@ -43,20 +53,105 @@ interface ClientConfig<TWorld, TInput, TActionResult> {
   /** Callback when an action result is received from server */
   onActionResult?: (result: ActionResult<TActionResult>) => void;
 
-  /** Interpolation delay in ms (default: 100). Higher = smoother but more delay */
-  interpolationDelayMs?: number;
-
   /** Artificial latency for testing (default: 0) */
   simulatedLatency?: number;
+
+  /**
+   * FishNet-style tick smoothing configuration.
+   * Controls how player positions/transforms are smoothed for rendering.
+   */
+  smoothing?: SmoothingConfig;
 
   // Option 1: Pass a GameDefinition
   game?: GameDefinition<TWorld, TInput>;
 
   // Option 2: Pass functions explicitly
   predictionScope?: PredictionScope<TWorld, TInput>;
-  interpolate?: InterpolateFunction<TWorld>;
+}
+
+interface SmoothingConfig {
+  /** Adaptive interpolation level (default: Low) */
+  adaptiveInterpolation?: AdaptiveInterpolationLevel;
+
+  /** Adaptive smoothing type (default: Default) */
+  adaptiveSmoothingType?: AdaptiveSmoothingType;
+
+  /** Interpolation percent applied to tick lag (0-1, default: 1) */
+  interpolationPercent?: number;
+
+  /** Collision interpolation percent applied to corrections (0-1, default: 1) */
+  collisionInterpolationPercent?: number;
+
+  /** Interpolation decrease step for Custom smoothing (default: 1) */
+  interpolationDecreaseStep?: number;
+
+  /** Interpolation increase step for Custom smoothing (default: 1) */
+  interpolationIncreaseStep?: number;
+
+  /** Distance threshold for teleporting instead of smoothing (default: 200) */
+  teleportThreshold?: number;
+
+  /** Axis-specific teleport threshold for X (optional) */
+  teleportThresholdX?: number;
+
+  /** Axis-specific teleport threshold for Y (optional) */
+  teleportThresholdY?: number;
+
+  /** Smooth X position (default: true) */
+  smoothPositionX?: boolean;
+
+  /** Smooth Y position (default: true) */
+  smoothPositionY?: boolean;
+
+  /** Maximum snapshots to buffer (default: 30) */
+  snapshotBufferSize?: number;
+
+  /** Enable rotation smoothing for 2D angles (default: false) */
+  smoothRotation?: boolean;
+
+  /** Enable scale smoothing (default: false) */
+  smoothScale?: boolean;
+
+  /** Smooth scale X (default: true) */
+  smoothScaleX?: boolean;
+
+  /** Smooth scale Y (default: true) */
+  smoothScaleY?: boolean;
+
+  /** Rotation threshold for teleporting in radians (default: Math.PI) */
+  rotationTeleportThreshold?: number;
+
+  /** Axis-specific teleport threshold for scale X (optional) */
+  scaleTeleportThresholdX?: number;
+
+  /** Axis-specific teleport threshold for scale Y (optional) */
+  scaleTeleportThresholdY?: number;
+
+  /** Enable extrapolation for spectators when queue is empty (default: true) */
+  enableExtrapolation?: boolean;
+
+  /** Maximum extrapolation time in ms (default: 2 ticks) */
+  maxExtrapolationMs?: number;
 }
 ```
+
+### Server-Authoritative Tick Contract
+
+The netcode uses a server-authoritative tick contract. When a client connects, the server sends a `netcode:config` handshake containing the tick rate. The client validates this against any locally configured `tickIntervalMs`.
+
+- If the client specifies `tickIntervalMs` and it differs from the server's by more than 1ms, the client throws an error.
+- Recommendation: Omit `tickIntervalMs` from client config to use the server's authoritative value.
+
+### Automated Latency Testing
+
+For automated latency and jitter testing, use `simulatedLatency` in `createClient` and the deterministic latency harness in `packages/netcode/src/test-utils/latency.ts`.
+
+- Run all netcode tests: `bun test packages/netcode`
+- Run only the ROUNDS smoke test: `bun test packages/netcode/src/rounds-smoke.test.ts`
+
+### FishNet Parity
+
+Behavioral alignment with FishNet is tracked in `docs/concepts/fishnet-parity.md`.
 
 ### ClientHandle
 

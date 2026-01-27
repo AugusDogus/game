@@ -14,19 +14,20 @@ const createWorld = (players: PlatformerPlayer[], tick: number = 0): PlatformerW
 
 describe("interpolatePlatformer", () => {
   describe("basic interpolation", () => {
+    // Note: Tests use small movements (< 200 units) to avoid triggering teleport detection
     test("should interpolate position linearly at alpha=0.5", () => {
       const from = createWorld([createPlayer("p1", { position: { x: 0, y: 0 } })], 0);
-      const to = createWorld([createPlayer("p1", { position: { x: 100, y: 200 } })], 1);
+      const to = createWorld([createPlayer("p1", { position: { x: 20, y: 40 } })], 1);
 
       const result = interpolatePlatformer(from, to, 0.5);
 
-      expect(result.players.get("p1")?.position.x).toBe(50);
-      expect(result.players.get("p1")?.position.y).toBe(100);
+      expect(result.players.get("p1")?.position.x).toBe(10);
+      expect(result.players.get("p1")?.position.y).toBe(20);
     });
 
     test("should return 'from' position at alpha=0", () => {
       const from = createWorld([createPlayer("p1", { position: { x: 10, y: 20 } })], 0);
-      const to = createWorld([createPlayer("p1", { position: { x: 100, y: 200 } })], 1);
+      const to = createWorld([createPlayer("p1", { position: { x: 30, y: 50 } })], 1);
 
       const result = interpolatePlatformer(from, to, 0);
 
@@ -36,34 +37,34 @@ describe("interpolatePlatformer", () => {
 
     test("should return 'to' position at alpha=1", () => {
       const from = createWorld([createPlayer("p1", { position: { x: 10, y: 20 } })], 0);
-      const to = createWorld([createPlayer("p1", { position: { x: 100, y: 200 } })], 1);
+      const to = createWorld([createPlayer("p1", { position: { x: 30, y: 50 } })], 1);
 
       const result = interpolatePlatformer(from, to, 1);
 
-      expect(result.players.get("p1")?.position.x).toBe(100);
-      expect(result.players.get("p1")?.position.y).toBe(200);
+      expect(result.players.get("p1")?.position.x).toBe(30);
+      expect(result.players.get("p1")?.position.y).toBe(50);
     });
 
     test("should interpolate at alpha=0.25", () => {
       const from = createWorld([createPlayer("p1", { position: { x: 0, y: 0 } })], 0);
-      const to = createWorld([createPlayer("p1", { position: { x: 100, y: 100 } })], 1);
+      const to = createWorld([createPlayer("p1", { position: { x: 40, y: 40 } })], 1);
 
       const result = interpolatePlatformer(from, to, 0.25);
 
-      expect(result.players.get("p1")?.position.x).toBe(25);
-      expect(result.players.get("p1")?.position.y).toBe(25);
+      expect(result.players.get("p1")?.position.x).toBe(10);
+      expect(result.players.get("p1")?.position.y).toBe(10);
     });
   });
 
   describe("velocity interpolation", () => {
     test("should interpolate velocity linearly", () => {
       const from = createWorld([createPlayer("p1", { velocity: { x: 0, y: 0 } })], 0);
-      const to = createWorld([createPlayer("p1", { velocity: { x: 100, y: -200 } })], 1);
+      const to = createWorld([createPlayer("p1", { velocity: { x: 40, y: -80 } })], 1);
 
       const result = interpolatePlatformer(from, to, 0.5);
 
-      expect(result.players.get("p1")?.velocity.x).toBe(50);
-      expect(result.players.get("p1")?.velocity.y).toBe(-100);
+      expect(result.players.get("p1")?.velocity.x).toBe(20);
+      expect(result.players.get("p1")?.velocity.y).toBe(-40);
     });
   });
 
@@ -99,16 +100,16 @@ describe("interpolatePlatformer", () => {
       );
       const to = createWorld(
         [
-          createPlayer("p1", { position: { x: 100, y: 100 } }),
-          createPlayer("p2", { position: { x: 200, y: 200 } }),
+          createPlayer("p1", { position: { x: 20, y: 20 } }),
+          createPlayer("p2", { position: { x: 120, y: 120 } }),
         ],
         1,
       );
 
       const result = interpolatePlatformer(from, to, 0.5);
 
-      expect(result.players.get("p1")?.position.x).toBe(50);
-      expect(result.players.get("p2")?.position.x).toBe(150);
+      expect(result.players.get("p1")?.position.x).toBe(10);
+      expect(result.players.get("p2")?.position.x).toBe(110);
     });
 
     test("should handle many players", () => {
@@ -117,7 +118,7 @@ describe("interpolatePlatformer", () => {
 
       for (let i = 0; i < 50; i++) {
         fromPlayers.push(createPlayer(`p${i}`, { position: { x: i * 10, y: 0 } }));
-        toPlayers.push(createPlayer(`p${i}`, { position: { x: i * 10 + 100, y: 100 } }));
+        toPlayers.push(createPlayer(`p${i}`, { position: { x: i * 10 + 20, y: 20 } }));
       }
 
       const from = createWorld(fromPlayers, 0);
@@ -126,8 +127,8 @@ describe("interpolatePlatformer", () => {
       const result = interpolatePlatformer(from, to, 0.5);
 
       expect(result.players.size).toBe(50);
-      expect(result.players.get("p0")?.position.x).toBe(50); // 0 + 100 * 0.5
-      expect(result.players.get("p49")?.position.y).toBe(50); // 0 + 100 * 0.5
+      expect(result.players.get("p0")?.position.x).toBe(10); // 0 + 20 * 0.5
+      expect(result.players.get("p49")?.position.y).toBe(10); // 0 + 20 * 0.5
     });
   });
 
@@ -136,7 +137,7 @@ describe("interpolatePlatformer", () => {
       const from = createWorld([createPlayer("p1", { position: { x: 0, y: 0 } })], 0);
       const to = createWorld(
         [
-          createPlayer("p1", { position: { x: 100, y: 100 } }),
+          createPlayer("p1", { position: { x: 20, y: 20 } }),
           createPlayer("p2", { position: { x: 500, y: 500 } }), // New player
         ],
         1,
@@ -145,7 +146,7 @@ describe("interpolatePlatformer", () => {
       const result = interpolatePlatformer(from, to, 0.5);
 
       // p1 should be interpolated
-      expect(result.players.get("p1")?.position.x).toBe(50);
+      expect(result.players.get("p1")?.position.x).toBe(10);
 
       // p2 is new, should use target state directly
       expect(result.players.get("p2")?.position.x).toBe(500);
@@ -164,7 +165,7 @@ describe("interpolatePlatformer", () => {
       );
       const to = createWorld(
         [
-          createPlayer("p1", { position: { x: 150, y: 150 } }),
+          createPlayer("p1", { position: { x: 120, y: 120 } }),
           // p2 is gone
         ],
         1,
@@ -173,7 +174,7 @@ describe("interpolatePlatformer", () => {
       const result = interpolatePlatformer(from, to, 0.5);
 
       // p1 should be interpolated
-      expect(result.players.get("p1")?.position.x).toBe(125);
+      expect(result.players.get("p1")?.position.x).toBe(110);
 
       // p2 should still exist (from 'from' state) - shows during transition
       expect(result.players.has("p2")).toBe(true);
@@ -233,8 +234,8 @@ describe("interpolatePlatformer", () => {
     });
 
     test("should handle negative positions", () => {
-      const from = createWorld([createPlayer("p1", { position: { x: -100, y: -200 } })], 0);
-      const to = createWorld([createPlayer("p1", { position: { x: 100, y: 200 } })], 1);
+      const from = createWorld([createPlayer("p1", { position: { x: -20, y: -40 } })], 0);
+      const to = createWorld([createPlayer("p1", { position: { x: 20, y: 40 } })], 1);
 
       const result = interpolatePlatformer(from, to, 0.5);
 
@@ -244,15 +245,15 @@ describe("interpolatePlatformer", () => {
 
     test("should handle alpha slightly outside 0-1 range", () => {
       const from = createWorld([createPlayer("p1", { position: { x: 0, y: 0 } })], 0);
-      const to = createWorld([createPlayer("p1", { position: { x: 100, y: 100 } })], 1);
+      const to = createWorld([createPlayer("p1", { position: { x: 40, y: 40 } })], 1);
 
       // Alpha slightly > 1 (extrapolation)
       const resultOver = interpolatePlatformer(from, to, 1.1);
-      expect(resultOver.players.get("p1")?.position.x).toBeCloseTo(110, 5);
+      expect(resultOver.players.get("p1")?.position.x).toBeCloseTo(44, 5);
 
       // Alpha slightly < 0
       const resultUnder = interpolatePlatformer(from, to, -0.1);
-      expect(resultUnder.players.get("p1")?.position.x).toBeCloseTo(-10, 5);
+      expect(resultUnder.players.get("p1")?.position.x).toBeCloseTo(-4, 5);
     });
 
     test("should handle same position (no movement)", () => {
@@ -273,6 +274,31 @@ describe("interpolatePlatformer", () => {
 
       expect(result.players).not.toBe(from.players);
       expect(result.players).not.toBe(to.players);
+    });
+  });
+
+  describe("teleport detection", () => {
+    test("should snap to target position when distance exceeds threshold (teleport/respawn)", () => {
+      // Large position change (> 200 units) should snap, not interpolate
+      const from = createWorld([createPlayer("p1", { position: { x: 0, y: 0 } })], 0);
+      const to = createWorld([createPlayer("p1", { position: { x: 500, y: 500 } })], 1);
+
+      const result = interpolatePlatformer(from, to, 0.5);
+
+      // Should snap to target, not interpolate to (250, 250)
+      expect(result.players.get("p1")?.position.x).toBe(500);
+      expect(result.players.get("p1")?.position.y).toBe(500);
+    });
+
+    test("should interpolate normally when distance is under threshold", () => {
+      // Small position change (< 200 units) should interpolate normally
+      const from = createWorld([createPlayer("p1", { position: { x: 0, y: 0 } })], 0);
+      const to = createWorld([createPlayer("p1", { position: { x: 50, y: 50 } })], 1);
+
+      const result = interpolatePlatformer(from, to, 0.5);
+
+      expect(result.players.get("p1")?.position.x).toBe(25);
+      expect(result.players.get("p1")?.position.y).toBe(25);
     });
   });
 });

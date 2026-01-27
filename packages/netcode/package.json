@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@game/example-platformer": "workspace:*",
+    "@game/example-rounds": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5"
   }

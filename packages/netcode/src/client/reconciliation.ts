@@ -80,16 +80,15 @@ export class Reconciler<TWorld, TInput extends { timestamp: number }> {
     // Replay each unacknowledged input with the server's fixed tick delta
     // The server processes each input with a separate simulation call
     // using the fixed tick interval, so reconciliation must match this behavior
-    let replayTick = snapshot.tick;
     for (const inputMsg of unacknowledged) {
-      replayTick++;
       this.predictor.applyInputWithDelta(inputMsg.input, this.tickIntervalMs);
 
-      // Notify smoother to ease-in the corrected state at this tick
+      // Notify smoother to ease-in the corrected state using input seq
+      // (matches the tick-smoother queue indexing for local inputs)
       if (this.onReplayCallback) {
         const currentState = this.predictor.getState();
         if (currentState) {
-          this.onReplayCallback(replayTick, currentState);
+          this.onReplayCallback(inputMsg.seq, currentState);
         }
       }
     }

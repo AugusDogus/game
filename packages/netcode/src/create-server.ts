@@ -5,7 +5,13 @@
  */
 
 import type { Server, Socket } from "socket.io";
-import { DEFAULT_INTERPOLATION_TICKS, DEFAULT_SNAPSHOT_HISTORY_SIZE, DEFAULT_TICK_RATE, DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
+import {
+  DEFAULT_SPECTATOR_INTERPOLATION_TICKS,
+  DEFAULT_SNAPSHOT_HISTORY_SIZE,
+  DEFAULT_TICK_RATE,
+  DEFAULT_TICK_INTERVAL_MS,
+  DEFAULT_TIMING_UPDATE_INTERVAL_MS,
+} from "./constants.js";
 import type { ActionMessage, ActionResult, ActionValidator, GameDefinition, InputMerger, SimulateFunction } from "./core/types.js";
 import { DefaultWorldManager } from "./core/world.js";
 import { ActionQueue } from "./server/action-queue.js";
@@ -51,9 +57,9 @@ interface ServerConfigBase<
    */
   maxRewindMs?: number;
   /**
-   * Interpolation ticks used by clients (must match client config).
-   * Used for lag compensation calculations.
-   * Default: DEFAULT_INTERPOLATION_TICKS (2 ticks)
+   * Interpolation ticks used by clients for remote players (spectator mode).
+   * Used for lag compensation calculations - tells server how far behind clients render.
+   * Default: DEFAULT_SPECTATOR_INTERPOLATION_TICKS (2 ticks)
    */
   interpolationTicks?: number;
   /**
@@ -73,6 +79,12 @@ interface ServerConfigBase<
    * Default: 5000ms (5 seconds)
    */
   clockSyncIntervalMs?: number;
+  /**
+   * Interval in milliseconds between timing updates to clients.
+   * Set to 0 to disable timing updates.
+   * Default: 1000ms (1 second)
+   */
+  timingUpdateIntervalMs?: number;
 }
 
 /**
@@ -282,7 +294,7 @@ export function createServer<
 
   // Lag compensation (only if validateAction is provided)
   // Convert interpolation ticks to milliseconds for lag compensation
-  const interpolationTicks = config.interpolationTicks ?? DEFAULT_INTERPOLATION_TICKS;
+  const interpolationTicks = config.interpolationTicks ?? DEFAULT_SPECTATOR_INTERPOLATION_TICKS;
   const interpolationDelayMs = interpolationTicks * tickIntervalMs;
   
   const lagCompensator = config.validateAction
@@ -301,11 +313,19 @@ export function createServer<
   // Clock sync state
   const clockSyncIntervalMs = config.clockSyncIntervalMs ?? DEFAULT_CLOCK_SYNC_INTERVAL_MS;
   const pendingClockSyncs: Map<string, number> = new Map(); // clientId -> serverSendTime
+  const timingUpdateIntervalMs =
+    config.timingUpdateIntervalMs ?? DEFAULT_TIMING_UPDATE_INTERVAL_MS;
 
   // Connection handler (extracted for cleanup in stop())
   const connectionHandler = (socket: Socket) => {
     const clientId = socket.id;
     console.log(`[NetcodeServer] Client connected: ${clientId}`);
+
+    // Send server config handshake (required by client)
+    socket.emit("netcode:config", {
+      tickIntervalMs,
+      tickRate,
+    });
 
     // Add player to world
     strategy.addClient(clientId);
@@ -347,9 +367,8 @@ export function createServer<
       });
     }
 
-    // Handle clock sync response (for lag compensation accuracy)
+    // Handle clock sync response (for RTT + lag compensation accuracy)
     socket.on("netcode:clock_sync_response", (message: unknown) => {
-      if (!lagCompensator) return;
       if (typeof message !== "object" || message === null) return;
 
       const { serverTimestamp, clientTimestamp } = message as {
@@ -372,15 +391,28 @@ export function createServer<
       // clockOffset ≈ serverSendTime + (rtt / 2) - clientTimestamp
       const clockOffset = serverSendTime + rtt / 2 - clientTimestamp;
 
-      lagCompensator.updateClientClock(clientId, { clockOffset, rtt });
+      if (lagCompensator) {
+        lagCompensator.updateClientClock(clientId, { clockOffset, rtt });
+      }
+
+      // Broadcast RTT back to client for adaptive interpolation
+      socket.emit("netcode:rtt_update", { rtt });
     });
 
     // Send initial clock sync ping
-    if (lagCompensator && clockSyncIntervalMs > 0) {
+    if (clockSyncIntervalMs > 0) {
       const serverTimestamp = Date.now();
       pendingClockSyncs.set(clientId, serverTimestamp);
       socket.emit("netcode:clock_sync", { serverTimestamp });
     }
+
+    // Handle config request (client may have missed initial netcode:config)
+    socket.on("netcode:request_config", () => {
+      socket.emit("netcode:config", {
+        tickIntervalMs,
+        tickRate,
+      });
+    });
 
     // Handle disconnect
     socket.on("disconnect", () => {
@@ -445,12 +477,25 @@ export function createServer<
   let clockSyncIntervalId: NodeJS.Timeout | null = null;
 
   const sendClockSyncToAll = () => {
-    if (!lagCompensator) return;
-
     const serverTimestamp = Date.now();
     for (const [, socket] of config.io.sockets.sockets) {
       pendingClockSyncs.set(socket.id, serverTimestamp);
       socket.emit("netcode:clock_sync", { serverTimestamp });
+    }
+  };
+
+  let timingUpdateIntervalId: NodeJS.Timeout | null = null;
+
+  const sendTimingUpdateToAll = () => {
+    if (timingUpdateIntervalMs <= 0) {
+      return;
+    }
+    for (const clientId of strategy.getConnectedClients()) {
+      const queuedInputs = strategy.getQueuedInputCount(clientId);
+      config.io.to(clientId).emit("netcode:timing_update", {
+        queuedInputs,
+        intervalMs: timingUpdateIntervalMs,
+      });
     }
   };
 
@@ -461,8 +506,11 @@ export function createServer<
       console.log(`[NetcodeServer] Started game loop at ${tickRate} Hz`);
 
       // Start periodic clock sync if enabled
-      if (lagCompensator && clockSyncIntervalMs > 0) {
+      if (clockSyncIntervalMs > 0) {
         clockSyncIntervalId = setInterval(sendClockSyncToAll, clockSyncIntervalMs);
+      }
+      if (timingUpdateIntervalMs > 0) {
+        timingUpdateIntervalId = setInterval(sendTimingUpdateToAll, timingUpdateIntervalMs);
       }
     },
 
@@ -476,6 +524,10 @@ export function createServer<
       if (clockSyncIntervalId !== null) {
         clearInterval(clockSyncIntervalId);
         clockSyncIntervalId = null;
+      }
+      if (timingUpdateIntervalId !== null) {
+        clearInterval(timingUpdateIntervalId);
+        timingUpdateIntervalId = null;
       }
       pendingClockSyncs.clear();
     },

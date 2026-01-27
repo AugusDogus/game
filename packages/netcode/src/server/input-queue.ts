@@ -85,6 +85,13 @@ export class InputQueue<TInput> {
   }
 
   /**
+   * Get the number of pending inputs for a client.
+   */
+  getQueueLength(clientId: string): number {
+    return this.queues.get(clientId)?.length ?? 0;
+  }
+
+  /**
    * Get all pending inputs from all clients as a map.
    * Returns the last input for each client (most recent intent).
    * Used for whole-world simulation.

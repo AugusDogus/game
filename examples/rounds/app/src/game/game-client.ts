@@ -1,6 +1,5 @@
 import { createClient, type ClientHandle } from "@game/netcode/client";
 import {
-  interpolateRounds,
   roundsPredictionScope,
   type RoundsInput,
   type RoundsWorld,
@@ -41,6 +40,10 @@ export class GameClient {
   // Client-side input edge detection state
   private lastSentJumpState: boolean = false;
 
+  // Netcode logging (optional via query param)
+  private logNetcode: boolean = false;
+  private logBuffer: Array<Record<string, unknown>> = [];
+
   static async create(socket: Socket, canvas: HTMLCanvasElement): Promise<GameClient> {
     const renderer = await Renderer.create(canvas);
     return new GameClient(socket, canvas, renderer);
@@ -49,12 +52,11 @@ export class GameClient {
   private constructor(socket: Socket, canvas: HTMLCanvasElement, renderer: Renderer) {
     this.renderer = renderer;
     this.canvas = canvas;
+    this.logNetcode = new URLSearchParams(window.location.search).get("logNetcode") === "1";
 
     this.netcodeClient = createClient<RoundsWorld, RoundsInput>({
       socket,
       predictionScope: roundsPredictionScope,
-      interpolate: interpolateRounds,
-      interpolationDelayMs: 100,
       onWorldUpdate: (_state: RoundsWorld) => {},
       onPlayerJoin: (playerId: string) => console.log(`Player joined: ${playerId}`),
       onPlayerLeave: (playerId: string) => console.log(`Player left: ${playerId}`),
@@ -100,6 +102,9 @@ export class GameClient {
     this.handleResize();
     this.startRenderLoop();
     this.startInputLoop();
+    if (this.logNetcode) {
+      this.startLogFlushLoop();
+    }
   }
 
   private handleResize(): void {
@@ -182,11 +187,55 @@ export class GameClient {
           mouseX: this.mouseX,
           mouseY: this.mouseY,
         });
+
+        if (this.logNetcode) {
+          this.captureNetcodeLog(world, localPlayerId);
+        }
       }
 
       this.animationFrameId = requestAnimationFrame(render);
     };
     render();
+  }
+
+  private captureNetcodeLog(world: RoundsWorld, localPlayerId: string | null): void {
+    const now = performance.now();
+    const debug = this.netcodeClient.getSmoothingDebug?.();
+    const localPlayer = localPlayerId ? world.players.get(localPlayerId) : undefined;
+    const remotePlayer = localPlayerId
+      ? Array.from(world.players.values()).find((p) => p.id !== localPlayerId)
+      : undefined;
+
+    this.logBuffer.push({
+      t: now,
+      playerId: localPlayerId ?? null,
+      serverTick: debug?.serverTick ?? null,
+      tickLag: debug?.tickLag ?? null,
+      localPos: localPlayer?.position ?? null,
+      remotePos: remotePlayer?.position ?? null,
+      remoteQueue: debug?.remotePlayers?.map((p) => ({
+        id: p.playerId,
+        interpolation: p.interpolation,
+        queueLength: p.queueLength,
+      })) ?? [],
+    });
+
+    // Avoid unbounded growth if logging is left on
+    if (this.logBuffer.length > 1000) {
+      this.logBuffer.splice(0, this.logBuffer.length - 1000);
+    }
+  }
+
+  private startLogFlushLoop(): void {
+    window.setInterval(() => {
+      if (this.logBuffer.length === 0) return;
+      const payload = { logs: this.logBuffer.splice(0, this.logBuffer.length) };
+      fetch("/api/logs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }, 1000);
   }
 
   stop(): void {
@@ -217,6 +266,20 @@ export class GameClient {
 
   getWorld(): RoundsWorld | null {
     return this.netcodeClient.getStateForRendering();
+  }
+
+  getNetcodeDebug(): {
+    rttMs: number | null;
+    serverTick: number;
+    localTimeTick: number | null;
+    tickLag: number | null;
+    remotePlayers: Array<{
+      playerId: string;
+      interpolation: number;
+      queueLength: number;
+    }>;
+  } | null {
+    return this.netcodeClient.getSmoothingDebug?.() ?? null;
   }
 
   getPlayerId(): string | null {

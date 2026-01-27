@@ -161,9 +161,6 @@ export interface GameDefinition<TWorld, TInput extends { timestamp: number }> {
   /** Simulate one tick of the game world. See {@link SimulateFunction}. */
   simulate: SimulateFunction<TWorld, TInput>;
 
-  /** Interpolate between two world states. See {@link InterpolateFunction}. */
-  interpolate: InterpolateFunction<TWorld>;
-
   /** Add a new player to the world state (server-side) */
   addPlayer: (world: TWorld, playerId: string) => TWorld;
 
@@ -178,6 +175,13 @@ export interface GameDefinition<TWorld, TInput extends { timestamp: number }> {
 
   /** Factory function to create a prediction scope for client-side prediction */
   createPredictionScope?: () => PredictionScope<TWorld, TInput>;
+
+  /**
+   * Interpolation function for smooth rendering of remote entities.
+   * If provided, enables snapshot interpolation (NetworkTransform-style) for remote players.
+   * See {@link InterpolateFunction}.
+   */
+  interpolate?: InterpolateFunction<TWorld>;
 
   /** Optional custom binary serialization for network efficiency */
   serialize?: SerializeFunction<TWorld>;

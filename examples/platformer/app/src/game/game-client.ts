@@ -1,6 +1,5 @@
 import { createClient, type ClientHandle } from "@game/netcode/client";
 import {
-  interpolatePlatformer,
   platformerPredictionScope,
   type PlatformerInput,
   type PlatformerWorld,
@@ -69,8 +68,6 @@ export class GameClient {
     this.netcodeClient = createClient<PlatformerWorld, PlatformerInput>({
       socket,
       predictionScope: platformerPredictionScope,
-      interpolate: interpolatePlatformer,
-      interpolationDelayMs: 100,
       onWorldUpdate: (_state: PlatformerWorld) => {
         // World update handled by render loop
       },

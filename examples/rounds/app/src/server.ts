@@ -1,5 +1,7 @@
 import { Server } from "socket.io";
 import { Server as Engine } from "@socket.io/bun-engine";
+import { mkdir, appendFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createServer } from "@game/netcode/server";
 import { superjsonParser } from "@game/netcode/parser";
 import {
@@ -24,6 +26,8 @@ import homepage from "./client/index.html";
 const DEV_MODE = process.env.DEV_MODE === "true";
 
 const startTime = Date.now();
+const logDir = "logs";
+const logFile = join(logDir, "netcode-client.log");
 
 // Create Socket.IO server with superjson parser
 const io = new Server({
@@ -99,6 +103,34 @@ const server = Bun.serve({
           status: "ok",
           timestamp: new Date().toISOString(),
           uptime: Date.now() - startTime,
+        });
+      },
+    },
+
+    "/api/logs": {
+      async POST(req) {
+        try {
+          const body = await req.json();
+          const logs = Array.isArray(body?.logs) ? body.logs : [body];
+          await mkdir(logDir, { recursive: true });
+          const lines = logs.map((entry) => `${new Date().toISOString()} ${JSON.stringify(entry)}\n`).join("");
+          await appendFile(logFile, lines);
+          for (const entry of logs) {
+            console.log("[ClientLog]", entry);
+          }
+          return Response.json({ ok: true, received: logs.length });
+        } catch {
+          return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+        }
+      },
+      OPTIONS() {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            "access-control-allow-origin": "*",
+            "access-control-allow-methods": "POST, OPTIONS",
+            "access-control-allow-headers": "content-type",
+          },
         });
       },
     },

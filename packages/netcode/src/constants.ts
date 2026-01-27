@@ -17,25 +17,10 @@ export const DEFAULT_TICK_RATE = 60;
 export const DEFAULT_TICK_INTERVAL_MS = 1000 / DEFAULT_TICK_RATE; // ~16.67ms
 
 /**
- * Default interpolation ticks for the local player (owner).
- * Lower value = less latency, relies more on client-side prediction.
- * FishNet uses 1 tick for owners.
- */
-export const DEFAULT_OWNER_INTERPOLATION_TICKS = 1;
-
-/**
- * Default interpolation ticks for remote players (spectators).
- * Higher value = more buffer, smoother rendering with network jitter.
- * FishNet uses 2 ticks for spectators.
+ * Default interpolation ticks for spectators (used for lag compensation calculations).
+ * With adaptive interpolation, this is dynamically adjusted based on RTT.
  */
 export const DEFAULT_SPECTATOR_INTERPOLATION_TICKS = 2;
-
-/**
- * Default interpolation buffer size in ticks.
- * Used for lag compensation calculations on the server.
- * @deprecated Use DEFAULT_SPECTATOR_INTERPOLATION_TICKS instead
- */
-export const DEFAULT_INTERPOLATION_TICKS = DEFAULT_SPECTATOR_INTERPOLATION_TICKS;
 
 /**
  * Default snapshot history size: 180 snapshots
@@ -71,3 +56,23 @@ export const MIN_DELTA_MS = 1;
  * Prevents large jumps from network delays or paused clients
  */
 export const MAX_DELTA_MS = 100;
+
+/**
+ * Tolerance for tick interval mismatch between server and client config.
+ * If the server's tickIntervalMs differs from client config by more than this,
+ * an error is thrown. Default: 1ms (allows for floating point rounding).
+ */
+export const TICK_INTERVAL_MISMATCH_TOLERANCE_MS = 1;
+
+/**
+ * Timeout in milliseconds for waiting for server config handshake.
+ * If the client doesn't receive netcode:config within this time, an error is thrown.
+ * Default: 10 seconds.
+ */
+export const CONFIG_HANDSHAKE_TIMEOUT_MS = 10000;
+
+/**
+ * Default interval for server timing updates (1 second).
+ * Used for client-side tick alignment.
+ */
+export const DEFAULT_TIMING_UPDATE_INTERVAL_MS = 1000;

@@ -1,13 +1,13 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import type { Snapshot } from "../core/types.js";
 import {
+  createTestPlayer,
+  createTestWorld,
   platformerPredictionScope,
   type PlatformerInput,
   type PlatformerPlayer,
   type PlatformerWorld,
-  createTestPlayer,
-  createTestWorld,
 } from "@game/example-platformer";
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { Snapshot } from "../core/types.js";
 import { InputBuffer } from "./input-buffer.js";
 import { Predictor } from "./prediction.js";
 import { Reconciler } from "./reconciliation.js";
@@ -172,8 +172,8 @@ describe("Reconciler", () => {
 
       reconciler.reconcile(snapshot);
 
-      // Should have called callback 3 times (for ticks 11, 12, 13)
-      expect(replayedTicks).toEqual([11, 12, 13]);
+      // Should have called callback 3 times (for input seq 0, 1, 2)
+      expect(replayedTicks).toEqual([0, 1, 2]);
     });
 
     test("should provide corrected state in replay callback", () => {
@@ -201,6 +201,90 @@ describe("Reconciler", () => {
       // Each replayed position should be further right
       expect(replayedPositions.length).toBe(2);
       expect(replayedPositions[1]!.x).toBeGreaterThan(replayedPositions[0]!.x);
+    });
+  });
+
+  describe("tick alignment invariants", () => {
+    test("replay callback ticks should match input buffer seq numbers", () => {
+      // This is the critical invariant: reconcile uses input seq (not server tick)
+      // for the replay callback, which must match how owner smoother indexes entries
+      
+      const replayedSeqs: number[] = [];
+      const inputSeqs: number[] = [];
+      
+      reconciler.setReplayCallback((seq, _state) => {
+        replayedSeqs.push(seq);
+      });
+
+      // Add inputs and track their seq numbers
+      inputSeqs.push(inputBuffer.add(createInput(1, 0, false, 1000))); // seq 0
+      inputSeqs.push(inputBuffer.add(createInput(1, 0, false, 1016))); // seq 1
+      inputSeqs.push(inputBuffer.add(createInput(1, 0, false, 1032))); // seq 2
+
+      const serverPlayer = createTestPlayer(playerId, {
+        position: { x: 0, y: 190 },
+        isGrounded: true,
+      });
+      const snapshot = createSnapshot(serverPlayer, -1); // No acks, replay all
+
+      reconciler.reconcile(snapshot);
+
+      // Replay callback ticks must be the INPUT SEQ numbers
+      expect(replayedSeqs).toEqual(inputSeqs);
+    });
+
+    test("replay callback should NOT use server tick + offset", () => {
+      // This ensures we don't regress to the old bug where we used
+      // snapshot.tick + replayStep as the tick key
+      
+      const replayedTicks: number[] = [];
+      
+      reconciler.setReplayCallback((tick, _state) => {
+        replayedTicks.push(tick);
+      });
+
+      // Add inputs
+      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
+      inputBuffer.add(createInput(1, 0, false, 1016)); // seq 1
+
+      const serverPlayer = createTestPlayer(playerId, {
+        position: { x: 0, y: 190 },
+        isGrounded: true,
+      });
+      const snapshot = createSnapshot(serverPlayer, -1);
+      snapshot.tick = 500; // High server tick
+
+      reconciler.reconcile(snapshot);
+
+      // Ticks should be input seqs (0, 1), NOT server tick offsets (501, 502)
+      expect(replayedTicks).toEqual([0, 1]);
+      expect(replayedTicks).not.toContain(501);
+      expect(replayedTicks).not.toContain(502);
+    });
+
+    test("partial ack should replay only unacked input seqs", () => {
+      const replayedSeqs: number[] = [];
+      
+      reconciler.setReplayCallback((seq, _state) => {
+        replayedSeqs.push(seq);
+      });
+
+      // Add inputs
+      inputBuffer.add(createInput(1, 0, false, 1000)); // seq 0
+      inputBuffer.add(createInput(1, 0, false, 1016)); // seq 1
+      inputBuffer.add(createInput(1, 0, false, 1032)); // seq 2
+      inputBuffer.add(createInput(1, 0, false, 1048)); // seq 3
+
+      const serverPlayer = createTestPlayer(playerId, {
+        position: { x: 10, y: 190 },
+        isGrounded: true,
+      });
+      const snapshot = createSnapshot(serverPlayer, 1); // Ack through seq 1
+
+      reconciler.reconcile(snapshot);
+
+      // Should only replay seq 2 and 3 (unacked)
+      expect(replayedSeqs).toEqual([2, 3]);
     });
   });
 

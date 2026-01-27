@@ -1,9 +1,9 @@
-import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { GamePhase } from "@game/example-rounds";
+import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { GameClient } from "../game/game-client.js";
 import { socket } from "./socket";
-import type { Card, CardPickState, GamePhase } from "@game/example-rounds";
 
 const queryClient = new QueryClient();
 
@@ -203,6 +203,8 @@ function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [latency, setLatency] = useState<number | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [showNetcodeOverlay, setShowNetcodeOverlay] = useState(false);
+  const [netcodeDebugText, setNetcodeDebugText] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameClientRef = useRef<GameClient | null>(null);
 
@@ -279,6 +281,46 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!showNetcodeOverlay) {
+      setNetcodeDebugText("");
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const debug = gameClientRef.current?.getNetcodeDebug?.();
+      if (!debug) {
+        setNetcodeDebugText("NETCODE DEBUG\nsmoothing data unavailable");
+        return;
+      }
+
+      const lines: string[] = [
+        "NETCODE DEBUG",
+        `RTT: ${debug.rttMs === null ? "n/a" : `${Math.round(debug.rttMs)} ms`}`,
+        `ServerTick: ${debug.serverTick}`,
+        `LocalTick: ${debug.localTimeTick === null ? "n/a" : debug.localTimeTick}`,
+        `TickLag: ${debug.tickLag === null ? "n/a" : debug.tickLag}`,
+      ];
+
+      if (debug.remotePlayers.length === 0) {
+        lines.push("Remote: none");
+      } else {
+        for (const player of debug.remotePlayers.slice(0, 4)) {
+          lines.push(
+            `Remote ${player.playerId.slice(0, 6)}: interp ${player.interpolation}, queue ${player.queueLength}`,
+          );
+        }
+        if (debug.remotePlayers.length > 4) {
+          lines.push(`Remote: +${debug.remotePlayers.length - 4} more`);
+        }
+      }
+
+      setNetcodeDebugText(lines.join("\n"));
+    }, 200);
+
+    return () => window.clearInterval(intervalId);
+  }, [showNetcodeOverlay]);
+
+  useEffect(() => {
     if (!isConnected || !canvasRef.current) {
       gameClientRef.current?.stop();
       gameClientRef.current = null;
@@ -327,8 +369,18 @@ function App() {
       </div>
 
       {/* Game container */}
-      <div className="flex-1 min-h-0 relative border border-slate-700 rounded-lg bg-slate-950 overflow-hidden">
+      <div
+        className="flex-1 min-h-0 relative border border-slate-700 rounded-lg bg-slate-950 overflow-hidden"
+        style={{ cursor: "none" }}
+      >
         <canvas ref={canvasRef} className="w-full h-full" style={{ display: "block" }} />
+        {showNetcodeOverlay && netcodeDebugText && (
+          <div className="absolute top-24 left-4 z-20 pointer-events-none">
+            <pre className="bg-slate-900/80 text-slate-100 text-xs rounded px-2 py-1 whitespace-pre">
+              {netcodeDebugText}
+            </pre>
+          </div>
+        )}
         <GameHUD gameStatus={gameStatus} localPlayerId={localPlayerId} />
         {gameStatus?.cardPick && (
           <CardPickOverlay cardPick={gameStatus.cardPick} localPlayerId={localPlayerId} />
@@ -382,6 +434,18 @@ function App() {
                 <p>Tick: <span className="text-slate-200">{gameStatus.tick}</span></p>
               </div>
             )}
+
+            <div className="border-t border-slate-700 pt-2">
+              <label className="flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={showNetcodeOverlay}
+                  onChange={(e) => setShowNetcodeOverlay(e.target.checked)}
+                  className="accent-slate-500"
+                />
+                Netcode overlay
+              </label>
+            </div>
           </div>
         </div>
       )}

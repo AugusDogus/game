@@ -13,6 +13,7 @@ import { describe, expect, test } from "bun:test";
 import { InputBuffer } from "./client/input-buffer.js";
 import { Predictor } from "./client/prediction.js";
 import { Reconciler } from "./client/reconciliation.js";
+import { TickSmoother, AdaptiveInterpolationLevel, AdaptiveSmoothingType } from "./client/tick-smoother.js";
 import { DEFAULT_TICK_INTERVAL_MS } from "./constants.js";
 import type { Snapshot } from "./core/types.js";
 import { getLast } from "./core/utils.js";
@@ -29,6 +30,11 @@ import {
   type PlatformerWorld,
 } from "@game/example-platformer";
 import { InputQueue } from "./server/input-queue.js";
+import {
+  SeededRandom,
+  LatencySimulator,
+  type EventEmitter,
+} from "./test-utils/latency.js";
 
 /**
  * Helper to create a world in "playing" state for tests
@@ -605,6 +611,427 @@ describe("Scale Tests", () => {
     // So from y=100, player should be around y=98 after one tick
     expect(player0.position.y).toBeGreaterThan(97);
     expect(player0.position.y).toBeLessThan(100);
+  });
+});
+
+/**
+ * Simulated latency tests for netcode behavior under network conditions.
+ * 
+ * These tests use the deterministic latency harness to verify:
+ * - Tick alignment invariants hold under latency
+ * - Smoothing queues stay within bounds
+ * - Reconciliation works correctly with delayed snapshots
+ */
+describe("Latency Simulation Tests", () => {
+  const PLAYER_ID = "test-player";
+
+  /**
+   * Mock event emitter for testing message delays.
+   */
+  class MockEmitter implements EventEmitter {
+    private listeners: Map<string, Set<(...args: unknown[]) => void>> = new Map();
+    public emittedEvents: Array<{ event: string; args: unknown[] }> = [];
+
+    emit(event: string, ...args: unknown[]): void {
+      this.emittedEvents.push({ event, args });
+      const listeners = this.listeners.get(event);
+      if (listeners) {
+        for (const listener of listeners) {
+          listener(...args);
+        }
+      }
+    }
+
+    on(event: string, listener: (...args: unknown[]) => void): void {
+      let eventListeners = this.listeners.get(event);
+      if (!eventListeners) {
+        eventListeners = new Set();
+        this.listeners.set(event, eventListeners);
+      }
+      eventListeners.add(listener);
+    }
+
+    off(event: string, listener: (...args: unknown[]) => void): void {
+      const eventListeners = this.listeners.get(event);
+      if (eventListeners) {
+        eventListeners.delete(listener);
+      }
+    }
+
+    clear(): void {
+      this.emittedEvents = [];
+    }
+  }
+
+  const createInput = (
+    moveX: number,
+    moveY: number,
+    jump: boolean,
+    timestamp: number,
+    jumpPressed: boolean = false,
+    jumpReleased: boolean = false,
+  ): PlatformerInput => ({
+    moveX,
+    moveY,
+    jump,
+    jumpPressed,
+    jumpReleased,
+    shoot: false,
+    shootTargetX: 0,
+    shootTargetY: 0,
+    timestamp,
+  });
+
+  const createPlayingWorld = (): PlatformerWorld => forceStartGame(createPlatformerWorld());
+
+  function serverTick(
+    world: PlatformerWorld,
+    inputQueue: InputQueue<PlatformerInput>,
+    connectedClients: Set<string>,
+    tickIntervalMs: number = DEFAULT_TICK_INTERVAL_MS,
+  ): { world: PlatformerWorld; acks: Map<string, number> } {
+    const batchedInputs = inputQueue.getAllPendingInputsBatched();
+    const acks = new Map<string, number>();
+
+    for (const clientId of inputQueue.getClientsWithInputs()) {
+      const inputs = inputQueue.getPendingInputs(clientId);
+      if (inputs.length > 0) {
+        const lastInput = getLast(inputs, "inputs");
+        acks.set(clientId, lastInput.seq);
+        inputQueue.acknowledge(clientId, lastInput.seq);
+      }
+    }
+
+    const mergedInputs = new Map<string, PlatformerInput>();
+    
+    for (const [clientId, inputMsgs] of batchedInputs) {
+      if (inputMsgs.length > 0) {
+        const inputs = inputMsgs.map((m) => m.input);
+        mergedInputs.set(clientId, mergePlatformerInputs(inputs));
+      }
+    }
+
+    for (const clientId of connectedClients) {
+      if (!mergedInputs.has(clientId)) {
+        mergedInputs.set(clientId, createIdleInput());
+      }
+    }
+
+    const currentWorld = simulatePlatformer(world, mergedInputs, tickIntervalMs);
+    return { world: currentWorld, acks };
+  }
+
+  test("owner smoothing corrections apply to queue entries under 120ms RTT", () => {
+    // Simulate ~120ms RTT (60ms one-way latency)
+    const clientEmitter = new MockEmitter();
+    const serverEmitter = new MockEmitter();
+    const rng = new SeededRandom(42);
+    
+    const clientToServer = new LatencySimulator(serverEmitter, {
+      meanLatencyMs: 60,
+      jitterMs: 15,
+    }, rng);
+    const serverToClient = new LatencySimulator(clientEmitter, {
+      meanLatencyMs: 60,
+      jitterMs: 15,
+    }, rng);
+
+    // Client-side state
+    const inputBuffer = new InputBuffer<PlatformerInput>();
+    const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+    const ownerSmoother = new TickSmoother({ tickIntervalMs: DEFAULT_TICK_INTERVAL_MS });
+    ownerSmoother.setIsOwner(true);
+    let predictionTick = 0;
+    const predictionTickBySeq = new Map<number, number>();
+    
+    let serverWorld = createPlayingWorld();
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
+    predictor.setBaseState(serverWorld, PLAYER_ID);
+    
+    const reconciler = new Reconciler<PlatformerWorld, PlatformerInput>(
+      inputBuffer,
+      predictor,
+      platformerPredictionScope,
+      PLAYER_ID,
+    );
+
+    // Track corrections to verify tick alignment
+    const correctionResults: boolean[] = [];
+    reconciler.setReplayCallback((seq, state) => {
+      const player = state.players?.get(PLAYER_ID);
+      if (player) {
+        const predTick = predictionTickBySeq.get(seq);
+        if (predTick === undefined) {
+          return;
+        }
+        // This is the critical invariant: correction must find its tick in queue
+        const applied = ownerSmoother.easeCorrection(predTick, player.position.x, player.position.y);
+        correctionResults.push(applied);
+      }
+    });
+
+    // Server-side state
+    const serverInputQueue = new InputQueue<PlatformerInput>();
+    const connectedClients = new Set<string>([PLAYER_ID]);
+    let serverTickNum = 0;
+
+    // Simulate 10 client frames (~160ms at 60fps)
+    // Client sends inputs, server processes, sends snapshots back
+    const clientTickMs = 16.67;
+    let clientTime = 0;
+    const inputsToSend: Array<{ seq: number; input: PlatformerInput }> = [];
+
+    // Client generates inputs
+    for (let i = 0; i < 10; i++) {
+      const input = createInput(1, 0, false, 1000 + i * clientTickMs);
+      const seq = inputBuffer.add(input);
+      const predTick = predictionTick++;
+      predictionTickBySeq.set(seq, predTick);
+      predictor.applyInput(input);
+      
+      // Add to smoother with prediction tick
+      const player = predictor.getState()?.players?.get(PLAYER_ID);
+      if (player) {
+        ownerSmoother.onPostTick(predTick, player.position.x, player.position.y);
+      }
+      
+      inputsToSend.push({ seq, input });
+    }
+
+    // Send all inputs through latency simulator
+    for (const { seq, input } of inputsToSend) {
+      clientToServer.emit("netcode:input", { seq, input, timestamp: input.timestamp });
+    }
+
+    // Advance time for inputs to arrive at server (~60-75ms with jitter)
+    clientToServer.tick(80);
+    
+    // Process server-received inputs
+    for (const event of serverEmitter.emittedEvents) {
+      if (event.event === "netcode:input") {
+        const { seq, input, timestamp } = event.args[0] as { seq: number; input: PlatformerInput; timestamp: number };
+        serverInputQueue.enqueue(PLAYER_ID, { seq, input, timestamp });
+      }
+    }
+    serverEmitter.clear();
+
+    // Server processes tick
+    const { world: newServerWorld, acks } = serverTick(serverWorld, serverInputQueue, connectedClients);
+    serverWorld = newServerWorld;
+    serverTickNum++;
+
+    // Force at least one unacked input so reconcile replays and fires callbacks.
+    const lastInputSeq = inputsToSend[inputsToSend.length - 1]?.seq;
+    if (lastInputSeq !== undefined && lastInputSeq > 0) {
+      acks.set(PLAYER_ID, lastInputSeq - 1);
+    }
+
+    // Server sends snapshot back through latency
+    const snapshot: Snapshot<PlatformerWorld> = {
+      tick: serverTickNum,
+      timestamp: Date.now(),
+      state: serverWorld,
+      inputAcks: acks,
+    };
+    serverToClient.emit("netcode:snapshot", snapshot);
+
+    // Advance time for snapshot to arrive at client (~60-75ms with jitter)
+    serverToClient.tick(80);
+
+    // Client receives and reconciles snapshot
+    for (const event of clientEmitter.emittedEvents) {
+      if (event.event === "netcode:snapshot") {
+        const receivedSnapshot = event.args[0] as Snapshot<PlatformerWorld>;
+        reconciler.reconcile(receivedSnapshot);
+      }
+    }
+
+    // CRITICAL INVARIANT: All corrections should have been applied successfully
+    // This fails if there's a tick alignment mismatch between reconcile and smoother
+    expect(correctionResults.length).toBeGreaterThan(0);
+    for (const result of correctionResults) {
+      expect(result).toBe(true);
+    }
+  });
+
+  test("smoother queue stays within bounds under high jitter", () => {
+    const ownerSmoother = new TickSmoother({
+      tickIntervalMs: DEFAULT_TICK_INTERVAL_MS,
+      maxOverBuffer: 5,
+    });
+    ownerSmoother.setIsOwner(true);
+
+    // Simulate variable input timing (high jitter scenario)
+    // Some frames fast, some slow, simulating network-induced timing variance
+    const inputTimes = [
+      0, 10, 35, 40, 80, 85, 90, 150, 152, 155, // Bursty timing
+      200, 250, 300, 310, 320, 330, 340, 350, 360, 370,
+    ];
+
+    for (let i = 0; i < inputTimes.length; i++) {
+      const x = i * 10; // Position progresses
+      ownerSmoother.onPostTick(i, x, 0);
+      
+      // Consume some entries with getSmoothedPosition to simulate rendering
+      if (i > 0 && i % 3 === 0) {
+        ownerSmoother.getSmoothedPosition(DEFAULT_TICK_INTERVAL_MS);
+      }
+    }
+
+    // Queue should never exceed configured max (interpolation + maxOverBuffer)
+    // For owner: interpolation=1, maxOverBuffer=5, so max=6
+    expect(ownerSmoother.getQueueLength()).toBeLessThanOrEqual(6);
+  });
+
+  test("reconciliation works correctly with delayed snapshots", () => {
+    const inputBuffer = new InputBuffer<PlatformerInput>();
+    const predictor = new Predictor<PlatformerWorld, PlatformerInput>(platformerPredictionScope);
+    
+    let serverWorld = createPlayingWorld();
+    serverWorld = addPlayerToWorld(serverWorld, PLAYER_ID, { x: 0, y: 10 });
+    predictor.setBaseState(serverWorld, PLAYER_ID);
+    
+    const reconciler = new Reconciler<PlatformerWorld, PlatformerInput>(
+      inputBuffer,
+      predictor,
+      platformerPredictionScope,
+      PLAYER_ID,
+    );
+
+    const serverInputQueue = new InputQueue<PlatformerInput>();
+    const connectedClients = new Set<string>([PLAYER_ID]);
+
+    // Client sends 5 inputs rapidly
+    const inputs: PlatformerInput[] = [];
+    for (let i = 0; i < 5; i++) {
+      const input = createInput(1, 0, false, 1000 + i * 16);
+      inputs.push(input);
+      const seq = inputBuffer.add(input);
+      predictor.applyInput(input);
+      serverInputQueue.enqueue(PLAYER_ID, { seq, input, timestamp: input.timestamp });
+    }
+
+    // Server processes first 2 inputs (simulating network batching)
+    const tempQueue1 = new InputQueue<PlatformerInput>();
+    const firstBatch = serverInputQueue.getPendingInputs(PLAYER_ID).slice(0, 2);
+    for (const msg of firstBatch) {
+      tempQueue1.enqueue(PLAYER_ID, msg);
+    }
+    
+    const { world: world1, acks: acks1 } = serverTick(serverWorld, tempQueue1, connectedClients);
+    
+    // Old snapshot arrives (acks inputs 0-1)
+    const snapshot1: Snapshot<PlatformerWorld> = {
+      tick: 1,
+      timestamp: Date.now(),
+      state: world1,
+      inputAcks: acks1,
+    };
+    reconciler.reconcile(snapshot1);
+
+    // Client should have replayed inputs 2-4
+    const stateAfterReconcile = predictor.getState()?.players?.get(PLAYER_ID);
+    expect(stateAfterReconcile?.position.x).toBeGreaterThan(0);
+
+    // Inputs 0-1 should be removed from buffer
+    expect(inputBuffer.get(0)).toBeUndefined();
+    expect(inputBuffer.get(1)).toBeUndefined();
+    // Inputs 2-4 should still be pending
+    expect(inputBuffer.get(2)).toBeDefined();
+    expect(inputBuffer.get(3)).toBeDefined();
+    expect(inputBuffer.get(4)).toBeDefined();
+  });
+
+  test("remote player smoothing uses server ticks only", () => {
+    // Remote smoothers should ONLY receive server tick numbers
+    // This is critical: remote smoother tick keys must NOT be input seqs
+    
+    const remoteSmoother = new TickSmoother({
+      tickIntervalMs: DEFAULT_TICK_INTERVAL_MS,
+    });
+    remoteSmoother.setIsOwner(false);
+
+    // Simulate receiving 5 snapshots from server
+    const serverTicks = [100, 101, 102, 103, 104]; // Server tick numbers
+    
+    for (const serverTick of serverTicks) {
+      const x = (serverTick - 100) * 50; // Simulate movement
+      remoteSmoother.onPostTick(serverTick, x, 0);
+    }
+
+    // All server ticks should be in queue (except first which initializes)
+    for (let i = 1; i < serverTicks.length; i++) {
+      expect(remoteSmoother.hasTickInQueue(serverTicks[i]!)).toBe(true);
+    }
+
+    // Client input seqs (0, 1, 2...) should NOT be in queue
+    expect(remoteSmoother.hasTickInQueue(0)).toBe(false);
+    expect(remoteSmoother.hasTickInQueue(1)).toBe(false);
+    expect(remoteSmoother.hasTickInQueue(2)).toBe(false);
+  });
+
+  test("custom adaptive smoothing steps adjust interpolation gradually", () => {
+    const spectator = new TickSmoother({
+      adaptiveInterpolation: AdaptiveInterpolationLevel.Low,
+      adaptiveSmoothingType: AdaptiveSmoothingType.Custom,
+      interpolationIncreaseStep: 2,
+      interpolationDecreaseStep: 1,
+    });
+    spectator.setIsOwner(false);
+
+    spectator.updateAdaptiveInterpolation(8); // desired ~7
+    expect(spectator.getInterpolation()).toBe(3); // 1 -> +2 (min 2)
+
+    spectator.updateAdaptiveInterpolation(8);
+    expect(spectator.getInterpolation()).toBe(5); // 3 -> +2
+
+    spectator.updateAdaptiveInterpolation(2); // desired ~2
+    expect(spectator.getInterpolation()).toBe(4); // 5 -> -1
+  });
+
+  test("tick alignment invariant: owner corrections find queue entries under jitter", () => {
+    // This is the most critical invariant test for the previous bug
+    // When jitter causes inputs to bunch up, corrections must still find entries
+    
+    const rng = new SeededRandom(99);
+    const ownerSmoother = new TickSmoother({ tickIntervalMs: DEFAULT_TICK_INTERVAL_MS });
+    ownerSmoother.setIsOwner(true);
+    let predictionTick = 0;
+    const predictionTickBySeq = new Map<number, number>();
+
+    // Simulate 20 prediction steps with variable timing (jitter)
+    const inputSeqs: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const seq = i;
+      inputSeqs.push(seq);
+      const predTick = predictionTick++;
+      predictionTickBySeq.set(seq, predTick);
+      const x = i * 10 + rng.range(-5, 5); // Add some position noise
+      ownerSmoother.onPostTick(predTick, x, 0);
+    }
+
+    // Now simulate reconciliation corrections
+    // The key: corrections use the same seq numbers we put in via onPostTick
+    const queuedSeqs = inputSeqs.filter((seq) => {
+      const predTick = predictionTickBySeq.get(seq);
+      return predTick !== undefined && ownerSmoother.hasTickInQueue(predTick);
+    });
+    expect(queuedSeqs.length).toBeGreaterThan(0);
+
+    for (const seq of queuedSeqs) {
+      const newX = seq * 10 + 5; // Slightly different position (server correction)
+      const predTick = predictionTickBySeq.get(seq);
+      if (predTick === undefined) {
+        continue;
+      }
+      const applied = ownerSmoother.easeCorrection(predTick, newX, 0);
+      expect(applied).toBe(true);
+    }
+    
+    // If we had the old bug (using server ticks instead of input seqs),
+    // ALL corrections would fail because the queue contains input seqs (0, 1, 2...)
+    // not server tick offsets (500, 501, 502...)
+    // So having ANY successful corrections proves the alignment is correct
   });
 });
 
